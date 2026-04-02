@@ -1,0 +1,1535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASL3 rpt.conf Editor</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #1c2128;
+    --border: #30363d;
+    --green: #3fb950;
+    --green-dim: #1a3626;
+    --amber: #d29922;
+    --amber-dim: #3a2700;
+    --red: #f85149;
+    --red-dim: #3b1219;
+    --blue: #58a6ff;
+    --blue-dim: #0d2644;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --text-dim: #6e7681;
+    --accent: #238636;
+    --accent-hover: #2ea043;
+    --tab-active: #58a6ff;
+    --radius: 6px;
+    --font-mono: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+    --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  /* === HEADER === */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 56px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-weight: 700;
+    font-size: 16px;
+    letter-spacing: -0.3px;
+  }
+
+  .logo-icon {
+    width: 32px;
+    height: 32px;
+    background: linear-gradient(135deg, #238636, #1a7f37);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+  }
+
+  .logo-sub {
+    color: var(--text-muted);
+    font-weight: 400;
+    font-size: 12px;
+  }
+
+  .header-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  /* === BUTTONS === */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: var(--radius);
+    border: 1px solid transparent;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: var(--font-sans);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .btn-primary {
+    background: var(--accent);
+    border-color: #2ea04326;
+    color: #fff;
+  }
+  .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+
+  .btn-danger {
+    background: transparent;
+    border-color: var(--red);
+    color: var(--red);
+  }
+  .btn-danger:hover:not(:disabled) {
+    background: var(--red-dim);
+  }
+
+  .btn-secondary {
+    background: transparent;
+    border-color: var(--border);
+    color: var(--text);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background: var(--surface2);
+    border-color: #8b949e;
+  }
+
+  .btn-amber {
+    background: transparent;
+    border-color: var(--amber);
+    color: var(--amber);
+  }
+  .btn-amber:hover:not(:disabled) { background: var(--amber-dim); }
+
+  .btn-blue {
+    background: transparent;
+    border-color: var(--blue);
+    color: var(--blue);
+  }
+  .btn-blue:hover:not(:disabled) { background: var(--blue-dim); }
+
+  .btn-sm { padding: 4px 10px; font-size: 12px; }
+  .btn-lg { padding: 10px 20px; font-size: 14px; }
+
+  /* === LAYOUT === */
+  .layout {
+    display: flex;
+    height: calc(100vh - 56px);
+  }
+
+  /* === SIDEBAR === */
+  .sidebar {
+    width: 220px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 12px 0;
+  }
+
+  .sidebar-section {
+    padding: 4px 12px 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-top: 8px;
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 16px;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 13px;
+    border-left: 2px solid transparent;
+    transition: all 0.12s;
+  }
+
+  .nav-item:hover { background: var(--surface2); color: var(--text); }
+  .nav-item.active {
+    background: var(--blue-dim);
+    color: var(--blue);
+    border-left-color: var(--blue);
+  }
+
+  .nav-icon { font-size: 14px; width: 18px; text-align: center; }
+
+  /* === MAIN CONTENT === */
+  .main {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+  }
+
+  .page { display: none; }
+  .page.active { display: block; }
+
+  .page-header {
+    margin-bottom: 24px;
+  }
+
+  .page-title {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  .page-desc {
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  /* === SETTINGS CARDS === */
+  .settings-grid {
+    display: grid;
+    gap: 16px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .card-header {
+    padding: 12px 16px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .card-title {
+    font-weight: 600;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .card-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  .card-collapse-icon {
+    color: var(--text-dim);
+    transition: transform 0.2s;
+  }
+
+  .card.collapsed .card-collapse-icon { transform: rotate(-90deg); }
+  .card.collapsed .card-body { display: none; }
+
+  .card-body {
+    padding: 0;
+  }
+
+  /* === SETTING ROWS === */
+  .setting-row {
+    display: grid;
+    grid-template-columns: 200px 1fr auto;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.1s;
+  }
+
+  .setting-row:last-child { border-bottom: none; }
+  .setting-row:hover { background: var(--surface2); }
+  .setting-row.disabled { opacity: 0.55; }
+
+  .setting-label {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--green);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .setting-label-desc {
+    font-family: var(--font-sans);
+    font-size: 11px;
+    color: var(--text-muted);
+    font-style: italic;
+  }
+
+  .setting-input {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    padding: 5px 10px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    width: 100%;
+    transition: border-color 0.15s;
+  }
+
+  .setting-input:focus {
+    outline: none;
+    border-color: var(--blue);
+    box-shadow: 0 0 0 3px rgba(88,166,255,0.1);
+  }
+
+  .setting-input.changed {
+    border-color: var(--amber);
+    box-shadow: 0 0 0 3px rgba(210,153,34,0.12);
+  }
+
+  select.setting-input {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238b949e' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 28px;
+  }
+
+  .setting-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  /* Toggle Switch */
+  .toggle {
+    position: relative;
+    width: 36px;
+    height: 20px;
+    flex-shrink: 0;
+  }
+
+  .toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+
+  .toggle-slider {
+    position: absolute;
+    inset: 0;
+    background: var(--border);
+    border-radius: 20px;
+    cursor: pointer;
+    transition: 0.2s;
+  }
+
+  .toggle-slider:before {
+    content: '';
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    left: 3px;
+    top: 3px;
+    background: var(--text-muted);
+    border-radius: 50%;
+    transition: 0.2s;
+  }
+
+  .toggle input:checked + .toggle-slider { background: var(--accent); }
+  .toggle input:checked + .toggle-slider:before {
+    transform: translateX(16px);
+    background: #fff;
+  }
+
+  /* === BADGES === */
+  .badge {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .badge-green { background: var(--green-dim); color: var(--green); border: 1px solid #3fb95040; }
+  .badge-amber { background: var(--amber-dim); color: var(--amber); border: 1px solid #d2992240; }
+  .badge-red { background: var(--red-dim); color: var(--red); border: 1px solid #f8514940; }
+  .badge-blue { background: var(--blue-dim); color: var(--blue); border: 1px solid #58a6ff40; }
+
+  /* === STICKY SAVE BAR === */
+  .save-bar {
+    position: fixed;
+    bottom: -80px;
+    left: 220px;
+    right: 0;
+    background: var(--surface2);
+    border-top: 1px solid var(--border);
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    z-index: 99;
+    transition: bottom 0.3s ease;
+  }
+
+  .save-bar.visible { bottom: 0; }
+
+  .save-bar-msg {
+    color: var(--amber);
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* === TOAST === */
+  #toast-container {
+    position: fixed;
+    top: 70px;
+    right: 16px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .toast {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    min-width: 280px;
+    font-size: 13px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    animation: slideIn 0.25s ease;
+  }
+
+  @keyframes slideIn {
+    from { transform: translateX(20px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+
+  .toast-icon { font-size: 16px; flex-shrink: 0; }
+  .toast-body { flex: 1; }
+  .toast-title { font-weight: 600; margin-bottom: 2px; }
+  .toast-msg { color: var(--text-muted); font-size: 12px; }
+  .toast.success { border-left: 3px solid var(--green); }
+  .toast.error { border-left: 3px solid var(--red); }
+  .toast.warning { border-left: 3px solid var(--amber); }
+  .toast.info { border-left: 3px solid var(--blue); }
+
+  /* === RAW EDITOR === */
+  .raw-editor-wrap {
+    position: relative;
+  }
+
+  #raw-editor {
+    width: 100%;
+    min-height: 600px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.6;
+    padding: 16px;
+    resize: vertical;
+    tab-size: 4;
+  }
+
+  #raw-editor:focus {
+    outline: none;
+    border-color: var(--blue);
+  }
+
+  /* === ALERTS === */
+  .alert {
+    padding: 12px 16px;
+    border-radius: var(--radius);
+    margin-bottom: 16px;
+    font-size: 13px;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+
+  .alert-warning { background: var(--amber-dim); border: 1px solid #d2992240; color: var(--amber); }
+  .alert-error { background: var(--red-dim); border: 1px solid #f8514940; color: var(--red); }
+  .alert-info { background: var(--blue-dim); border: 1px solid #58a6ff40; color: var(--blue); }
+  .alert-success { background: var(--green-dim); border: 1px solid #3fb95040; color: var(--green); }
+
+  /* === NODE SELECTOR === */
+  .node-selector {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding: 12px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  .node-selector label {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  #node-select {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    padding: 6px 12px;
+    font-size: 14px;
+    font-family: var(--font-mono);
+    cursor: pointer;
+  }
+
+  /* === STATUS PANEL === */
+  .status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .status-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+  }
+
+  .status-card-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 6px;
+  }
+
+  .status-card-value {
+    font-size: 18px;
+    font-weight: 700;
+    font-family: var(--font-mono);
+  }
+
+  /* === SPINNER === */
+  .spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* === MISC === */
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 16px 0;
+  }
+
+  .mono { font-family: var(--font-mono); }
+
+  code {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--green);
+  }
+
+  .flex { display: flex; }
+  .gap-8 { gap: 8px; }
+  .items-center { align-items: center; }
+  .mt-16 { margin-top: 16px; }
+
+  /* Node pill in sidebar */
+  .node-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--green-dim);
+    color: var(--green);
+    border: 1px solid #3fb95040;
+    border-radius: 20px;
+    padding: 1px 8px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    font-weight: 600;
+  }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">📻</div>
+    <div>
+      ASL3 rpt.conf Editor
+      <div class="logo-sub">AllStarLink 3 Configuration Manager</div>
+    </div>
+  </div>
+  <div class="header-actions">
+    <span id="conf-path-badge" class="badge badge-blue mono">{{ conf_path }}</span>
+    <button class="btn btn-secondary btn-sm" onclick="loadBackups()">🗂 Backups</button>
+    <button class="btn btn-amber btn-sm" onclick="reloadModule()">↻ Reload Module</button>
+    <button class="btn btn-danger btn-sm" onclick="restartAsterisk()">⚡ Restart Asterisk</button>
+  </div>
+</header>
+
+<div class="layout">
+  <!-- SIDEBAR -->
+  <nav class="sidebar">
+    <div class="sidebar-section">Navigation</div>
+    <div class="nav-item active" onclick="showPage('dashboard')" id="nav-dashboard">
+      <span class="nav-icon">📊</span> Dashboard
+    </div>
+    <div class="nav-item" onclick="showPage('general')" id="nav-general">
+      <span class="nav-icon">⚙️</span> General
+    </div>
+
+    <div class="sidebar-section">Node Settings</div>
+    <div id="node-nav-items">
+      <!-- populated by JS -->
+    </div>
+
+    <div class="sidebar-section">Tools</div>
+    <div class="nav-item" onclick="showPage('raw')" id="nav-raw">
+      <span class="nav-icon">📝</span> Raw Editor
+    </div>
+    <div class="nav-item" onclick="showPage('backups')" id="nav-backups">
+      <span class="nav-icon">🗂</span> Backups
+    </div>
+    <div class="nav-item" onclick="showPage('help')" id="nav-help">
+      <span class="nav-icon">❓</span> Help
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- DASHBOARD -->
+    <div class="page active" id="page-dashboard">
+      <div class="page-header">
+        <div class="page-title">Dashboard</div>
+        <div class="page-desc">Overview of your AllStarLink 3 node configuration</div>
+      </div>
+
+      <div class="status-grid" id="status-grid">
+        <div class="status-card">
+          <div class="status-card-label">Config File</div>
+          <div class="status-card-value" id="stat-conf" style="font-size:13px; color: var(--text-muted)">Loading…</div>
+        </div>
+        <div class="status-card">
+          <div class="status-card-label">Nodes Configured</div>
+          <div class="status-card-value" id="stat-nodes" style="color: var(--green)">–</div>
+        </div>
+        <div class="status-card">
+          <div class="status-card-label">Config Status</div>
+          <div class="status-card-value" id="stat-status">–</div>
+        </div>
+      </div>
+
+      <div id="dashboard-nodes"></div>
+
+      <div class="card mt-16">
+        <div class="card-header">
+          <div>
+            <div class="card-title">🚀 Quick Actions</div>
+            <div class="card-desc">Common operations</div>
+          </div>
+        </div>
+        <div class="card-body" style="padding: 16px; display: flex; flex-wrap: wrap; gap: 10px;">
+          <button class="btn btn-primary btn-lg" onclick="showPage('general')">⚙️ Edit General Settings</button>
+          <button class="btn btn-secondary btn-lg" onclick="showPage('raw')">📝 Raw Editor</button>
+          <button class="btn btn-amber btn-lg" onclick="reloadModule()">↻ Reload Module</button>
+          <button class="btn btn-danger btn-lg" onclick="restartAsterisk()">⚡ Restart Asterisk</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- GENERAL STANZA -->
+    <div class="page" id="page-general">
+      <div class="page-header">
+        <div class="page-title">⚙️ General Settings <span class="badge badge-blue">[general]</span></div>
+        <div class="page-desc">Global node lookup and DNS resolution settings (ASL3 [general] stanza)</div>
+      </div>
+      <div id="general-settings-container">
+        <div class="settings-grid" id="general-settings-grid"></div>
+      </div>
+    </div>
+
+    <!-- NODE SETTINGS (dynamic) -->
+    <div class="page" id="page-node">
+      <div class="page-header">
+        <div class="page-title" id="node-page-title">Node Settings</div>
+        <div class="page-desc">Configure all parameters for the selected node stanza</div>
+      </div>
+
+      <div class="node-selector">
+        <label>Active Node:</label>
+        <select id="node-select" onchange="switchNode(this.value)">
+        </select>
+        <span id="node-mode-badge" class="badge badge-green"></span>
+      </div>
+
+      <div id="node-settings-container"></div>
+    </div>
+
+    <!-- RAW EDITOR -->
+    <div class="page" id="page-raw">
+      <div class="page-header">
+        <div class="page-title">📝 Raw Editor</div>
+        <div class="page-desc">Edit rpt.conf directly as text. Changes here override any structured edits.</div>
+      </div>
+      <div class="alert alert-warning">
+        ⚠️ <span>Be careful — syntax errors in rpt.conf will prevent Asterisk from loading. A backup is automatically created before saving.</span>
+      </div>
+      <div class="raw-editor-wrap">
+        <textarea id="raw-editor" spellcheck="false" placeholder="Loading rpt.conf..."></textarea>
+      </div>
+      <div style="margin-top: 12px; display: flex; gap: 8px;">
+        <button class="btn btn-primary" onclick="saveRaw()">💾 Save Raw Config</button>
+        <button class="btn btn-secondary" onclick="loadRawContent()">↺ Reload from Disk</button>
+      </div>
+    </div>
+
+    <!-- BACKUPS -->
+    <div class="page" id="page-backups">
+      <div class="page-header">
+        <div class="page-title">🗂 Backups</div>
+        <div class="page-desc">Automatic backups are created every time you save. Last 10 shown.</div>
+      </div>
+      <div id="backup-list"><div class="alert alert-info">ℹ️ Loading backups…</div></div>
+    </div>
+
+    <!-- HELP -->
+    <div class="page" id="page-help">
+      <div class="page-header">
+        <div class="page-title">❓ Help & Reference</div>
+        <div class="page-desc">Quick reference for rpt.conf settings</div>
+      </div>
+      <div class="card">
+        <div class="card-body" style="padding: 20px;">
+          <h3 style="margin-bottom: 12px;">Key Settings Reference</h3>
+          <table style="width:100%; border-collapse: collapse; font-size: 13px;">
+            <thead>
+              <tr style="background: var(--surface2); border-bottom: 1px solid var(--border);">
+                <th style="padding: 8px 12px; text-align: left; font-family: var(--font-mono); color: var(--green);">Parameter</th>
+                <th style="padding: 8px 12px; text-align: left;">Description</th>
+                <th style="padding: 8px 12px; text-align: left;">Default</th>
+              </tr>
+            </thead>
+            <tbody id="help-table-body"></tbody>
+          </table>
+          <div class="divider"></div>
+          <p style="color: var(--text-muted); font-size: 13px;">
+            Full documentation: <a href="https://allstarlink.github.io/config/rpt_conf/" target="_blank" style="color: var(--blue)">AllStarLink Manual → rpt.conf</a>
+          </p>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- SAVE BAR -->
+<div class="save-bar" id="save-bar">
+  <div class="save-bar-msg">
+    <span>●</span> Unsaved changes
+  </div>
+  <div style="display: flex; gap: 8px;">
+    <button class="btn btn-secondary" onclick="discardChanges()">✕ Discard</button>
+    <button class="btn btn-primary" onclick="saveChanges()">💾 Save Changes</button>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast-container"></div>
+
+<script>
+// =============================
+// CONFIG: ALL rpt.conf settings
+// =============================
+const RPT_SETTINGS = {
+  general: {
+    label: "General Stanza",
+    desc: "ASL3 global settings [general]",
+    icon: "⚙️",
+    fields: [
+      { key: "node_lookup_method", label: "Node Lookup Method", desc: "How nodes are resolved: both, dns, or file", type: "select", options: ["both", "dns", "file"], default: "both" },
+      { key: "dns_node_domain", label: "DNS Node Domain", desc: "DNS domain for node lookups (advanced)", type: "text", default: "nodes.allstarlink.org" },
+      { key: "max_dns_node_length", label: "Max DNS Node Length", desc: "Maximum digits for DNS node number queries", type: "number", default: "6" },
+    ]
+  },
+  basic: {
+    label: "Basic Node Settings",
+    desc: "Core repeater configuration",
+    icon: "📡",
+    fields: [
+      { key: "rxchannel", label: "RX Channel", desc: "Channel driver for the radio interface", type: "text", default: "SimpleUSB/usb_1999", placeholder: "SimpleUSB/usb_NODENO or DAHDI/1" },
+      { key: "duplex", label: "Duplex Mode", desc: "0=Half no telem, 1=Half with telem, 2=Full duplex, 3=Full no repeat, 4=Full repeat autopatch only", type: "select", options: ["0","1","2","3","4"], default: "2" },
+      { key: "linktolink", label: "Link-to-Link", desc: "Half-duplex acts as full duplex for link-to-link operation", type: "yesno", default: "no" },
+      { key: "callerid", label: "Caller ID", desc: "Caller ID sent when linking to other nodes", type: "text", default: "\"WB6NIL\" <1999>", placeholder: "\"CALLSIGN\" <NODENO>" },
+      { key: "accountcode", label: "Account Code", desc: "Accounting code for CDR records", type: "text", default: "RADIO" },
+      { key: "context", label: "Context", desc: "Dialplan context for incoming calls", type: "text", default: "radio" },
+    ]
+  },
+  id: {
+    label: "Station ID",
+    desc: "CW/voice identification settings",
+    icon: "🔊",
+    fields: [
+      { key: "idrecording", label: "ID Recording", desc: "Sound file for voice ID (e.g. rpt/nodenames/1999)", type: "text", default: "", placeholder: "rpt/nodenames/NODENO" },
+      { key: "idtalkover", label: "ID Talk-Over", desc: "Sound file to use when ID plays over a signal", type: "text", default: "" },
+      { key: "idtime", label: "ID Interval (ms)", desc: "How often to transmit ID (milliseconds, default 5 min)", type: "number", default: "300000" },
+      { key: "politeid", label: "Polite ID Time (ms)", desc: "ms before ID expiry to try tail ID (default 30000)", type: "number", default: "30000" },
+      { key: "morse", label: "Morse Stanza", desc: "Name of morse code settings stanza", type: "text", default: "morse" },
+    ]
+  },
+  timers: {
+    label: "Timers",
+    desc: "Hang time, timeout, and other timer settings",
+    icon: "⏱️",
+    fields: [
+      { key: "hangtime", label: "Hang Time (ms)", desc: "Repeater hang time after unkey (ms)", type: "number", default: "5000" },
+      { key: "althangtime", label: "Alt Hang Time (ms)", desc: "Alternate hang time (selected by COP 19/20)", type: "number", default: "4000" },
+      { key: "totime", label: "Time-Out Timer (ms)", desc: "Max TX time before timeout (ms, 0=disabled)", type: "number", default: "180000" },
+      { key: "sleeptime", label: "Sleep Time (ms)", desc: "Time after last activity to enter sleep mode (ms)", type: "number", default: "0" },
+      { key: "lnkactenable", label: "Link Activity Timer", desc: "Enable the link activity timer", type: "yesno", default: "0" },
+      { key: "lnkacttime", label: "Link Activity Time (ms)", desc: "Link activity timer duration (ms)", type: "number", default: "1800000" },
+      { key: "lnkactmacro", label: "Link Activity Macro", desc: "Macro to run when link activity timer expires", type: "text", default: "" },
+      { key: "lnkacttimerwarn", label: "Link Activity Warning", desc: "Message to play 30s before timer expiry", type: "text", default: "" },
+      { key: "remote_inact_timeout", label: "Remote Inactivity Timeout", desc: "Remote base inactivity timeout (seconds)", type: "number", default: "900" },
+      { key: "remote_timeout", label: "Remote Session Timeout", desc: "Remote base session timeout (seconds)", type: "number", default: "3600" },
+      { key: "remote_timeout_warning", label: "Remote Timeout Warning (s)", desc: "Seconds before remote timeout to warn", type: "number", default: "300" },
+      { key: "remote_timeout_warning_freq", label: "Remote Warning Frequency (s)", desc: "How often to repeat the timeout warning", type: "number", default: "30" },
+    ]
+  },
+  telemetry: {
+    label: "Telemetry",
+    desc: "Courtesy tones, telemetry behavior, and audio levels",
+    icon: "📢",
+    fields: [
+      { key: "telemetry", label: "Telemetry Stanza", desc: "Name of the telemetry stanza", type: "text", default: "telemetry" },
+      { key: "telemdefault", label: "Telemetry Default", desc: "0=telemetry off, 1=telemetry on, 2=on demand", type: "select", options: ["0","1","2"], default: "1" },
+      { key: "telemdynamic", label: "Telemetry Dynamic", desc: "Allow users to change telemetry setting via COP", type: "yesno", default: "yes" },
+      { key: "holdofftelem", label: "Hold Off Telemetry", desc: "Hold telemetry when signal present (except forced ID)", type: "yesno", default: "0" },
+      { key: "telemduckdb", label: "Telemetry Duck (dB)", desc: "Telemetry ducking in dB when voice TX in progress", type: "number", default: "-15" },
+      { key: "telemnomdb", label: "Telemetry Nominal (dB)", desc: "Telemetry nominal level in dB", type: "number", default: "0" },
+      { key: "unlinkedct", label: "Unlinked Courtesy Tone", desc: "Courtesy tone when node is not linked", type: "text", default: "ct2" },
+      { key: "remotect", label: "Remote Courtesy Tone", desc: "Courtesy tone when a remote node is linked", type: "text", default: "ct3" },
+      { key: "linkunkeyct", label: "Link Unkey CT", desc: "Courtesy tone when a link transmission ends", type: "text", default: "ct8" },
+      { key: "nolocallinkct", label: "No Local Link CT", desc: "Use unlinkedct instead when only local node linked", type: "yesno", default: "0" },
+      { key: "nounkeyct", label: "No Unkey CT", desc: "Completely disable unkey courtesy tone (not recommended)", type: "yesno", default: "no" },
+    ]
+  },
+  dtmf: {
+    label: "DTMF Settings",
+    desc: "DTMF decoding and function characters",
+    icon: "🔢",
+    fields: [
+      { key: "funcchar", label: "Function Char", desc: "DTMF character to start a function (default *)", type: "text", default: "*" },
+      { key: "endchar", label: "End Char", desc: "DTMF character to end a function (default #)", type: "text", default: "#" },
+      { key: "functions", label: "Functions Stanza", desc: "Name of the local functions stanza", type: "text", default: "functions" },
+      { key: "link_functions", label: "Link Functions Stanza", desc: "Name of the link functions stanza", type: "text", default: "link-functions" },
+      { key: "phone_functions", label: "Phone Functions Stanza", desc: "Name of the phone functions stanza", type: "text", default: "phone-functions" },
+      { key: "dtmfkey", label: "DTMF Key Stanza", desc: "Name of the DTMFKeys stanza (optional)", type: "text", default: "" },
+      { key: "dtmfkeys", label: "DTMF Keys List", desc: "Comma-separated list of DTMF sequences (optional)", type: "text", default: "" },
+      { key: "propagate_dtmf", label: "Propagate DTMF", desc: "Regenerate DTMF on linked nodes when not function", type: "yesno", default: "no" },
+    ]
+  },
+  nodes: {
+    label: "Node Connections",
+    desc: "Static node connections, permit/deny lists, and external nodes",
+    icon: "🔗",
+    fields: [
+      { key: "nodes", label: "Nodes Stanza", desc: "Name of the static nodes stanza", type: "text", default: "nodes" },
+      { key: "extnodefile", label: "Ext Node File", desc: "Path to external node database file", type: "text", default: "/var/lib/asterisk/rpt_extnodes" },
+      { key: "extnodes", label: "Ext Nodes Stanza", desc: "Section in extnodefile containing dynamic node info", type: "text", default: "extnodes" },
+      { key: "nodenames", label: "Node Names Path", desc: "Directory for node name sound files", type: "text", default: "/var/lib/asterisk/sounds/rpt/nodenames" },
+      { key: "startup_macro", label: "Startup Macro", desc: "Macro to run at node startup", type: "text", default: "" },
+      { key: "connpgm", label: "Connect Program", desc: "Script to run when a node connects", type: "text", default: "" },
+      { key: "discpgm", label: "Disconnect Program", desc: "Script to run when a node disconnects", type: "text", default: "" },
+    ]
+  },
+  audio: {
+    label: "Audio & Streaming",
+    desc: "Audio levels, notch filters, and streaming",
+    icon: "🎵",
+    fields: [
+      { key: "linkmongain", label: "Link Monitor Gain (dB)", desc: "Gain for monitor-mode linked audio (dB)", type: "number", default: "0" },
+      { key: "erxgain", label: "EchoLink RX Gain (dB)", desc: "EchoLink receive gain adjustment (dB)", type: "number", default: "0" },
+      { key: "etxgain", label: "EchoLink TX Gain (dB)", desc: "EchoLink transmit gain adjustment (dB)", type: "number", default: "0" },
+      { key: "rxnotch", label: "RX Notch Filter", desc: "Notch filter (freq,bw) e.g. 1000,50", type: "text", default: "" },
+      { key: "outstreamcmd", label: "Output Stream Command", desc: "Command to stream node audio (e.g. to Broadcastify)", type: "text", default: "" },
+    ]
+  },
+  parrot: {
+    label: "Parrot / Echo Mode",
+    desc: "Echo reflector (parrot) mode settings",
+    icon: "🦜",
+    fields: [
+      { key: "parrot", label: "Parrot Mode", desc: "Enable parrot (echo) mode on this node", type: "yesno", default: "no" },
+      { key: "parrottime", label: "Parrot Delay (ms)", desc: "Delay before playing back parrot audio (ms)", type: "number", default: "1000" },
+    ]
+  },
+  rxburst: {
+    label: "RX Toneburst",
+    desc: "Tone burst squelch detection settings",
+    icon: "📶",
+    fields: [
+      { key: "rxburstfreq", label: "RX Burst Freq (Hz)", desc: "Frequency of RX toneburst to detect (Hz)", type: "number", default: "1000" },
+      { key: "rxburstthreshold", label: "RX Burst Threshold", desc: "Threshold for tone burst detection (0-999)", type: "number", default: "0" },
+      { key: "rxbursttime", label: "RX Burst Time (ms)", desc: "Duration of tone burst to detect (ms)", type: "number", default: "100" },
+    ]
+  },
+  archive: {
+    label: "Archiving & Logging",
+    desc: "Activity recording and logging options",
+    icon: "💾",
+    fields: [
+      { key: "archivedir", label: "Archive Directory", desc: "Directory for activity recordings (enables recording)", type: "text", default: "" },
+      { key: "archiveformat", label: "Archive Format", desc: "Audio format for recordings (wav, ogg, etc.)", type: "text", default: "wav" },
+      { key: "archivedatefmt", label: "Archive Date Format", desc: "strftime format for archive filenames", type: "text", default: "%Y%m%d%H%M%S" },
+      { key: "archiveaudio", label: "Archive Audio", desc: "Record audio in archive", type: "yesno", default: "no" },
+      { key: "mdclog", label: "MDC Log", desc: "Log MDC-1200 data to this file", type: "text", default: "" },
+      { key: "statpost_url", label: "Stat Post URL", desc: "URL to POST node stats to", type: "text", default: "" },
+      { key: "statpost_program", label: "Stat Post Program", desc: "Program to call for stat posting", type: "text", default: "" },
+    ]
+  },
+  misc: {
+    label: "Miscellaneous",
+    desc: "Other settings including control states, scheduler, tail messages",
+    icon: "🔧",
+    fields: [
+      { key: "controlstates", label: "Control States Stanza", desc: "Name of the control states stanza", type: "text", default: "" },
+      { key: "scheduler", label: "Scheduler Stanza", desc: "Name of the scheduler stanza", type: "text", default: "" },
+      { key: "events", label: "Events Stanza", desc: "Name of the events stanza", type: "text", default: "" },
+      { key: "macro", label: "Macro Stanza", desc: "Name of the macro stanza", type: "text", default: "macro" },
+      { key: "tonemacro", label: "Tone Macro Stanza", desc: "Name of the tonemacro stanza", type: "text", default: "" },
+      { key: "tailmessagelist", label: "Tail Message List", desc: "Space-separated list of tail message sound files", type: "text", default: "" },
+      { key: "tailmessagetime", label: "Tail Message Time (ms)", desc: "How often to play a tail message (ms)", type: "number", default: "0" },
+      { key: "tailsquashedtime", label: "Tail Squash Time (ms)", desc: "Interval to inhibit tail messages (ms)", type: "number", default: "0" },
+      { key: "votermode", label: "Voter Mode", desc: "VOTER/RTCM voter mode setting", type: "text", default: "" },
+      { key: "votertype", label: "Voter Type", desc: "VOTER/RTCM voter type", type: "text", default: "" },
+      { key: "votermargin", label: "Voter Margin", desc: "VOTER signal margin", type: "number", default: "" },
+      { key: "inxlat", label: "Inbound DTMF Translate", desc: "Inbound DTMF translation table", type: "text", default: "" },
+      { key: "outxlat", label: "Outbound DTMF Translate", desc: "Outbound DTMF translation table", type: "text", default: "" },
+      { key: "eannmode", label: "Echolink Announce Mode", desc: "1=number, 2=callsign, 3=number+callsign", type: "select", options: ["1","2","3"], default: "1" },
+      { key: "echolinkdefault", label: "Echolink Default", desc: "Enable Echolink by default", type: "yesno", default: "yes" },
+      { key: "echolinkdynamic", label: "Echolink Dynamic", desc: "Allow users to enable/disable Echolink", type: "yesno", default: "yes" },
+      { key: "guilinkdefault", label: "GUI Link Default", desc: "Enable GUI linking by default", type: "yesno", default: "yes" },
+      { key: "guilinkdynamic", label: "GUI Link Dynamic", desc: "Allow users to change GUI link setting", type: "yesno", default: "yes" },
+      { key: "phonelinkdefault", label: "Phone Link Default", desc: "Enable phone linking by default", type: "yesno", default: "yes" },
+      { key: "phonelinkdynamic", label: "Phone Link Dynamic", desc: "Allow users to change phone link setting", type: "yesno", default: "yes" },
+      { key: "tlbdefault", label: "TheLinkBox Default", desc: "Enable TheLinkBox by default", type: "yesno", default: "yes" },
+      { key: "tlbdynamic", label: "TheLinkBox Dynamic", desc: "Allow users to change TheLinkBox setting", type: "yesno", default: "yes" },
+      { key: "beaconing", label: "Beaconing", desc: "Enable APRS beaconing", type: "yesno", default: "no" },
+      { key: "aprstt", label: "APRS-TT Stanza", desc: "Name of the APRS-TT stanza", type: "text", default: "" },
+      { key: "elke", label: "Elke Link Mode", desc: "Enable Elke link mode", type: "yesno", default: "no" },
+      { key: "litzchar", label: "LiTZ Char", desc: "Long tone zero character", type: "text", default: "0" },
+      { key: "litzcmd", label: "LiTZ Command", desc: "Command to execute on LiTZ detection", type: "text", default: "" },
+      { key: "litztime", label: "LiTZ Time (ms)", desc: "Duration for LiTZ detection (ms)", type: "number", default: "3000" },
+      { key: "mdcmacro", label: "MDC Macro Stanza", desc: "Name of the MDC macro stanza", type: "text", default: "" },
+    ]
+  }
+};
+
+// =============================
+// STATE
+// =============================
+let confContent = "";
+let pendingChanges = {}; // {section: {key: {value, enabled}}}
+let currentSection = "general";
+let currentNode = null;
+let nodes = [];
+let parsedSettings = {}; // from API
+
+// =============================
+// INIT
+// =============================
+async function init() {
+  await loadConf();
+  buildHelpTable();
+}
+
+async function loadConf() {
+  try {
+    const res = await fetch("/api/conf");
+    if (!res.ok) {
+      const err = await res.json();
+      showToast("error", "Cannot Load Config", err.error || "Unknown error");
+      document.getElementById("stat-conf").textContent = "Not found";
+      document.getElementById("stat-status").innerHTML = '<span class="badge badge-red">Error</span>';
+      return;
+    }
+    const data = await res.json();
+    confContent = data.content;
+    nodes = data.nodes;
+    parsedSettings = data.general_settings || {};
+
+    // Update sidebar
+    updateNodeNav();
+    // Update dashboard
+    updateDashboard();
+    // Build general settings
+    buildGeneralSettings();
+    // Build node settings if nodes present
+    if (nodes.length > 0) {
+      currentNode = nodes[0];
+      buildNodeSelector();
+      buildNodeSettings(currentNode);
+    }
+    // Raw editor
+    document.getElementById("raw-editor").value = confContent;
+  } catch(e) {
+    showToast("error", "Load Error", e.message);
+  }
+}
+
+function updateNodeNav() {
+  const container = document.getElementById("node-nav-items");
+  container.innerHTML = "";
+  if (nodes.length === 0) {
+    container.innerHTML = '<div class="nav-item" style="color:var(--text-dim); font-size:12px;">No nodes found</div>';
+    return;
+  }
+  nodes.forEach(node => {
+    const div = document.createElement("div");
+    div.className = "nav-item";
+    div.id = `nav-node-${node}`;
+    div.innerHTML = `<span class="nav-icon">📻</span> Node <span class="node-pill">${node}</span>`;
+    div.onclick = () => { currentNode = node; showPage('node'); buildNodeSettings(node); };
+    container.appendChild(div);
+  });
+}
+
+function updateDashboard() {
+  document.getElementById("stat-conf").textContent = document.getElementById("conf-path-badge").textContent;
+  document.getElementById("stat-nodes").textContent = nodes.length;
+  document.getElementById("stat-status").innerHTML = '<span class="badge badge-green">Loaded</span>';
+
+  const container = document.getElementById("dashboard-nodes");
+  if (nodes.length === 0) {
+    container.innerHTML = '<div class="alert alert-warning">⚠️ No numeric node stanzas found in rpt.conf. Check your config file.</div>';
+    return;
+  }
+  let html = '<div class="card"><div class="card-header"><div class="card-title">📻 Configured Nodes</div></div><div class="card-body">';
+  nodes.forEach(node => {
+    const rxch = parsedSettings["rxchannel"]?.value || "–";
+    const duplex = parsedSettings["duplex"]?.value || "2";
+    const duplexLabels = {"0":"Half (no telem)","1":"Half duplex","2":"Full duplex","3":"Full (no repeat)","4":"Full (AP only)"};
+    html += `<div class="setting-row">
+      <div class="setting-label">${node}<div class="setting-label-desc">Node Number</div></div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <span class="badge badge-blue">duplex=${duplex} – ${duplexLabels[duplex]||""}</span>
+        <span class="badge badge-green">rx=${rxch}</span>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="currentNode='${node}'; showPage('node'); buildNodeSettings('${node}')">Configure →</button>
+    </div>`;
+  });
+  html += '</div></div>';
+  container.innerHTML = html;
+}
+
+// =============================
+// GENERAL SETTINGS
+// =============================
+function buildGeneralSettings() {
+  const container = document.getElementById("general-settings-grid");
+  container.innerHTML = "";
+  const card = buildSettingsCard("general", RPT_SETTINGS.general);
+  container.appendChild(card);
+}
+
+// =============================
+// NODE SETTINGS
+// =============================
+function buildNodeSelector() {
+  const sel = document.getElementById("node-select");
+  sel.innerHTML = "";
+  nodes.forEach(n => {
+    const opt = document.createElement("option");
+    opt.value = n;
+    opt.textContent = `Node ${n}`;
+    sel.appendChild(opt);
+  });
+}
+
+function switchNode(node) {
+  currentNode = node;
+  buildNodeSettings(node);
+}
+
+function buildNodeSettings(node) {
+  document.getElementById("node-page-title").innerHTML = `📻 Node Settings <span class="badge badge-green">[${node}]</span>`;
+  document.getElementById("node-select").value = node;
+
+  const container = document.getElementById("node-settings-container");
+  container.innerHTML = "";
+  const grid = document.createElement("div");
+  grid.className = "settings-grid";
+
+  // Skip 'general' section, render all node sections
+  Object.entries(RPT_SETTINGS).forEach(([sectionKey, section]) => {
+    if (sectionKey === "general") return;
+    const card = buildSettingsCard(sectionKey, section, node);
+    grid.appendChild(card);
+  });
+
+  container.appendChild(grid);
+}
+
+// =============================
+// CARD BUILDER
+// =============================
+function buildSettingsCard(sectionKey, section, nodeNum = null) {
+  const card = document.createElement("div");
+  card.className = "card";
+
+  // Header
+  const header = document.createElement("div");
+  header.className = "card-header";
+  header.innerHTML = `
+    <div>
+      <div class="card-title">${section.icon} ${section.label}</div>
+      <div class="card-desc">${section.desc}</div>
+    </div>
+    <span class="card-collapse-icon">▾</span>
+  `;
+  header.onclick = () => card.classList.toggle("collapsed");
+  card.appendChild(header);
+
+  const body = document.createElement("div");
+  body.className = "card-body";
+
+  section.fields.forEach(field => {
+    const row = buildSettingRow(field, sectionKey, nodeNum);
+    body.appendChild(row);
+  });
+
+  card.appendChild(body);
+  return card;
+}
+
+function buildSettingRow(field, sectionKey, nodeNum) {
+  const row = document.createElement("div");
+  row.className = "setting-row";
+
+  // Get current value from parsed settings
+  let currentVal = field.default || "";
+  let isCommented = false;
+  if (parsedSettings[field.key]) {
+    currentVal = parsedSettings[field.key].value;
+    isCommented = parsedSettings[field.key].commented;
+  }
+
+  // Label
+  const labelEl = document.createElement("div");
+  labelEl.className = "setting-label";
+  labelEl.innerHTML = `${field.key}<div class="setting-label-desc">${field.desc}</div>`;
+
+  // Input
+  const inputWrap = document.createElement("div");
+  let inputEl;
+
+  if (field.type === "select") {
+    inputEl = document.createElement("select");
+    inputEl.className = "setting-input";
+    field.options.forEach(opt => {
+      const o = document.createElement("option");
+      o.value = opt;
+      o.textContent = opt;
+      if (opt === currentVal) o.selected = true;
+      inputEl.appendChild(o);
+    });
+  } else if (field.type === "yesno") {
+    inputEl = document.createElement("select");
+    inputEl.className = "setting-input";
+    ["yes","no","1","0"].forEach(opt => {
+      const o = document.createElement("option");
+      o.value = opt;
+      o.textContent = opt;
+      if (opt === currentVal) o.selected = true;
+      inputEl.appendChild(o);
+    });
+  } else {
+    inputEl = document.createElement("input");
+    inputEl.type = field.type === "number" ? "number" : "text";
+    inputEl.className = "setting-input";
+    inputEl.value = currentVal;
+    if (field.placeholder) inputEl.placeholder = field.placeholder;
+  }
+
+  inputEl.disabled = isCommented;
+
+  inputEl.addEventListener("input", () => {
+    inputEl.classList.add("changed");
+    recordChange(sectionKey, nodeNum, field.key, inputEl.value, !isCommented);
+    showSaveBar();
+  });
+
+  inputEl.addEventListener("change", () => {
+    recordChange(sectionKey, nodeNum, field.key, inputEl.value, !isCommented);
+  });
+
+  inputWrap.appendChild(inputEl);
+
+  // Toggle (enable/disable = comment/uncomment)
+  const toggleWrap = document.createElement("div");
+  toggleWrap.className = "setting-toggle";
+
+  const toggleLabel = document.createElement("label");
+  toggleLabel.className = "toggle";
+  const toggleInput = document.createElement("input");
+  toggleInput.type = "checkbox";
+  toggleInput.checked = !isCommented;
+  const slider = document.createElement("span");
+  slider.className = "toggle-slider";
+  toggleLabel.appendChild(toggleInput);
+  toggleLabel.appendChild(slider);
+
+  const toggleText = document.createElement("span");
+  toggleText.textContent = isCommented ? "off" : "on";
+
+  toggleInput.addEventListener("change", () => {
+    isCommented = !toggleInput.checked;
+    inputEl.disabled = isCommented;
+    toggleText.textContent = isCommented ? "off" : "on";
+    if (isCommented) {
+      row.classList.add("disabled");
+    } else {
+      row.classList.remove("disabled");
+    }
+    recordChange(sectionKey, nodeNum, field.key, inputEl.value, toggleInput.checked);
+    showSaveBar();
+  });
+
+  if (isCommented) row.classList.add("disabled");
+
+  toggleWrap.appendChild(toggleLabel);
+  toggleWrap.appendChild(toggleText);
+
+  row.appendChild(labelEl);
+  row.appendChild(inputWrap);
+  row.appendChild(toggleWrap);
+
+  return row;
+}
+
+// =============================
+// CHANGE TRACKING
+// =============================
+function recordChange(section, node, key, value, enabled) {
+  const k = node ? `${node}:${section}` : section;
+  if (!pendingChanges[k]) pendingChanges[k] = { section: node || section, nodeNum: node };
+  if (!pendingChanges[k].changes) pendingChanges[k].changes = {};
+  pendingChanges[k].changes[key] = { value, enabled };
+}
+
+// =============================
+// SAVE
+// =============================
+async function saveChanges() {
+  if (Object.keys(pendingChanges).length === 0) {
+    showToast("info", "No Changes", "Nothing to save.");
+    return;
+  }
+
+  // For simplicity, reload raw, apply all changes, save
+  try {
+    const res = await fetch("/api/conf");
+    const data = await res.json();
+    let content = data.content;
+
+    // Apply changes via server
+    for (const [k, changeGroup] of Object.entries(pendingChanges)) {
+      const sectionName = changeGroup.nodeNum || changeGroup.section;
+      const saveRes = await fetch("/api/save", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          section: sectionName,
+          changes: changeGroup.changes
+        })
+      });
+      const saveData = await saveRes.json();
+      if (!saveData.success) {
+        showToast("error", "Save Failed", saveData.error || "Unknown error");
+        return;
+      }
+    }
+
+    pendingChanges = {};
+    hideSaveBar();
+    showToast("success", "Saved!", "rpt.conf updated successfully.");
+    await loadConf();
+  } catch(e) {
+    showToast("error", "Save Error", e.message);
+  }
+}
+
+async function saveRaw() {
+  const content = document.getElementById("raw-editor").value;
+  try {
+    const res = await fetch("/api/save", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ raw_content: content })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast("success", "Saved!", `Backup: ${data.backup}`);
+      confContent = content;
+    } else {
+      showToast("error", "Save Failed", data.error);
+    }
+  } catch(e) {
+    showToast("error", "Error", e.message);
+  }
+}
+
+function discardChanges() {
+  pendingChanges = {};
+  hideSaveBar();
+  loadConf();
+  showToast("info", "Discarded", "Changes discarded.");
+}
+
+// =============================
+// RAW EDITOR
+// =============================
+async function loadRawContent() {
+  const res = await fetch("/api/conf");
+  const data = await res.json();
+  document.getElementById("raw-editor").value = data.content;
+  showToast("info", "Reloaded", "Raw content refreshed from disk.");
+}
+
+// =============================
+// RESTART / RELOAD
+// =============================
+async function restartAsterisk() {
+  if (!confirm("Restart Asterisk? This will briefly interrupt all connections.")) return;
+  showToast("info", "Restarting…", "Sending restart command to Asterisk.");
+  try {
+    const res = await fetch("/api/restart", { method: "POST" });
+    const data = await res.json();
+    if (data.success) {
+      showToast("success", "Restarted", data.output || "Asterisk restarted successfully.");
+    } else {
+      showToast("error", "Restart Failed", data.error || "Unknown error");
+    }
+  } catch(e) {
+    showToast("error", "Error", e.message);
+  }
+}
+
+async function reloadModule() {
+  showToast("info", "Reloading…", "Reloading app_rpt module.");
+  try {
+    const res = await fetch("/api/reload", { method: "POST" });
+    const data = await res.json();
+    if (data.success) {
+      showToast("success", "Reloaded", data.output || "Module reloaded.");
+    } else {
+      showToast("error", "Reload Failed", data.error || "Unknown error");
+    }
+  } catch(e) {
+    showToast("error", "Error", e.message);
+  }
+}
+
+// =============================
+// BACKUPS
+// =============================
+async function loadBackups() {
+  showPage("backups");
+  const res = await fetch("/api/backups");
+  const data = await res.json();
+  const container = document.getElementById("backup-list");
+  if (!data.backups || data.backups.length === 0) {
+    container.innerHTML = '<div class="alert alert-info">ℹ️ No backups found yet. Backups are created automatically when you save.</div>';
+    return;
+  }
+  let html = `<div class="alert alert-info">ℹ️ Backups stored in <code>${data.backup_dir}</code></div><div class="card"><div class="card-body">`;
+  data.backups.forEach(file => {
+    const ts = file.replace("rpt.conf.","").replace(".bak","");
+    html += `<div class="setting-row">
+      <div class="setting-label mono">${file}<div class="setting-label-desc">${formatTimestamp(ts)}</div></div>
+      <div></div>
+      <button class="btn btn-secondary btn-sm" onclick="restoreBackup('${file}')">↩ Restore</button>
+    </div>`;
+  });
+  html += '</div></div>';
+  container.innerHTML = html;
+}
+
+function formatTimestamp(ts) {
+  try {
+    const y = ts.substr(0,4), mo = ts.substr(4,2), d = ts.substr(6,2);
+    const h = ts.substr(9,2), mi = ts.substr(11,2), s = ts.substr(13,2);
+    return `${y}-${mo}-${d} ${h}:${mi}:${s}`;
+  } catch { return ts; }
+}
+
+async function restoreBackup(filename) {
+  if (!confirm(`Restore ${filename}? Current rpt.conf will be backed up first.`)) return;
+  const res = await fetch(`/api/backup/${filename}`);
+  const data = await res.json();
+  if (data.content) {
+    const saveRes = await fetch("/api/save", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ raw_content: data.content })
+    });
+    const saveData = await saveRes.json();
+    if (saveData.success) {
+      showToast("success", "Restored", `${filename} has been restored.`);
+      loadConf();
+    } else {
+      showToast("error", "Restore Failed", saveData.error);
+    }
+  }
+}
+
+// =============================
+// HELP TABLE
+// =============================
+function buildHelpTable() {
+  const tbody = document.getElementById("help-table-body");
+  Object.values(RPT_SETTINGS).forEach(section => {
+    section.fields.forEach(field => {
+      const tr = document.createElement("tr");
+      tr.style.borderBottom = "1px solid var(--border)";
+      tr.innerHTML = `
+        <td style="padding: 8px 12px; font-family: var(--font-mono); color: var(--green); font-size: 12px;">${field.key}</td>
+        <td style="padding: 8px 12px; color: var(--text-muted);">${field.desc}</td>
+        <td style="padding: 8px 12px; font-family: var(--font-mono); font-size: 12px; color: var(--amber);">${field.default || '—'}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  });
+}
+
+// =============================
+// NAVIGATION
+// =============================
+function showPage(page) {
+  document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+  document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
+
+  const pageEl = document.getElementById(`page-${page}`);
+  if (pageEl) pageEl.classList.add("active");
+
+  const navEl = document.getElementById(`nav-${page}`);
+  if (navEl) navEl.classList.add("active");
+
+  if (page === "backups") loadBackups();
+  if (page === "raw") loadRawContent();
+
+  // Handle node nav
+  if (page === "node" && currentNode) {
+    const nodeNav = document.getElementById(`nav-node-${currentNode}`);
+    if (nodeNav) nodeNav.classList.add("active");
+  }
+}
+
+// =============================
+// SAVE BAR
+// =============================
+function showSaveBar() {
+  document.getElementById("save-bar").classList.add("visible");
+}
+
+function hideSaveBar() {
+  document.getElementById("save-bar").classList.remove("visible");
+}
+
+// =============================
+// TOAST NOTIFICATIONS
+// =============================
+function showToast(type, title, msg) {
+  const icons = { success: "✅", error: "❌", warning: "⚠️", info: "ℹ️" };
+  const container = document.getElementById("toast-container");
+  const toast = document.createElement("div");
+  toast.className = `toast ${type}`;
+  toast.innerHTML = `
+    <span class="toast-icon">${icons[type] || "ℹ️"}</span>
+    <div class="toast-body">
+      <div class="toast-title">${title}</div>
+      ${msg ? `<div class="toast-msg">${msg}</div>` : ""}
+    </div>
+  `;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = "0";
+    toast.style.transition = "opacity 0.3s";
+    setTimeout(() => toast.remove(), 300);
+  }, 4000);
+}
+
+// =============================
+// BOOTSTRAP
+// =============================
+init();
+</script>
+</body>
+</html>
