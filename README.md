@@ -233,7 +233,7 @@ ASL3-EZ/
 
 ## License
 
-GNU License — use freely, at your own risk. Not affiliated with AllStarLink
+GNU GPU License — use freely, at your own risk. Not affiliated with AllStarLink
 
 ---
 
