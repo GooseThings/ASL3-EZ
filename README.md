@@ -1,4 +1,4 @@
-# ASL3-EZ
+# ASL3-EZ - Version 0.0.2 BETA
 
 **AllStarLink 3 Editor by N8GMZ**
 
