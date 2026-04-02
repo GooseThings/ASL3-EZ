@@ -12,19 +12,19 @@ A browser-based web interface for editing your AllStarLink 3 `rpt.conf` configur
 
 ## Features
 
-- **All rpt.conf settings** — every node stanza parameter organized into collapsible sections
-- **Functions, Link Functions, Phone Functions** stanza editors — add/remove/edit DTMF commands with a table UI
-- **Macro editor** — define and edit macros in the `[macro]` stanza
-- **Scheduler** — set up cron-style scheduled macro execution in `[schedule]`
-- **Telemetry stanza editor** — define courtesy tones and telemetry entries
-- **Nodes stanza editor** — manage static node connection entries
-- **COP Commands reference** — full table of all COP, iLink, and Status commands
-- **Toggle settings on/off** — comment/uncomment lines without deleting them
-- **Automatic backups** — every save creates a timestamped backup
-- **Backup browser** — view and restore any of the last 10 backups with confirmation dialogs
-- **One-click Asterisk restart** or softer module reload — both with confirmation dialog
-- **Raw text editor** — edit rpt.conf directly when needed
-- **About page** with contact information
+- 📻 **All rpt.conf settings** — every node stanza parameter organized into collapsible sections
+- 🔢 **Functions, Link Functions, Phone Functions** stanza editors — add/remove/edit DTMF commands with a table UI
+- 🎛️ **Macro editor** — define and edit macros in the `[macro]` stanza
+- 🕐 **Scheduler** — set up cron-style scheduled macro execution in `[schedule]`
+- 📢 **Telemetry stanza editor** — define courtesy tones and telemetry entries
+- 🌐 **Nodes stanza editor** — manage static node connection entries
+- 📋 **COP Commands reference** — full table of all COP, iLink, and Status commands
+- 🔄 **Toggle settings on/off** — comment/uncomment lines without deleting them
+- 💾 **Automatic backups** — every save creates a timestamped backup
+- 🗂 **Backup browser** — view and restore any of the last 10 backups with confirmation dialogs
+- ⚡ **One-click Asterisk restart** or softer module reload — both with confirmation dialog
+- 📝 **Raw text editor** — edit rpt.conf directly when needed
+- ℹ️ **About page** with contact information
 
 ---
 
