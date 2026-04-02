@@ -1,20 +1,1388 @@
-function saveChanges() {
-    try {
-        // Validate input data
-        const inputData = document.getElementById('inputField').value;
-        if (!inputData) {
-            throw new Error('Input data is required.');
-        }
-        // Perform save operation (mocked)
-        console.log('Saving changes...');
-        // Simulate a save with a possible error
-        const saveSuccessful = Math.random() > 0.1; // Assuming 90% success rate
-        if (!saveSuccessful) {
-            throw new Error('Failed to save changes. Please try again.');
-        }
-        console.log('Changes saved successfully!');
-    } catch (error) {
-        console.error(error.message);
-        alert('Error: ' + error.message);
-    }
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+<title>ASL3-EZ</title>
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --surface2: #1c2128; --border: #30363d;
+    --green: #3fb950; --green-dim: #1a3626; --amber: #d29922; --amber-dim: #3a2700;
+    --red: #f85149; --red-dim: #3b1219; --blue: #58a6ff; --blue-dim: #0d2644;
+    --text: #e6edf3; --text-muted: #8b949e; --text-dim: #6e7681;
+    --accent: #238636; --accent-hover: #2ea043; --radius: 6px;
+    --font-mono: 'JetBrains Mono','Fira Code','Courier New',monospace;
+    --font-sans: 'IBM Plex Sans',-apple-system,BlinkMacSystemFont,sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font-sans); font-size: 14px; line-height: 1.5; min-height: 100vh; }
+  header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 20px; display: flex; align-items: center; justify-content: space-between; height: 52px; position: sticky; top: 0; z-index: 100; }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 15px; }
+  .logo-icon { width: 30px; height: 30px; background: linear-gradient(135deg,#238636,#1a7f37); border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .logo-sub { color: var(--text-muted); font-weight: 400; font-size: 11px; }
+  .nav-logo { width: 180px; height: auto; max-width: 100%; vertical-align: middle; }
+
+/* Optional: Adjust size specifically for very small mobile screens */
+/* @media (max-width: 480px) { .nav-logo { width: 120px; } } */
+
+  .header-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .btn { display: inline-flex; align-items: center; gap: 5px; padding: 5px 12px; border-radius: var(--radius); border: 1px solid transparent; font-size: 12px; font-weight: 500; cursor: pointer; transition: all .15s; font-family: var(--font-sans); white-space: nowrap; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-primary { background: var(--accent); border-color: #2ea04326; color: #fff; }
+  .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+  .btn-danger { background: transparent; border-color: var(--red); color: var(--red); }
+  .btn-danger:hover:not(:disabled) { background: var(--red-dim); }
+  .btn-secondary { background: transparent; border-color: var(--border); color: var(--text); }
+  .btn-secondary:hover:not(:disabled) { background: var(--surface2); border-color: #8b949e; }
+  .btn-amber { background: transparent; border-color: var(--amber); color: var(--amber); }
+  .btn-amber:hover:not(:disabled) { background: var(--amber-dim); }
+  .btn-blue { background: transparent; border-color: var(--blue); color: var(--blue); }
+  .btn-blue:hover:not(:disabled) { background: var(--blue-dim); }
+  .layout { display: flex; height: calc(100vh - 52px); }
+  .sidebar { width: 210px; flex-shrink: 0; background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 8px 0; }
+  .sidebar-section { padding: 6px 12px 3px; font-size: 10px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: .8px; margin-top: 6px; }
+  .nav-item { display: flex; align-items: center; gap: 7px; padding: 6px 14px; cursor: pointer; color: var(--text-muted); font-size: 12px; border-left: 2px solid transparent; transition: all .12s; }
+  .nav-item:hover { background: var(--surface2); color: var(--text); }
+  .nav-item.active { background: var(--blue-dim); color: var(--blue); border-left-color: var(--blue); }
+  .nav-icon { font-size: 13px; width: 16px; text-align: center; }
+  .main { flex: 1; overflow-y: auto; padding: 20px; }
+  .page { display: none; }
+  .page.active { display: block; }
+  .page-header { margin-bottom: 20px; }
+  .page-title { font-size: 18px; font-weight: 700; margin-bottom: 3px; }
+  .page-desc { color: var(--text-muted); font-size: 12px; }
+  .settings-grid { display: grid; gap: 12px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .card-header { padding: 10px 14px; background: var(--surface2); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none; }
+  .card-title { font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 7px; }
+  .card-desc { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+  .card-collapse-icon { color: var(--text-dim); transition: transform .2s; font-size: 11px; }
+  .card.collapsed .card-collapse-icon { transform: rotate(-90deg); }
+  .card.collapsed .card-body { display: none; }
+  .setting-row { display: grid; grid-template-columns: 190px 1fr auto; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid var(--border); transition: background .1s; }
+  .setting-row:last-child { border-bottom: none; }
+  .setting-row:hover { background: var(--surface2); }
+  .setting-row.disabled { opacity: .55; }
+  .setting-label { font-family: var(--font-mono); font-size: 11px; color: var(--green); display: flex; flex-direction: column; gap: 1px; }
+  .setting-label-desc { font-family: var(--font-sans); font-size: 10px; color: var(--text-muted); font-style: italic; line-height: 1.3; }
+  .setting-input { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); padding: 4px 8px; font-family: var(--font-mono); font-size: 12px; width: 100%; transition: border-color .15s; }
+  .setting-input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(88,166,255,.1); }
+  .setting-input.changed { border-color: var(--amber); box-shadow: 0 0 0 3px rgba(210,153,34,.12); }
+  select.setting-input { cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath fill='%238b949e' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 8px center; padding-right: 24px; }
+  .setting-toggle { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--text-muted); white-space: nowrap; }
+  .toggle { position: relative; width: 32px; height: 18px; flex-shrink: 0; }
+  .toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .toggle-slider { position: absolute; inset: 0; background: var(--border); border-radius: 18px; cursor: pointer; transition: .2s; }
+  .toggle-slider:before { content: ''; position: absolute; width: 12px; height: 12px; left: 3px; top: 3px; background: var(--text-muted); border-radius: 50%; transition: .2s; }
+  .toggle input:checked + .toggle-slider { background: var(--accent); }
+  .toggle input:checked + .toggle-slider:before { transform: translateX(14px); background: #fff; }
+  .badge { display: inline-block; padding: 1px 6px; border-radius: 20px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
+  .badge-green { background: var(--green-dim); color: var(--green); border: 1px solid #3fb95040; }
+  .badge-amber { background: var(--amber-dim); color: var(--amber); border: 1px solid #d2992240; }
+  .badge-red { background: var(--red-dim); color: var(--red); border: 1px solid #f8514940; }
+  .badge-blue { background: var(--blue-dim); color: var(--blue); border: 1px solid #58a6ff40; }
+  .save-bar { position: fixed; bottom: -70px; left: 210px; right: 0; background: var(--surface2); border-top: 1px solid var(--border); padding: 10px 20px; display: flex; align-items: center; justify-content: space-between; z-index: 99; transition: bottom .3s ease; }
+  .save-bar.visible { bottom: 0; }
+  .save-bar-msg { color: var(--amber); font-size: 12px; display: flex; align-items: center; gap: 7px; }
+  #toast-container { position: fixed; top: 62px; right: 14px; z-index: 9999; display: flex; flex-direction: column; gap: 7px; }
+  .toast { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; min-width: 260px; font-size: 12px; display: flex; align-items: flex-start; gap: 8px; box-shadow: 0 4px 12px rgba(0,0,0,.4); animation: slideIn .25s ease; }
+  @keyframes slideIn { from { transform: translateX(20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  .toast-icon { font-size: 14px; flex-shrink: 0; }
+  .toast-body { flex: 1; }
+  .toast-title { font-weight: 600; margin-bottom: 1px; }
+  .toast-msg { color: var(--text-muted); font-size: 11px; }
+  .toast.success { border-left: 3px solid var(--green); }
+  .toast.error { border-left: 3px solid var(--red); }
+  .toast.warning { border-left: 3px solid var(--amber); }
+  .toast.info { border-left: 3px solid var(--blue); }
+  #raw-editor { width: 100%; min-height: 550px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-family: var(--font-mono); font-size: 12px; line-height: 1.6; padding: 14px; resize: vertical; tab-size: 4; }
+  #raw-editor:focus { outline: none; border-color: var(--blue); }
+  .alert { padding: 10px 14px; border-radius: var(--radius); margin-bottom: 14px; font-size: 12px; display: flex; gap: 8px; align-items: flex-start; }
+  .alert-warning { background: var(--amber-dim); border: 1px solid #d2992240; color: var(--amber); }
+  .alert-error { background: var(--red-dim); border: 1px solid #f8514940; color: var(--red); }
+  .alert-info { background: var(--blue-dim); border: 1px solid #58a6ff40; color: var(--blue); }
+  .alert-success { background: var(--green-dim); border: 1px solid #3fb95040; color: var(--green); }
+  .node-selector { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+  .node-selector label { font-weight: 600; font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+  #node-select { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); padding: 5px 10px; font-size: 13px; font-family: var(--font-mono); cursor: pointer; }
+  .status-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap: 10px; margin-bottom: 20px; }
+  .status-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
+  .status-card-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 5px; }
+  .status-card-value { font-size: 16px; font-weight: 700; font-family: var(--font-mono); }
+  .mono { font-family: var(--font-mono); }
+  code { background: var(--surface2); border: 1px solid var(--border); border-radius: 3px; padding: 1px 4px; font-family: var(--font-mono); font-size: 11px; color: var(--green); }
+  .mt-12 { margin-top: 12px; }
+  .node-pill { display: inline-flex; align-items: center; background: var(--green-dim); color: var(--green); border: 1px solid #3fb95040; border-radius: 20px; padding: 1px 7px; font-size: 10px; font-family: var(--font-mono); font-weight: 600; }
+
+  /* Stanza editor (for functions, macros, COP, etc.) */
+  .stanza-editor-wrap { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .stanza-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .stanza-table th { background: var(--surface2); padding: 7px 12px; text-align: left; font-size: 11px; color: var(--text-muted); font-weight: 600; border-bottom: 1px solid var(--border); }
+  .stanza-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .stanza-table tr:last-child td { border-bottom: none; }
+  .stanza-table tr:hover td { background: var(--surface2); }
+  .stanza-input { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); padding: 3px 7px; font-family: var(--font-mono); font-size: 12px; width: 100%; }
+  .stanza-input:focus { outline: none; border-color: var(--blue); }
+  .stanza-key-input { width: 80px; }
+  .add-row-btn { margin: 8px 12px; }
+  .del-btn { background: none; border: none; color: var(--red); cursor: pointer; font-size: 14px; padding: 2px 5px; border-radius: 3px; }
+  .del-btn:hover { background: var(--red-dim); }
+
+  /* COP reference table */
+  .ref-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .ref-table th { background: var(--surface2); padding: 6px 10px; text-align: left; color: var(--text-muted); font-weight: 600; border-bottom: 1px solid var(--border); position: sticky; top: 0; }
+  .ref-table td { padding: 5px 10px; border-bottom: 1px solid var(--border); }
+  .ref-table tr:last-child td { border-bottom: none; }
+  .ref-table tr:hover td { background: var(--surface2); }
+  .ref-table .cop-num { font-family: var(--font-mono); color: var(--amber); font-weight: 600; }
+  .ref-table .ilink-num { font-family: var(--font-mono); color: var(--blue); font-weight: 600; }
+
+  /* About page */
+  .about-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px 32px; max-width: 600px; }
+  .about-card h2 { font-size: 22px; margin-bottom: 4px; }
+  .about-card .callsign { font-family: var(--font-mono); font-size: 28px; color: var(--green); font-weight: 700; letter-spacing: 2px; margin-bottom: 16px; }
+  .about-card a { color: var(--blue); text-decoration: none; }
+  .about-card a:hover { text-decoration: underline; }
+  .about-divider { height: 1px; background: var(--border); margin: 16px 0; }
+
+  /* Dialog */
+  .dialog-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 9000; align-items: center; justify-content: center; }
+  .dialog-overlay.show { display: flex; }
+  .dialog { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 24px; min-width: 340px; max-width: 480px; box-shadow: 0 8px 32px rgba(0,0,0,.5); }
+  .dialog-title { font-size: 16px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .dialog-msg { color: var(--text-muted); font-size: 13px; margin-bottom: 20px; line-height: 1.5; }
+  .dialog-actions { display: flex; gap: 8px; justify-content: flex-end; }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon"><img src="/static/asl3-ez-logo.png" alt="ASL3-EZ Logo" class="nav-logo"></div>
+    <div>ASL3-EZ <div class="logo-sub">AllStarLink 3 rpt.conf Editor by N8GMZ</div></div>
+  </div>
+  <div class="header-actions">
+    <span class="badge badge-blue mono" style="font-size:10px;">{{ conf_path }}</span>
+    <button class="btn btn-secondary" onclick="showPage('backups')">🗂 Backups</button>
+    <button class="btn btn-amber" onclick="confirmReload()">↻ Reload Module</button>
+    <button class="btn btn-danger" onclick="confirmRestart()">⚡ Restart Asterisk</button>
+  </div>
+</header>
+
+<div class="layout">
+  <nav class="sidebar">
+    <div class="sidebar-section">Overview</div>
+    <div class="nav-item active" onclick="showPage('dashboard')" id="nav-dashboard"><span class="nav-icon">📊</span> Dashboard</div>
+    <div class="nav-item" onclick="showPage('general')" id="nav-general"><span class="nav-icon">⚙️</span> General</div>
+
+    <div class="sidebar-section">Node Config</div>
+    <div id="node-nav-items"></div>
+
+    <div class="sidebar-section">DTMF Stanzas</div>
+    <div class="nav-item" onclick="showPage('functions')" id="nav-functions"><span class="nav-icon">🔢</span> Functions</div>
+    <div class="nav-item" onclick="showPage('link-functions')" id="nav-link-functions"><span class="nav-icon">🔗</span> Link Functions</div>
+    <div class="nav-item" onclick="showPage('phone-functions')" id="nav-phone-functions"><span class="nav-icon">📞</span> Phone Functions</div>
+
+    <div class="sidebar-section">Advanced</div>
+    <div class="nav-item" onclick="showPage('macros')" id="nav-macros"><span class="nav-icon">🎛️</span> Macros</div>
+    <div class="nav-item" onclick="showPage('scheduler')" id="nav-scheduler"><span class="nav-icon">🕐</span> Scheduler</div>
+    <div class="nav-item" onclick="showPage('telemetry')" id="nav-telemetry"><span class="nav-icon">📢</span> Telemetry</div>
+    <div class="nav-item" onclick="showPage('nodes-stanza')" id="nav-nodes-stanza"><span class="nav-icon">🌐</span> Nodes List</div>
+
+    <div class="sidebar-section">Reference</div>
+    <div class="nav-item" onclick="showPage('cop-ref')" id="nav-cop-ref"><span class="nav-icon">📋</span> COP Commands</div>
+    <div class="nav-item" onclick="showPage('help')" id="nav-help"><span class="nav-icon">❓</span> Help</div>
+
+    <div class="sidebar-section">Tools</div>
+    <div class="nav-item" onclick="showPage('raw')" id="nav-raw"><span class="nav-icon">📝</span> Raw Editor</div>
+    <div class="nav-item" onclick="showPage('backups')" id="nav-backups"><span class="nav-icon">🗂</span> Backups</div>
+    <div class="nav-item" onclick="showPage('about')" id="nav-about"><span class="nav-icon">ℹ️</span> About</div>
+  </nav>
+
+  <main class="main">
+
+    <!-- DASHBOARD -->
+    <div class="page active" id="page-dashboard">
+      <div class="page-header">
+        <div class="page-title">Dashboard</div>
+        <div class="page-desc">AllStarLink 3 node configuration overview</div>
+      </div>
+      <div class="status-grid">
+        <div class="status-card"><div class="status-card-label">Config File</div><div class="status-card-value" id="stat-conf" style="font-size:11px;color:var(--text-muted)">Loading…</div></div>
+        <div class="status-card"><div class="status-card-label">Nodes Found</div><div class="status-card-value" id="stat-nodes" style="color:var(--green)">–</div></div>
+        <div class="status-card"><div class="status-card-label">Status</div><div class="status-card-value" id="stat-status">–</div></div>
+      </div>
+      <div id="dashboard-nodes"></div>
+      <div class="card mt-12">
+        <div class="card-header" style="cursor:default;"><div><div class="card-title">🚀 Quick Actions</div></div></div>
+        <div style="padding:14px;display:flex;flex-wrap:wrap;gap:8px;">
+          <button class="btn btn-primary" onclick="showPage('general')">⚙️ General Settings</button>
+          <button class="btn btn-secondary" onclick="showPage('functions')">🔢 Edit Functions</button>
+          <button class="btn btn-secondary" onclick="showPage('macros')">🎛️ Edit Macros</button>
+          <button class="btn btn-secondary" onclick="showPage('scheduler')">🕐 Scheduler</button>
+          <button class="btn btn-secondary" onclick="showPage('raw')">📝 Raw Editor</button>
+          <button class="btn btn-amber" onclick="confirmReload()">↻ Reload Module</button>
+          <button class="btn btn-danger" onclick="confirmRestart()">⚡ Restart Asterisk</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- GENERAL -->
+    <div class="page" id="page-general">
+      <div class="page-header">
+        <div class="page-title">⚙️ General Settings <span class="badge badge-blue">[general]</span></div>
+        <div class="page-desc">ASL3 global node lookup and DNS settings</div>
+      </div>
+      <div class="settings-grid" id="general-settings-grid"></div>
+    </div>
+
+    <!-- NODE -->
+    <div class="page" id="page-node">
+      <div class="page-header">
+        <div class="page-title" id="node-page-title">Node Settings</div>
+        <div class="page-desc">All parameters for the selected node stanza</div>
+      </div>
+      <div class="node-selector">
+        <label>Active Node:</label>
+        <select id="node-select" onchange="switchNode(this.value)"></select>
+      </div>
+      <div id="node-settings-container"></div>
+    </div>
+
+    <!-- FUNCTIONS STANZA -->
+    <div class="page" id="page-functions">
+      <div class="page-header">
+        <div class="page-title">🔢 Functions Stanza <span class="badge badge-blue">[functions]</span></div>
+        <div class="page-desc">DTMF commands decoded from the node's local receiver. Format: <code>DTMF = class,method</code> — the * prefix is implied.</div>
+      </div>
+      <div class="alert alert-info">ℹ️ DTMF commands are entered <strong>without</strong> the leading * (funcchar). So <code>3 = ilink,3</code> means users dial <strong>*3&lt;node&gt;</strong>. See the COP Commands reference for all available commands.</div>
+      <div class="card">
+        <div class="card-header" style="cursor:default;"><div class="card-title">Local Function Commands</div><button class="btn btn-primary" onclick="addStanzaRow('functions-table')">+ Add Row</button></div>
+        <div class="stanza-editor-wrap">
+          <table class="stanza-table" id="functions-table">
+            <thead><tr><th style="width:90px">DTMF Key</th><th>Command (class,method or class,method,params)</th><th style="width:36px"></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:8px;">
+        <button class="btn btn-primary" onclick="saveStanza('functions-table','functions')">💾 Save [functions]</button>
+      </div>
+    </div>
+
+    <!-- LINK FUNCTIONS -->
+    <div class="page" id="page-link-functions">
+      <div class="page-header">
+        <div class="page-title">🔗 Link Functions <span class="badge badge-blue">[link-functions]</span></div>
+        <div class="page-desc">DTMF commands decoded when accessed via a linked node.</div>
+      </div>
+      <div class="card">
+        <div class="card-header" style="cursor:default;"><div class="card-title">Link Function Commands</div><button class="btn btn-primary" onclick="addStanzaRow('link-functions-table')">+ Add Row</button></div>
+        <div class="stanza-editor-wrap">
+          <table class="stanza-table" id="link-functions-table">
+            <thead><tr><th style="width:90px">DTMF Key</th><th>Command</th><th style="width:36px"></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div style="margin-top:10px;">
+        <button class="btn btn-primary" onclick="saveStanza('link-functions-table','link-functions')">💾 Save [link-functions]</button>
+      </div>
+    </div>
+
+    <!-- PHONE FUNCTIONS -->
+    <div class="page" id="page-phone-functions">
+      <div class="page-header">
+        <div class="page-title">📞 Phone Functions <span class="badge badge-blue">[phone-functions]</span></div>
+        <div class="page-desc">DTMF commands decoded from telephone (autopatch) connections.</div>
+      </div>
+      <div class="card">
+        <div class="card-header" style="cursor:default;"><div class="card-title">Phone Function Commands</div><button class="btn btn-primary" onclick="addStanzaRow('phone-functions-table')">+ Add Row</button></div>
+        <div class="stanza-editor-wrap">
+          <table class="stanza-table" id="phone-functions-table">
+            <thead><tr><th style="width:90px">DTMF Key</th><th>Command</th><th style="width:36px"></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div style="margin-top:10px;">
+        <button class="btn btn-primary" onclick="saveStanza('phone-functions-table','phone-functions')">💾 Save [phone-functions]</button>
+      </div>
+    </div>
+
+    <!-- MACROS -->
+    <div class="page" id="page-macros">
+      <div class="page-header">
+        <div class="page-title">🎛️ Macros <span class="badge badge-blue">[macro]</span></div>
+        <div class="page-desc">Macros execute a series of DTMF functions in sequence. Format: <code>macroN = *cmd1:*cmd2:*cmd3</code></div>
+      </div>
+      <div class="alert alert-info">ℹ️ Each macro entry is a number = colon-separated list of DTMF commands (including the * prefix). Example: <code>1 = *81:*82</code></div>
+      <div class="card">
+        <div class="card-header" style="cursor:default;"><div class="card-title">Macro Definitions</div><button class="btn btn-primary" onclick="addStanzaRow('macro-table')">+ Add Macro</button></div>
+        <div class="stanza-editor-wrap">
+          <table class="stanza-table" id="macro-table">
+            <thead><tr><th style="width:90px">Macro #</th><th>Command Sequence (colon-separated DTMF strings)</th><th style="width:36px"></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div style="margin-top:10px;">
+        <button class="btn btn-primary" onclick="saveStanza('macro-table','macro')">💾 Save [macro]</button>
+      </div>
+    </div>
+
+    <!-- SCHEDULER -->
+    <div class="page" id="page-scheduler">
+      <div class="page-header">
+        <div class="page-title">🕐 Scheduler <span class="badge badge-blue">[schedule]</span></div>
+        <div class="page-desc">Schedule macros to run at specific times using cron-style syntax.</div>
+      </div>
+      <div class="alert alert-info">ℹ️ Format: <code>macroN = minute hour dom month dow</code> — uses cron syntax. <code>*</code> = any. Example: <code>2 = 00 00 * * *</code> runs macro 2 at midnight daily.</div>
+      <div class="card">
+        <div class="card-header" style="cursor:default;"><div class="card-title">Scheduled Events</div><button class="btn btn-primary" onclick="addScheduleRow()">+ Add Schedule</button></div>
+        <div class="stanza-editor-wrap">
+          <table class="stanza-table" id="schedule-table">
+            <thead><tr><th style="width:80px">Macro #</th><th style="width:70px">Minute</th><th style="width:70px">Hour</th><th style="width:70px">DOM</th><th style="width:70px">Month</th><th style="width:70px">DOW</th><th style="width:36px"></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div style="margin-top:10px;">
+        <button class="btn btn-primary" onclick="saveSchedule()">💾 Save [schedule]</button>
+      </div>
+    </div>
+
+    <!-- TELEMETRY STANZA -->
+    <div class="page" id="page-telemetry">
+      <div class="page-header">
+        <div class="page-title">📢 Telemetry Stanza <span class="badge badge-blue">[telemetry]</span></div>
+        <div class="page-desc">Define courtesy tones and telemetry sound definitions. Format: <code>name = |t(freq,freq2,ms,amplitude)...</code></div>
+      </div>
+      <div class="card">
+        <div class="card-header" style="cursor:default;"><div class="card-title">Telemetry Definitions</div><button class="btn btn-primary" onclick="addStanzaRow('telemetry-table')">+ Add Entry</button></div>
+        <div class="stanza-editor-wrap">
+          <table class="stanza-table" id="telemetry-table">
+            <thead><tr><th style="width:120px">Name</th><th>Definition</th><th style="width:36px"></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div style="margin-top:10px;">
+        <button class="btn btn-primary" onclick="saveStanza('telemetry-table','telemetry')">💾 Save [telemetry]</button>
+      </div>
+    </div>
+
+    <!-- NODES STANZA -->
+    <div class="page" id="page-nodes-stanza">
+      <div class="page-header">
+        <div class="page-title">🌐 Nodes List <span class="badge badge-blue">[nodes]</span></div>
+        <div class="page-desc">Static node connections. Format: <code>NODENO = radio@host/NODENO,NONE</code></div>
+      </div>
+      <div class="card">
+        <div class="card-header" style="cursor:default;"><div class="card-title">Static Node Entries</div><button class="btn btn-primary" onclick="addStanzaRow('nodes-stanza-table')">+ Add Node</button></div>
+        <div class="stanza-editor-wrap">
+          <table class="stanza-table" id="nodes-stanza-table">
+            <thead><tr><th style="width:100px">Node Number</th><th>Connection String</th><th style="width:36px"></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div style="margin-top:10px;">
+        <button class="btn btn-primary" onclick="saveStanza('nodes-stanza-table','nodes')">💾 Save [nodes]</button>
+      </div>
+    </div>
+
+    <!-- COP REFERENCE -->
+    <div class="page" id="page-cop-ref">
+      <div class="page-header">
+        <div class="page-title">📋 COP Commands Reference</div>
+        <div class="page-desc">Control OPerator commands — use these in your [functions] stanza. Example: <code>901 = cop,1</code></div>
+      </div>
+      <div class="card" style="margin-bottom:14px;">
+        <div class="card-header" style="cursor:default;"><div class="card-title">COP (Control OPerator) Commands</div></div>
+        <div style="overflow-x:auto;">
+          <table class="ref-table" id="cop-table">
+            <thead><tr><th>COP #</th><th>Description</th><th>Example</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:14px;">
+        <div class="card-header" style="cursor:default;"><div class="card-title">iLink Commands</div></div>
+        <div style="overflow-x:auto;">
+          <table class="ref-table" id="ilink-table">
+            <thead><tr><th>ilink #</th><th>Description</th><th>Node # Required</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header" style="cursor:default;"><div class="card-title">Status Commands</div></div>
+        <div style="overflow-x:auto;">
+          <table class="ref-table" id="status-table">
+            <thead><tr><th>Status #</th><th>Description</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- HELP -->
+    <div class="page" id="page-help">
+      <div class="page-header">
+        <div class="page-title">❓ Help & Parameter Reference</div>
+        <div class="page-desc">All rpt.conf node stanza parameters with defaults. Full docs: <a href="https://allstarlink.github.io/config/rpt_conf/" target="_blank" style="color:var(--blue)">AllStarLink Manual</a></div>
+      </div>
+      <div class="card">
+        <div style="overflow-x:auto;">
+          <table class="ref-table">
+            <thead><tr><th>Parameter</th><th>Description</th><th>Default</th></tr></thead>
+            <tbody id="help-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- RAW EDITOR -->
+    <div class="page" id="page-raw">
+      <div class="page-header">
+        <div class="page-title">📝 Raw Editor</div>
+        <div class="page-desc">Edit rpt.conf directly as text. A backup is created before every save.</div>
+      </div>
+      <div class="alert alert-warning">⚠️ Syntax errors in rpt.conf will prevent Asterisk from loading. Always reload/restart after saving to verify.</div>
+      <textarea id="raw-editor" spellcheck="false" placeholder="Loading rpt.conf..."></textarea>
+      <div style="margin-top:10px;display:flex;gap:8px;">
+        <button class="btn btn-primary" onclick="confirmSaveRaw()">💾 Save Raw Config</button>
+        <button class="btn btn-secondary" onclick="loadRawContent()">↺ Reload from Disk</button>
+      </div>
+    </div>
+
+    <!-- BACKUPS -->
+    <div class="page" id="page-backups">
+      <div class="page-header">
+        <div class="page-title">🗂 Backups</div>
+        <div class="page-desc">Automatic backups created on every save. Showing last 10.</div>
+      </div>
+      <div id="backup-list"><div class="alert alert-info">ℹ️ Loading backups…</div></div>
+    </div>
+
+    <!-- ABOUT -->
+    <div class="page" id="page-about">
+      <div class="page-header">
+        <div class="page-title">ℹ️ About ASL3-EZ</div>
+      </div>
+      <div class="about-card">
+        <div class="callsign">Version 0.0.2 - Released 03.06.26</div>
+        <h2>About ASL3-EZ</h2>
+        <h2>Contact Information</h2>
+        <div class="about-divider"></div>
+        <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;">
+          <div>📧 <strong>Email:</strong> <a href="mailto:cq.n8gmz@gmail.com">cq.n8gmz@gmail.com</a></div>
+          <div>🌐 <strong>Website:</strong> <a href="http://www.we8chz.org" target="_blank">www.we8chz.org</a></div>
+          <div>💻 <strong>GitHub:</strong> <a href="https://github.com/GooseThings/ASL3-EZ" target="_blank">github.com/GooseThings/ASL3-EZ</a></div>
+          <div>📖 <strong>ASL3 Docs:</strong> <a href="https://allstarlink.github.io/config/rpt_conf/" target="_blank">allstarlink.github.io</a></div>
+        </div>
+        <div class="about-divider"></div>
+        <p style="color:var(--text-dim);font-size:12px;">Licensed under GNU GPL v2. Not affiliated with AllStarLink<br>Use at your own risk. Always verify changes before <br><br>73 de N8GMZ — happy linking! 📻</p>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- SAVE BAR -->
+<div class="save-bar" id="save-bar">
+  <div class="save-bar-msg"><span>●</span> Unsaved changes pending</div>
+  <div style="display:flex;gap:7px;">
+    <button class="btn btn-secondary" onclick="discardChanges()">✕ Discard</button>
+    <button class="btn btn-primary" onclick="confirmSaveChanges()">💾 Save Changes</button>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast-container"></div>
+
+<!-- CONFIRM DIALOG -->
+<div class="dialog-overlay" id="dialog-overlay">
+  <div class="dialog">
+    <div class="dialog-title" id="dialog-title">Confirm</div>
+    <div class="dialog-msg" id="dialog-msg">Are you sure?</div>
+    <div class="dialog-actions">
+      <button class="btn btn-secondary" onclick="closeDialog()">Cancel</button>
+      <button class="btn btn-primary" id="dialog-confirm-btn" onclick="dialogConfirm()">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// =============================================
+// ALL rpt.conf SETTINGS DEFINITIONS
+// =============================================
+const RPT_SETTINGS = {
+  general: {
+    label:"General Stanza", desc:"ASL3 global settings [general]", icon:"⚙️",
+    fields:[
+      {key:"node_lookup_method",label:"Node Lookup Method",desc:"How nodes are resolved",type:"select",options:["both","dns","file"],default:"both"},
+      {key:"dns_node_domain",label:"DNS Node Domain",desc:"Alternate DNS domain for node lookups (advanced users only)",type:"text",default:"nodes.allstarlink.org"},
+      {key:"max_dns_node_length",label:"Max DNS Node Length",desc:"Max digits for DNS node number queries",type:"number",default:"6"},
+    ]
+  },
+  basic:{
+    label:"Basic Node Settings",desc:"Core repeater configuration",icon:"📡",
+    fields:[
+      {key:"rxchannel",label:"RX Channel",desc:"Channel driver for radio interface",type:"text",default:"SimpleUSB/usb_1999",placeholder:"SimpleUSB/usb_NODENO or DAHDI/1"},
+      {key:"duplex",label:"Duplex Mode",desc:"0=Half no telem, 1=Half+telem, 2=Full duplex, 3=Full no repeat, 4=Full AP-only",type:"select",options:["0","1","2","3","4"],default:"2"},
+      {key:"linktolink",label:"Link-to-Link",desc:"Half-duplex acts as full duplex for link-to-link",type:"yesno",default:"no"},
+      {key:"callerid",label:"Caller ID",desc:"Caller ID sent when linking",type:"text",default:'"Repeater" <0000000000>',placeholder:'"CALLSIGN" <NODENO>'},
+      {key:"accountcode",label:"Account Code",desc:"Accounting code for CDR records",type:"text",default:"RADIO"},
+      {key:"context",label:"Context",desc:"Dialplan context for autopatch outgoing calls",type:"text",default:"radio"},
+      {key:"startup_macro",label:"Startup Macro",desc:"Macro number to execute at node startup",type:"text",default:""},
+    ]
+  },
+  id:{
+    label:"Station ID",desc:"CW and voice identification",icon:"🔊",
+    fields:[
+      {key:"idrecording",label:"ID Recording",desc:"Sound file or |iCALLSIGN for CW ID",type:"text",default:"",placeholder:"|iW1ABC or rpt/nodenames/NODENO"},
+      {key:"idtalkover",label:"ID Talk-Over",desc:"Alternate ID to play over a signal (can be shorter)",type:"text",default:"",placeholder:"|iW1ABC/R"},
+      {key:"idtime",label:"ID Interval (ms)",desc:"How often to transmit ID (ms, default 5 min)",type:"number",default:"300000"},
+      {key:"politeid",label:"Polite ID Time (ms)",desc:"ms before ID expiry to try tail ID",type:"number",default:"30000"},
+      {key:"beaconing",label:"Beaconing",desc:"Send ID at idtime interval regardless of activity (UK/EU feature, likely illegal in US)",type:"select",options:["0","1"],default:"0"},
+    ]
+  },
+  timers:{
+    label:"Timers",desc:"Hang time, timeout, and activity timers",icon:"⏱️",
+    fields:[
+      {key:"hangtime",label:"Hang Time (ms)",desc:"Repeater squelch tail hang time (ms)",type:"number",default:"5000"},
+      {key:"althangtime",label:"Alt Hang Time (ms)",desc:"Alternate hang time selected by COP 19/20",type:"number",default:"4000"},
+      {key:"totime",label:"Time-Out Timer (ms)",desc:"Max continuous TX time before timeout (0=disabled)",type:"number",default:"180000"},
+      {key:"time_out_reset_unkey_interval",label:"TOT Reset Unkey (ms)",desc:"Unkey interval to reset the timeout timer",type:"number",default:"0"},
+      {key:"time_out_reset_kerchunk_interval",label:"TOT Reset Kerchunk (ms)",desc:"Kerchunk interval to reset the timeout timer",type:"number",default:"0"},
+      {key:"sleeptime",label:"Sleep Time (ms)",desc:"Inactivity time before entering sleep mode (0=disabled)",type:"number",default:"0"},
+      {key:"lnkactenable",label:"Link Activity Timer",desc:"Enable the link activity timer",type:"select",options:["0","1"],default:"0"},
+      {key:"lnkacttime",label:"Link Activity Time (s)",desc:"Link activity timer duration (seconds)",type:"number",default:"1800"},
+      {key:"lnkactmacro",label:"Link Activity Macro",desc:"Macro/function to run when link activity timer expires",type:"text",default:""},
+      {key:"lnkacttimerwarn",label:"Link Activity Warning",desc:"Sound file to play 30s before link activity timer expires",type:"text",default:""},
+      {key:"remote_inact_timeout",label:"Remote Inactivity Timeout (s)",desc:"Remote base inactivity timeout in seconds (0=disabled)",type:"number",default:"900"},
+      {key:"remote_timeout",label:"Remote Session Timeout (s)",desc:"Remote base max session time in seconds (0=disabled)",type:"number",default:"3600"},
+      {key:"remote_timeout_warning",label:"Remote Timeout Warning (s)",desc:"Seconds before remote timeout to warn user",type:"number",default:"300"},
+      {key:"remote_timeout_warning_freq",label:"Remote Warning Frequency (s)",desc:"How often to repeat the timeout warning",type:"number",default:"30"},
+    ]
+  },
+  telemetry_settings:{
+    label:"Telemetry Settings",desc:"Telemetry behavior and courtesy tone references",icon:"📢",
+    fields:[
+      {key:"telemetry",label:"Telemetry Stanza",desc:"Name of the telemetry definitions stanza",type:"text",default:"telemetry"},
+      {key:"telemdefault",label:"Telemetry Default",desc:"0=off, 1=on, 2=on demand",type:"select",options:["0","1","2"],default:"1"},
+      {key:"telemdynamic",label:"Telemetry Dynamic",desc:"Allow users to change telemetry setting via COP",type:"yesno",default:"yes"},
+      {key:"holdofftelem",label:"Hold Off Telemetry",desc:"Hold all telemetry while receiver active (except forced ID)",type:"select",options:["0","1"],default:"0"},
+      {key:"telemduckdb",label:"Telemetry Duck (dB)",desc:"Telemetry ducking in dB during voice TX",type:"number",default:"-15"},
+      {key:"telemnomdb",label:"Telemetry Nominal (dB)",desc:"Telemetry nominal output level in dB",type:"number",default:"0"},
+      {key:"unlinkedct",label:"Unlinked Courtesy Tone",desc:"CT name to play when node is not linked to any other node",type:"text",default:"ct2"},
+      {key:"remotect",label:"Remote Courtesy Tone",desc:"CT name when a remote linked node is in the connection list",type:"text",default:"ct3"},
+      {key:"linkunkeyct",label:"Link Unkey CT",desc:"CT name when a link transmission ends",type:"text",default:"ct8"},
+      {key:"nolocallinkct",label:"No Local Link CT",desc:"Send unlinkedct instead when only a local node is connected",type:"select",options:["0","1"],default:"0"},
+      {key:"nounkeyct",label:"No Unkey CT",desc:"Completely disable unkey courtesy tone (not recommended)",type:"yesno",default:"no"},
+    ]
+  },
+  dtmf:{
+    label:"DTMF Settings",desc:"Function characters, stanza pointers, DTMF key access",icon:"🔢",
+    fields:[
+      {key:"funcchar",label:"Function Char",desc:"DTMF character to start a command (default *)",type:"text",default:"*"},
+      {key:"endchar",label:"End Char",desc:"DTMF character to end a command (default #)",type:"text",default:"#"},
+      {key:"functions",label:"Functions Stanza",desc:"Name of the local DTMF functions stanza",type:"text",default:"functions"},
+      {key:"link_functions",label:"Link Functions Stanza",desc:"Name of the link DTMF functions stanza",type:"text",default:"functions"},
+      {key:"phone_functions",label:"Phone Functions Stanza",desc:"Name of the phone DTMF functions stanza",type:"text",default:"phone-functions"},
+      {key:"dtmfkey",label:"DTMF Key Access",desc:"Require DTMF sequence to key up the node (0=off, 1=on)",type:"select",options:["0","1"],default:"0"},
+      {key:"dtmfkeys",label:"DTMF Keys Stanza",desc:"Name of the dtmfkeys stanza (when dtmfkey=1)",type:"text",default:"dtmfkeys"},
+      {key:"propagate_dtmf",label:"Propagate DTMF",desc:"Regenerate DTMF on links when not a function command",type:"yesno",default:"no"},
+      {key:"inxlat",label:"Inbound DTMF Translate",desc:"Remap funcchar/endchar on inbound: funcchars,endchars,passchars",type:"text",default:""},
+      {key:"outxlat",label:"Outbound DTMF Translate",desc:"Remap funcchar/endchar on outbound",type:"text",default:""},
+    ]
+  },
+  nodes_settings:{
+    label:"Node Connections",desc:"External node files, static nodes, connect/disconnect scripts",icon:"🔗",
+    fields:[
+      {key:"nodes",label:"Nodes Stanza",desc:"Name of the static nodes stanza",type:"text",default:"nodes"},
+      {key:"extnodefile",label:"Ext Node File",desc:"Path to external node database (comma-separated for multiple files)",type:"text",default:"/var/lib/asterisk/rpt_extnodes"},
+      {key:"extnodes",label:"Ext Nodes Section",desc:"Section name in extnodefile containing dynamic node info",type:"text",default:"extnodes"},
+      {key:"nodenames",label:"Node Names Path",desc:"Directory for node name sound files",type:"text",default:"/var/lib/asterisk/sounds/rpt/nodenames"},
+      {key:"connpgm",label:"Connect Program",desc:"Script/program to run when a node connects",type:"text",default:""},
+      {key:"discpgm",label:"Disconnect Program",desc:"Script/program to run when a node disconnects",type:"text",default:""},
+      {key:"controlstates",label:"Control States Stanza",desc:"Name of the control states stanza",type:"text",default:""},
+      {key:"scheduler",label:"Scheduler Stanza",desc:"Name of the scheduler stanza",type:"text",default:""},
+      {key:"events",label:"Events Stanza",desc:"Name of the event management stanza",type:"text",default:""},
+      {key:"macro",label:"Macro Stanza",desc:"Name of the macro stanza",type:"text",default:"macro"},
+      {key:"tonemacro",label:"Tone Macro Stanza",desc:"Name of the tonemacro stanza",type:"text",default:""},
+      {key:"mdcmacro",label:"MDC Macro Stanza",desc:"Name of the MDC-1200 macro stanza",type:"text",default:""},
+      {key:"morse",label:"Morse Stanza",desc:"Name of the morse code settings stanza",type:"text",default:"morse"},
+      {key:"wait-times",label:"Wait Times Stanza",desc:"Name of the wait-times stanza",type:"text",default:""},
+    ]
+  },
+  audio:{
+    label:"Audio & Streaming",desc:"Audio levels, notch filters, EchoLink, and streaming",icon:"🎵",
+    fields:[
+      {key:"linkmongain",label:"Link Monitor Gain (dB)",desc:"Gain adjustment for monitor-mode linked audio",type:"number",default:"0"},
+      {key:"erxgain",label:"EchoLink RX Gain (dB)",desc:"EchoLink receive gain adjustment in dB",type:"number",default:"0"},
+      {key:"etxgain",label:"EchoLink TX Gain (dB)",desc:"EchoLink transmit gain adjustment in dB",type:"number",default:"0"},
+      {key:"rxnotch",label:"RX Notch Filter",desc:"Notch filter as freq,bandwidth (e.g. 1000,50)",type:"text",default:""},
+      {key:"outstreamcmd",label:"Output Stream Command",desc:"Shell command to stream node audio (e.g. to Broadcastify)",type:"text",default:""},
+    ]
+  },
+  echolink:{
+    label:"EchoLink & GUI Linking",desc:"EchoLink, GUI/IAX, phone, and TheLinkBox telemetry settings",icon:"🌍",
+    fields:[
+      {key:"eannmode",label:"EchoLink Announce Mode",desc:"0=off, 1=node# only, 2=callsign only, 3=both",type:"select",options:["0","1","2","3"],default:"1"},
+      {key:"echolinkdefault",label:"EchoLink Telemetry Default",desc:"0=off, 1=on, 2=timed, 3=follow local",type:"select",options:["0","1","2","3"],default:"3"},
+      {key:"echolinkdynamic",label:"EchoLink Telemetry Dynamic",desc:"Allow users to change EchoLink telemetry via COP",type:"select",options:["0","1"],default:"1"},
+      {key:"guilinkdefault",label:"GUI Link Telemetry Default",desc:"Telemetry for IAXRpt/SIP/VoIP (0=off,1=on,2=timed,3=follow)",type:"select",options:["0","1","2","3"],default:"1"},
+      {key:"guilinkdynamic",label:"GUI Link Telemetry Dynamic",desc:"Allow users to change GUI telemetry via COP",type:"select",options:["0","1"],default:"1"},
+      {key:"phonelinkdefault",label:"Phone Link Telemetry Default",desc:"Telemetry for phone connections",type:"select",options:["0","1","2","3"],default:"1"},
+      {key:"phonelinkdynamic",label:"Phone Link Telemetry Dynamic",desc:"Allow users to change phone telemetry via COP",type:"select",options:["0","1"],default:"1"},
+      {key:"tlbdefault",label:"TheLinkBox Telemetry Default",desc:"Telemetry for TheLinkBox connections",type:"select",options:["0","1","2","3"],default:"1"},
+      {key:"tlbdynamic",label:"TheLinkBox Telemetry Dynamic",desc:"Allow users to change TheLinkBox telemetry via COP",type:"select",options:["0","1"],default:"1"},
+    ]
+  },
+  parrot:{
+    label:"Parrot / Echo Mode",desc:"Echo reflector mode settings",icon:"🦜",
+    fields:[
+      {key:"parrot",label:"Parrot Mode",desc:"Enable parrot (echo) mode — repeats all received audio",type:"yesno",default:"no"},
+      {key:"parrottime",label:"Parrot Delay (ms)",desc:"Delay before playing back parrot audio buffer",type:"number",default:"1000"},
+    ]
+  },
+  rxburst:{
+    label:"RX Toneburst",desc:"Tone burst squelch access detection",icon:"📶",
+    fields:[
+      {key:"rxburstfreq",label:"RX Burst Freq (Hz)",desc:"Frequency of RX toneburst to detect",type:"number",default:"1000"},
+      {key:"rxburstthreshold",label:"RX Burst Threshold",desc:"Detection threshold (0-999)",type:"number",default:"0"},
+      {key:"rxbursttime",label:"RX Burst Time (ms)",desc:"Duration of tone burst required for detection",type:"number",default:"100"},
+    ]
+  },
+  litz:{
+    label:"Long Tone Zero (LiTZ)",desc:"Long-tone zero access control settings",icon:"🎵",
+    fields:[
+      {key:"litzchar",label:"LiTZ Char",desc:"DTMF character to detect as Long Tone Zero",type:"text",default:"0"},
+      {key:"litzcmd",label:"LiTZ Command",desc:"DTMF command to execute on LiTZ detection",type:"text",default:""},
+      {key:"litztime",label:"LiTZ Time (ms)",desc:"Duration required for LiTZ detection",type:"number",default:"3000"},
+    ]
+  },
+  aprs:{
+    label:"APRS & GPS",desc:"APRS-TT and GPS beaconing",icon:"📡",
+    fields:[
+      {key:"aprstt",label:"APRS-TT Stanza",desc:"Context in gps.conf to use for APRStt (requires app_gps.so)",type:"text",default:""},
+      {key:"beaconing",label:"Beaconing",desc:"Send ID beacon regardless of activity (1=enable, UK/EU feature)",type:"select",options:["0","1"],default:"0"},
+    ]
+  },
+  archive:{
+    label:"Archiving & Logging",desc:"Activity recording, logging, and stat posting",icon:"💾",
+    fields:[
+      {key:"archivedir",label:"Archive Directory",desc:"Top-level recording directory (enables archiving when set)",type:"text",default:""},
+      {key:"archiveformat",label:"Archive Format",desc:"Audio format: wav49 (default), wav, gsm",type:"text",default:"wav49"},
+      {key:"archivedatefmt",label:"Archive Date Format",desc:"strftime format for archive filenames",type:"text",default:"%Y%m%d%H%M%S"},
+      {key:"archiveaudio",label:"Archive Audio",desc:"Record audio in archive (yes=audio+log, no=log only)",type:"yesno",default:"yes"},
+      {key:"mdclog",label:"MDC-1200 Log File",desc:"Path to log MDC-1200 data",type:"text",default:""},
+      {key:"statpost_url",label:"Stat Post URL",desc:"URL to POST node statistics to",type:"text",default:""},
+      {key:"statpost_program",label:"Stat Post Program",desc:"Program to call for stat posting",type:"text",default:""},
+    ]
+  },
+  tailmessage:{
+    label:"Tail Messages",desc:"Messages played in the repeater tail",icon:"💬",
+    fields:[
+      {key:"tailmessagelist",label:"Tail Message List",desc:"Space-separated list of sound files for tail messages",type:"text",default:""},
+      {key:"tailmessagetime",label:"Tail Message Time (ms)",desc:"How often to play a tail message (ms, 0=disabled)",type:"number",default:"0"},
+      {key:"tailsquashedtime",label:"Tail Squash Time (ms)",desc:"Interval to inhibit tail messages after a transmission",type:"number",default:"0"},
+    ]
+  },
+  voter:{
+    label:"VOTER / RTCM",desc:"VOTER and RTCM voter system settings",icon:"🗳️",
+    fields:[
+      {key:"votermode",label:"Voter Mode",desc:"VOTER/RTCM voter mode setting",type:"text",default:""},
+      {key:"votertype",label:"Voter Type",desc:"VOTER/RTCM voter type",type:"text",default:""},
+      {key:"votermargin",label:"Voter Margin",desc:"VOTER signal margin threshold",type:"number",default:""},
+    ]
+  },
+  advanced_misc:{
+    label:"Advanced / Miscellaneous",desc:"Elke link, IO base, DAQ, remote base, and other rarely-changed settings",icon:"🔧",
+    fields:[
+      {key:"elke",label:"Elke Link Timer",desc:"Elke link sleep timer in FFF units (0=disabled)",type:"text",default:""},
+      {key:"iobase",label:"I/O Base Address",desc:"Parallel port base address for remote base (e.g. 0x378)",type:"text",default:"0x378"},
+    ]
+  }
+};
+
+// COP command data
+const COP_COMMANDS = [
+  [1,"System warm boot"],[2,"System enable"],[3,"System disable"],[4,"Test Tone On/Off"],
+  [5,"Dump System Variables on Console (debug)"],[6,"PTT (phone mode only)"],[7,"Timeout timer enable"],
+  [8,"Timeout timer disable"],[9,"Autopatch enable"],[10,"Autopatch disable"],[11,"Link enable"],
+  [12,"Link disable"],[13,"Query System State"],[14,"Change System State"],[15,"Scheduler Enable"],
+  [16,"Scheduler Disable"],[17,"User functions (time, id, etc) enable"],[18,"User functions disable"],
+  [19,"Select alternate hang timer"],[20,"Select standard hang timer"],[21,"Enable Parrot Mode"],
+  [22,"Disable Parrot Mode"],[23,"Birdbath (Parrot Cleanup/Flush)"],[24,"Flush all telemetry"],
+  [25,"Query last node un-keyed"],[26,"Query all nodes keyed/unkeyed"],
+  [27,"Reset DAQ minimum on a pin"],[28,"Reset DAQ maximum on a pin"],
+  [30,"Recall Memory Setting in Attached Xcvr"],[31,"Channel Selector for Parallel Programmed Xcvr"],
+  [32,"Touchtone pad test (command + digits + #)"],[33,"Local Telemetry Output Enable"],
+  [34,"Local Telemetry Output Disable"],[35,"Local Telemetry Output on Demand"],
+  [36,"Foreign Link Local Output Path Enable"],[37,"Foreign Link Local Output Path Disable"],
+  [38,"Foreign Link Local Output Path Follows Local"],[39,"Foreign Link Local Output Path on Demand"],
+  [42,"EchoLink announce node number only"],[43,"EchoLink announce node callsign only"],
+  [44,"EchoLink announce node number and callsign"],[45,"Link Activity timer enable"],
+  [46,"Link Activity timer disable"],[47,"Reset Link Config Changed Flag"],
+  [48,"Send Tone Sequence (cop,48,digit,digit,...)"],[49,"Disable incoming connections (noice)"],
+  [50,"Enable incoming connections (noicd)"],[51,"Enable sleep mode"],[52,"Disable sleep mode"],
+  [53,"Wake up from sleep"],[54,"Go to sleep"],[55,"Parrot Once (if parrot mode disabled)"],
+  [56,"Rx CTCSS Enable"],[57,"Rx CTCSS Disable"],[58,"Tx CTCSS On Input only Enable"],
+  [59,"Tx CTCSS On Input only Disable"],[60,"Send MDC-1200 Burst"],
+  [61,"Control GPIO/PP pins"],[62,"Control GPIO/PP pins, quietly"],
+  [63,"Send pre-configured APRSTT notification"],[64,"Send APRSTT notification, quietly"],
+  [65,"Send POCSAG page (equipped channel types only)"]
+];
+
+const ILINK_COMMANDS = [
+  [1,"Disconnect specified link","Yes"],[2,"Connect specified link — monitor only","Yes"],
+  [3,"Connect specified link — transceive","Yes"],[4,"Enter command mode on specified link","Yes"],
+  [5,"System status","No"],[6,"Disconnect all links","No"],[7,"Last Node to Key Up","No"],
+  [8,"Connect specified link — local monitor only","Yes"],[9,"Send Text Message","No"],
+  [11,"Disconnect a previously permanently connected link","Yes"],
+  [12,"Permanently connect — monitor only","Yes"],[13,"Permanently connect — transceive","Yes"],
+  [15,"Full system status (all nodes)","No"],[16,"Reconnect all disconnected links","No"],
+  [17,"MDC test (diagnostic)","No"],[18,"Permanently connect — local monitor only","Yes"]
+];
+
+const STATUS_COMMANDS = [
+  [1,"Force ID (global)"],[2,"Give Time of Day (global)"],[3,"Give software version (global)"],
+  [4,"Give GPS location info"],[5,"Speak the last DTMF user"],
+  [11,"Force ID (local only)"],[12,"Give Time of Day (local only)"]
+];
+
+// =============================================
+// STATE
+// =============================================
+let confContent = "";
+let pendingChanges = {};
+let currentNode = null;
+let nodes = [];
+let parsedSettings = {};
+let dialogCallback = null;
+
+// =============================================
+// INIT
+// =============================================
+async function init() {
+  await loadConf();
+  buildCOPReference();
+  buildHelpTable();
 }
+
+async function loadConf() {
+  try {
+    const res = await fetch("/api/conf");
+    if (!res.ok) {
+      const err = await res.json();
+      showToast("error","Cannot Load Config", err.error || "Unknown error");
+      document.getElementById("stat-status").innerHTML = '<span class="badge badge-red">Error</span>';
+      return;
+    }
+    const data = await res.json();
+    confContent = data.content;
+    nodes = data.nodes;
+    parsedSettings = data.general_settings || {};
+    updateNodeNav();
+    updateDashboard();
+    buildGeneralSettings();
+    if (nodes.length > 0) {
+      currentNode = nodes[0];
+      buildNodeSelector();
+      buildNodeSettings(currentNode);
+    }
+    document.getElementById("raw-editor").value = confContent;
+    document.getElementById("stat-conf").textContent = "{{ conf_path }}";
+    document.getElementById("stat-nodes").textContent = nodes.length;
+    document.getElementById("stat-status").innerHTML = '<span class="badge badge-green">Loaded</span>';
+    // Load stanzas
+    loadStanzaFromConf("functions-table","functions");
+    loadStanzaFromConf("link-functions-table","link-functions");
+    loadStanzaFromConf("phone-functions-table","phone-functions");
+    loadStanzaFromConf("macro-table","macro");
+    loadStanzaFromConf("telemetry-table","telemetry");
+    loadStanzaFromConf("nodes-stanza-table","nodes");
+    loadScheduleFromConf();
+  } catch(e) {
+    showToast("error","Load Error",e.message);
+  }
+}
+
+// =============================================
+// PARSE STANZA FROM RAW CONTENT
+// =============================================
+function getStanzaContent(content, stanzaName) {
+  const lines = content.split('\n');
+  let inSection = false;
+  let result = [];
+  for (const line of lines) {
+    const stripped = line.trim();
+    if (/^\[.+\]/.test(stripped)) {
+      if (inSection) break;
+      const m = stripped.match(/^\[([^\]]+)\]/);
+      if (m && m[1].trim() === stanzaName) { inSection = true; continue; }
+    }
+    if (inSection && stripped && !stripped.startsWith(';')) {
+      const m = stripped.match(/^([^=;]+?)\s*=\s*([^;]*?)(?:\s*;.*)?$/);
+      if (m) result.push([m[1].trim(), m[2].trim()]);
+    }
+  }
+  return result;
+}
+
+function loadStanzaFromConf(tableId, stanzaName) {
+  const entries = getStanzaContent(confContent, stanzaName);
+  const tbody = document.querySelector(`#${tableId} tbody`);
+  if (!tbody) return;
+  tbody.innerHTML = "";
+  entries.forEach(([k, v]) => addStanzaRowData(tableId, k, v));
+  if (entries.length === 0) addStanzaRow(tableId);
+}
+
+function loadScheduleFromConf() {
+  const entries = getStanzaContent(confContent, "schedule");
+  const tbody = document.querySelector("#schedule-table tbody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+  entries.forEach(([k, v]) => {
+    const parts = v.split(/\s+/);
+    addScheduleRowData(k, parts[0]||"*", parts[1]||"*", parts[2]||"*", parts[3]||"*", parts[4]||"*");
+  });
+  if (entries.length === 0) addScheduleRowData("1","*","*","*","*","*");
+}
+
+// =============================================
+// STANZA TABLE BUILDERS
+// =============================================
+function addStanzaRow(tableId) {
+  addStanzaRowData(tableId, "", "");
+}
+
+function addStanzaRowData(tableId, key, val) {
+  const tbody = document.querySelector(`#${tableId} tbody`);
+  if (!tbody) return;
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td><input class="stanza-input stanza-key-input" value="${escHtml(key)}" placeholder="key"></td>
+    <td><input class="stanza-input" value="${escHtml(val)}" placeholder="value"></td>
+    <td><button class="del-btn" onclick="this.closest('tr').remove(); showSaveBar();" title="Remove">✕</button></td>
+  `;
+  tr.querySelectorAll("input").forEach(i => i.addEventListener("input", showSaveBar));
+  tbody.appendChild(tr);
+}
+
+function addScheduleRow() {
+  addScheduleRowData("", "*", "*", "*", "*", "*");
+}
+
+function addScheduleRowData(macro, min, hr, dom, mon, dow) {
+  const tbody = document.querySelector("#schedule-table tbody");
+  const tr = document.createElement("tr");
+  const cell = (v, ph) => `<td><input class="stanza-input" value="${escHtml(v)}" placeholder="${ph}" style="width:60px"></td>`;
+  tr.innerHTML = `
+    <td><input class="stanza-input stanza-key-input" value="${escHtml(macro)}" placeholder="macro#" style="width:70px"></td>
+    ${cell(min,"min")}${cell(hr,"hour")}${cell(dom,"dom")}${cell(mon,"mon")}${cell(dow,"dow")}
+    <td><button class="del-btn" onclick="this.closest('tr').remove(); showSaveBar();">✕</button></td>
+  `;
+  tr.querySelectorAll("input").forEach(i => i.addEventListener("input", showSaveBar));
+  tbody.appendChild(tr);
+}
+
+// =============================================
+// SAVE STANZA
+// =============================================
+async function saveStanza(tableId, stanzaName) {
+  const rows = document.querySelectorAll(`#${tableId} tbody tr`);
+  let stanzaContent = `[${stanzaName}]\n`;
+  rows.forEach(tr => {
+    const inputs = tr.querySelectorAll("input");
+    const k = inputs[0].value.trim();
+    const v = inputs[1].value.trim();
+    if (k) stanzaContent += `${k} = ${v}\n`;
+  });
+  await saveRawStanza(stanzaName, stanzaContent);
+}
+
+async function saveSchedule() {
+  const rows = document.querySelectorAll("#schedule-table tbody tr");
+  let stanzaContent = "[schedule]\n";
+  rows.forEach(tr => {
+    const inputs = tr.querySelectorAll("input");
+    const macro = inputs[0].value.trim();
+    const parts = [inputs[1].value||"*", inputs[2].value||"*", inputs[3].value||"*", inputs[4].value||"*", inputs[5].value||"*"];
+    if (macro) stanzaContent += `${macro} = ${parts.join(" ")}\n`;
+  });
+  await saveRawStanza("schedule", stanzaContent);
+}
+
+async function saveRawStanza(stanzaName, newStanzaContent) {
+  try {
+    const res = await fetch("/api/conf");
+    const data = await res.json();
+    let content = data.content;
+    // Remove old stanza
+    const lines = content.split('\n');
+    let newLines = [];
+    let inStanza = false;
+    for (const line of lines) {
+      const stripped = line.trim();
+      if (/^\[.+\]/.test(stripped)) {
+        const m = stripped.match(/^\[([^\]]+)\]/);
+        if (m && m[1].trim() === stanzaName) { inStanza = true; continue; }
+        else { inStanza = false; }
+      }
+      if (!inStanza) newLines.push(line);
+    }
+    // Append new stanza
+    const updated = newLines.join('\n').trimEnd() + '\n\n' + newStanzaContent;
+    const saveRes = await fetch("/api/save", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({raw_content: updated})
+    });
+    const saveData = await saveRes.json();
+    if (saveData.success) {
+      confContent = updated;
+      showToast("success","Saved!",`[${stanzaName}] stanza saved.`);
+    } else {
+      showToast("error","Save Failed", saveData.error);
+    }
+  } catch(e) {
+    showToast("error","Error",e.message);
+  }
+}
+
+// =============================================
+// DASHBOARD
+// =============================================
+function updateNodeNav() {
+  const container = document.getElementById("node-nav-items");
+  container.innerHTML = "";
+  if (nodes.length === 0) {
+    container.innerHTML = '<div class="nav-item" style="color:var(--text-dim);font-size:11px;">No nodes found</div>';
+    return;
+  }
+  nodes.forEach(node => {
+    const div = document.createElement("div");
+    div.className = "nav-item";
+    div.id = `nav-node-${node}`;
+    div.innerHTML = `<span class="nav-icon">📻</span> Node <span class="node-pill">${node}</span>`;
+    div.onclick = () => { currentNode = node; showPage('node'); buildNodeSettings(node); };
+    container.appendChild(div);
+  });
+}
+
+function updateDashboard() {
+  const container = document.getElementById("dashboard-nodes");
+  if (nodes.length === 0) {
+    container.innerHTML = '<div class="alert alert-warning">⚠️ No numeric node stanzas found in rpt.conf.</div>';
+    return;
+  }
+  let html = '<div class="card"><div class="card-header" style="cursor:default;"><div class="card-title">📻 Configured Nodes</div></div><div>';
+  nodes.forEach(node => {
+    const rxch = parsedSettings["rxchannel"]?.value || "–";
+    const duplex = parsedSettings["duplex"]?.value || "2";
+    const dmap = {"0":"Half/no telem","1":"Half+telem","2":"Full duplex","3":"Full/no repeat","4":"Full/AP-only"};
+    html += `<div class="setting-row">
+      <div class="setting-label">${node}<div class="setting-label-desc">Node Number</div></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <span class="badge badge-blue">duplex=${duplex} ${dmap[duplex]||""}</span>
+        <span class="badge badge-green">rx=${rxch}</span>
+      </div>
+      <button class="btn btn-secondary" style="font-size:11px;" onclick="currentNode='${node}';showPage('node');buildNodeSettings('${node}')">Configure →</button>
+    </div>`;
+  });
+  html += '</div></div>';
+  container.innerHTML = html;
+}
+
+// =============================================
+// GENERAL SETTINGS
+// =============================================
+function buildGeneralSettings() {
+  const container = document.getElementById("general-settings-grid");
+  container.innerHTML = "";
+  container.appendChild(buildSettingsCard("general", RPT_SETTINGS.general));
+}
+
+// =============================================
+// NODE SETTINGS
+// =============================================
+function buildNodeSelector() {
+  const sel = document.getElementById("node-select");
+  sel.innerHTML = "";
+  nodes.forEach(n => {
+    const opt = document.createElement("option");
+    opt.value = n; opt.textContent = `Node ${n}`; sel.appendChild(opt);
+  });
+}
+
+function switchNode(node) { currentNode = node; buildNodeSettings(node); }
+
+function buildNodeSettings(node) {
+  document.getElementById("node-page-title").innerHTML = `📻 Node Settings <span class="badge badge-green">[${node}]</span>`;
+  document.getElementById("node-select").value = node;
+  const container = document.getElementById("node-settings-container");
+  container.innerHTML = "";
+  const grid = document.createElement("div");
+  grid.className = "settings-grid";
+  Object.entries(RPT_SETTINGS).forEach(([sk, section]) => {
+    if (sk === "general") return;
+    grid.appendChild(buildSettingsCard(sk, section, node));
+  });
+  container.appendChild(grid);
+}
+
+// =============================================
+// CARD BUILDER
+// =============================================
+function buildSettingsCard(sectionKey, section, nodeNum=null) {
+  const card = document.createElement("div");
+  card.className = "card";
+  const header = document.createElement("div");
+  header.className = "card-header";
+  header.innerHTML = `<div><div class="card-title">${section.icon} ${section.label}</div><div class="card-desc">${section.desc}</div></div><span class="card-collapse-icon">▾</span>`;
+  header.onclick = () => card.classList.toggle("collapsed");
+  card.appendChild(header);
+  const body = document.createElement("div");
+  body.className = "card-body";
+  section.fields.forEach(field => body.appendChild(buildSettingRow(field, sectionKey, nodeNum)));
+  card.appendChild(body);
+  return card;
+}
+
+function buildSettingRow(field, sectionKey, nodeNum) {
+  const row = document.createElement("div");
+  row.className = "setting-row";
+  let currentVal = field.default || "";
+  let isCommented = false;
+  if (parsedSettings[field.key]) {
+    currentVal = parsedSettings[field.key].value;
+    isCommented = parsedSettings[field.key].commented;
+  }
+  const labelEl = document.createElement("div");
+  labelEl.className = "setting-label";
+  labelEl.innerHTML = `${field.key}<div class="setting-label-desc">${field.desc}</div>`;
+  const inputWrap = document.createElement("div");
+  let inputEl;
+  if (field.type === "select") {
+    inputEl = document.createElement("select");
+    inputEl.className = "setting-input";
+    (field.options||[]).forEach(opt => {
+      const o = document.createElement("option");
+      o.value = opt; o.textContent = opt;
+      if (opt === currentVal) o.selected = true;
+      inputEl.appendChild(o);
+    });
+  } else if (field.type === "yesno") {
+    inputEl = document.createElement("select");
+    inputEl.className = "setting-input";
+    ["yes","no"].forEach(opt => {
+      const o = document.createElement("option");
+      o.value = opt; o.textContent = opt;
+      if (opt === currentVal) o.selected = true;
+      inputEl.appendChild(o);
+    });
+  } else {
+    inputEl = document.createElement("input");
+    inputEl.type = field.type === "number" ? "number" : "text";
+    inputEl.className = "setting-input";
+    inputEl.value = currentVal;
+    if (field.placeholder) inputEl.placeholder = field.placeholder;
+  }
+  inputEl.disabled = isCommented;
+  inputEl.addEventListener("input", () => {
+    inputEl.classList.add("changed");
+    recordChange(sectionKey, nodeNum, field.key, inputEl.value, !isCommented);
+    showSaveBar();
+  });
+  inputEl.addEventListener("change", () => recordChange(sectionKey, nodeNum, field.key, inputEl.value, !isCommented));
+  inputWrap.appendChild(inputEl);
+  const toggleWrap = document.createElement("div");
+  toggleWrap.className = "setting-toggle";
+  const toggleLabel = document.createElement("label");
+  toggleLabel.className = "toggle";
+  const toggleInput = document.createElement("input");
+  toggleInput.type = "checkbox";
+  toggleInput.checked = !isCommented;
+  const slider = document.createElement("span");
+  slider.className = "toggle-slider";
+  toggleLabel.appendChild(toggleInput);
+  toggleLabel.appendChild(slider);
+  const toggleText = document.createElement("span");
+  toggleText.textContent = isCommented ? "off" : "on";
+  toggleInput.addEventListener("change", () => {
+    isCommented = !toggleInput.checked;
+    inputEl.disabled = isCommented;
+    toggleText.textContent = isCommented ? "off" : "on";
+    row.classList.toggle("disabled", isCommented);
+    recordChange(sectionKey, nodeNum, field.key, inputEl.value, toggleInput.checked);
+    showSaveBar();
+  });
+  if (isCommented) row.classList.add("disabled");
+  toggleWrap.appendChild(toggleLabel);
+  toggleWrap.appendChild(toggleText);
+  row.appendChild(labelEl);
+  row.appendChild(inputWrap);
+  row.appendChild(toggleWrap);
+  return row;
+}
+
+// =============================================
+// CHANGE TRACKING & SAVE
+// =============================================
+function recordChange(section, node, key, value, enabled) {
+  const k = node ? `${node}:${section}` : section;
+  if (!pendingChanges[k]) pendingChanges[k] = {section: node || section, nodeNum: node, changes: {}};
+  pendingChanges[k].changes[key] = {value, enabled};
+}
+
+async function saveChanges() {
+  if (Object.keys(pendingChanges).length === 0) { showToast("info","No Changes","Nothing to save."); return; }
+  try {
+    for (const [k, changeGroup] of Object.entries(pendingChanges)) {
+      const sectionName = changeGroup.nodeNum || changeGroup.section;
+      const saveRes = await fetch("/api/save", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({section: sectionName, changes: changeGroup.changes})
+      });
+      const saveData = await saveRes.json();
+      if (!saveData.success) { showToast("error","Save Failed", saveData.error || "Unknown error"); return; }
+    }
+    pendingChanges = {};
+    hideSaveBar();
+    showToast("success","Saved!","rpt.conf updated successfully.");
+    await loadConf();
+  } catch(e) {
+    showToast("error","Save Error",e.message);
+  }
+}
+
+async function saveRaw() {
+  const content = document.getElementById("raw-editor").value;
+  try {
+    const res = await fetch("/api/save", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({raw_content: content})
+    });
+    const data = await res.json();
+    if (data.success) { showToast("success","Saved!",`Backup: ${data.backup}`); confContent = content; }
+    else { showToast("error","Save Failed", data.error); }
+  } catch(e) { showToast("error","Error",e.message); }
+}
+
+function discardChanges() {
+  pendingChanges = {}; hideSaveBar(); loadConf(); showToast("info","Discarded","Changes discarded.");
+}
+
+async function loadRawContent() {
+  const res = await fetch("/api/conf");
+  const data = await res.json();
+  document.getElementById("raw-editor").value = data.content;
+  showToast("info","Reloaded","Raw content refreshed from disk.");
+}
+
+// =============================================
+// RESTART / RELOAD
+// =============================================
+async function restartAsterisk() {
+  showToast("info","Restarting…","Sending restart command.");
+  try {
+    const res = await fetch("/api/restart", {method:"POST"});
+    const data = await res.json();
+    if (data.success) showToast("success","Restarted", data.output || "Asterisk restarted.");
+    else showToast("error","Restart Failed", data.error || "Unknown error");
+  } catch(e) { showToast("error","Error",e.message); }
+}
+
+async function reloadModule() {
+  showToast("info","Reloading…","Reloading app_rpt module.");
+  try {
+    const res = await fetch("/api/reload", {method:"POST"});
+    const data = await res.json();
+    if (data.success) showToast("success","Reloaded", data.output || "Module reloaded.");
+    else showToast("error","Reload Failed", data.error || "Unknown error");
+  } catch(e) { showToast("error","Error",e.message); }
+}
+
+// =============================================
+// BACKUPS
+// =============================================
+async function loadBackups() {
+  const res = await fetch("/api/backups");
+  const data = await res.json();
+  const container = document.getElementById("backup-list");
+  if (!data.backups || data.backups.length === 0) {
+    container.innerHTML = '<div class="alert alert-info">ℹ️ No backups yet. They are created automatically on every save.</div>'; return;
+  }
+  let html = `<div class="alert alert-info">ℹ️ Backups stored in <code>${data.backup_dir}</code></div><div class="card"><div>`;
+  data.backups.forEach(file => {
+    const ts = formatTimestamp(file.replace("rpt.conf.","").replace(".bak",""));
+    html += `<div class="setting-row"><div class="setting-label mono">${file}<div class="setting-label-desc">${ts}</div></div><div></div><button class="btn btn-secondary" style="font-size:11px;" onclick="confirmRestore('${file}')">↩ Restore</button></div>`;
+  });
+  html += '</div></div>';
+  container.innerHTML = html;
+}
+
+function formatTimestamp(ts) {
+  try { return `${ts.substr(0,4)}-${ts.substr(4,2)}-${ts.substr(6,2)} ${ts.substr(9,2)}:${ts.substr(11,2)}:${ts.substr(13,2)}`; }
+  catch { return ts; }
+}
+
+async function restoreBackup(filename) {
+  const res = await fetch(`/api/backup/${filename}`);
+  const data = await res.json();
+  if (data.content) {
+    const saveRes = await fetch("/api/save", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({raw_content: data.content})
+    });
+    const saveData = await saveRes.json();
+    if (saveData.success) { showToast("success","Restored",`${filename} restored.`); loadConf(); }
+    else showToast("error","Restore Failed", saveData.error);
+  }
+}
+
+// =============================================
+// COP REFERENCE
+// =============================================
+function buildCOPReference() {
+  const tbody = document.querySelector("#cop-table tbody");
+  COP_COMMANDS.forEach(([num, desc]) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td class="cop-num">cop,${num}</td><td>${desc}</td><td><code>${num < 100 ? '9' : ''}${num} = cop,${num}</code></td>`;
+    tbody.appendChild(tr);
+  });
+  const itbody = document.querySelector("#ilink-table tbody");
+  ILINK_COMMANDS.forEach(([num, desc, req]) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td class="ilink-num">ilink,${num}</td><td>${desc}</td><td><span class="badge ${req==='Yes'?'badge-amber':'badge-blue'}">${req}</span></td>`;
+    itbody.appendChild(tr);
+  });
+  const stbody = document.querySelector("#status-table tbody");
+  STATUS_COMMANDS.forEach(([num, desc]) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td class="ilink-num">status,${num}</td><td>${desc}</td>`;
+    stbody.appendChild(tr);
+  });
+}
+
+// =============================================
+// HELP TABLE
+// =============================================
+function buildHelpTable() {
+  const tbody = document.getElementById("help-table-body");
+  Object.values(RPT_SETTINGS).forEach(section => {
+    section.fields.forEach(field => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td style="font-family:var(--font-mono);color:var(--green);font-size:11px;padding:6px 10px;">${field.key}</td><td style="padding:6px 10px;color:var(--text-muted);font-size:12px;">${field.desc}</td><td style="font-family:var(--font-mono);font-size:11px;color:var(--amber);padding:6px 10px;">${field.default||'—'}</td>`;
+      tbody.appendChild(tr);
+    });
+  });
+}
+
+// =============================================
+// NAVIGATION
+// =============================================
+function showPage(page) {
+  document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+  document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
+  const pageEl = document.getElementById(`page-${page}`);
+  if (pageEl) pageEl.classList.add("active");
+  const navEl = document.getElementById(`nav-${page}`);
+  if (navEl) navEl.classList.add("active");
+  if (page === "backups") loadBackups();
+  if (page === "raw") loadRawContent();
+  if (page === "node" && currentNode) {
+    const nodeNav = document.getElementById(`nav-node-${currentNode}`);
+    if (nodeNav) nodeNav.classList.add("active");
+  }
+}
+
+// =============================================
+// SAVE BAR
+// =============================================
+function showSaveBar() { document.getElementById("save-bar").classList.add("visible"); }
+function hideSaveBar() { document.getElementById("save-bar").classList.remove("visible"); }
+
+// =============================================
+// DIALOGS
+// =============================================
+function showDialog(title, msg, confirmLabel, confirmClass, callback) {
+  document.getElementById("dialog-title").textContent = title;
+  document.getElementById("dialog-msg").textContent = msg;
+  const btn = document.getElementById("dialog-confirm-btn");
+  btn.textContent = confirmLabel;
+  btn.className = `btn ${confirmClass}`;
+  dialogCallback = callback;
+  document.getElementById("dialog-overlay").classList.add("show");
+}
+
+function closeDialog() {
+  document.getElementById("dialog-overlay").classList.remove("show");
+  dialogCallback = null;
+}
+
+function dialogConfirm() {
+  closeDialog();
+  if (dialogCallback) dialogCallback();
+}
+
+function confirmRestart() {
+  showDialog("⚡ Restart Asterisk","This will restart Asterisk and briefly interrupt all active connections. Continue?","Restart","btn-danger", restartAsterisk);
+}
+
+function confirmReload() {
+  showDialog("↻ Reload Module","This will reload app_rpt.so. Active connections may be affected. Continue?","Reload","btn-amber", reloadModule);
+}
+
+function confirmSaveChanges() {
+  showDialog("💾 Save Changes","Save all pending changes to rpt.conf? A backup will be created automatically.","Save","btn-primary", saveChanges);
+}
+
+function confirmSaveRaw() {
+  showDialog("💾 Save Raw Config","Save the raw editor content to rpt.conf? A backup will be created. Syntax errors will prevent Asterisk from loading.","Save","btn-primary", saveRaw);
+}
+
+function confirmRestore(filename) {
+  showDialog("↩ Restore Backup",`Restore ${filename}? Current rpt.conf will be backed up first.`,"Restore","btn-amber", () => restoreBackup(filename));
+}
+
+// =============================================
+// TOAST
+// =============================================
+function showToast(type, title, msg) {
+  const icons = {success:"✅",error:"❌",warning:"⚠️",info:"ℹ️"};
+  const container = document.getElementById("toast-container");
+  const toast = document.createElement("div");
+  toast.className = `toast ${type}`;
+  toast.innerHTML = `<span class="toast-icon">${icons[type]||"ℹ️"}</span><div class="toast-body"><div class="toast-title">${title}</div>${msg?`<div class="toast-msg">${msg}</div>`:""}</div>`;
+  container.appendChild(toast);
+  setTimeout(() => { toast.style.opacity="0"; toast.style.transition="opacity .3s"; setTimeout(()=>toast.remove(),300); }, 4500);
+}
+
+// =============================================
+// UTILS
+// =============================================
+function escHtml(s) {
+  return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+// Close dialog on overlay click
+document.getElementById("dialog-overlay").addEventListener("click", function(e) {
+  if (e.target === this) closeDialog();
+});
+
+// =============================================
+// BOOT
+// =============================================
+init();
+</script>
+</body>
+</html>
