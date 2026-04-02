@@ -1,4 +1,5 @@
-# ASL3 rpt.conf Editor
+# ASL3 EZ
+AllstarLink3 **E**ditor by N8GM**Z**
 
 A clean, browser-based web interface for editing your **AllStarLink 3** `rpt.conf` configuration file — with live field editing, automatic backups, and one-click Asterisk restart.
 
@@ -10,14 +11,14 @@ A clean, browser-based web interface for editing your **AllStarLink 3** `rpt.con
 
 ## Features
 
-- 📻 **All rpt.conf settings** organized into logical sections (Basic, ID, Timers, Telemetry, DTMF, Nodes, Audio, and more)
-- 🔄 **Toggle settings on/off** (comments/uncomments lines without deleting them)
-- 💾 **Automatic backups** — every save creates a timestamped backup in `/etc/asterisk/rpt_backups/`
-- 🗂 **Backup browser** — view and restore any of the last 10 backups
-- ⚡ **One-click Asterisk restart** or softer `module reload app_rpt.so`
-- 📝 **Raw editor** — edit rpt.conf directly as text when needed
-- 📊 **Dashboard** showing node summary and quick actions
-- 🌙 **Dark theme** designed for terminal-comfortable sysadmins
+- **All rpt.conf settings** organized into logical sections (Basic, ID, Timers, Telemetry, DTMF, Nodes, Audio, and more)
+- **Toggle settings on/off** (comments/uncomments lines without deleting them)
+- **Automatic backups** — every save creates a timestamped backup in `/etc/asterisk/rpt_backups/`
+- **Backup browser** — view and restore any of the last 10 backups
+- **One-click Asterisk restart** or softer `module reload app_rpt.so`
+- **Raw editor** — edit rpt.conf directly as text when needed
+- **Dashboard** showing node summary and quick actions
+- **Dark theme** designed for terminal-comfortable sysadmins
 
 ---
 
@@ -36,15 +37,15 @@ A clean, browser-based web interface for editing your **AllStarLink 3** `rpt.con
 
 ```bash
 # Clone or download this repository
-git clone https://github.com/YOUR_USERNAME/asl3-rpt-editor.git
-cd asl3-rpt-editor
+git clone https://github.com/GooseThings/ASL3-EZ.git
+cd ASL3-EZ
 
 # Run the installer as root
 sudo bash install.sh
 ```
 
 The installer will:
-1. Copy files to `/opt/asl3-rpt-editor/`
+1. Copy files to `/opt/ASL3-EZ/`
 2. Create a Python virtual environment and install Flask
 3. Install and start a systemd service that auto-starts on boot
 
@@ -56,7 +57,7 @@ http://YOUR_NODE_IP:5000
 ### Manual Install (No systemd)
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/asl3-rpt-editor.git
+git clone https://github.com/GooseThings/ASL3-EZ.git
 cd asl3-rpt-editor
 
 # Create virtualenv
@@ -135,14 +136,14 @@ Environment variables can be set in the systemd service file (`/etc/systemd/syst
 To change settings, edit the service file:
 
 ```bash
-sudo systemctl edit asl3-rpt-editor
+sudo systemctl edit ASL3-EZ
 ```
 
 Or edit directly:
 ```bash
-sudo nano /etc/systemd/system/asl3-rpt-editor.service
+sudo nano /etc/systemd/system/ASL3-EZ.service
 sudo systemctl daemon-reload
-sudo systemctl restart asl3-rpt-editor
+sudo systemctl restart ASL3-EZ
 ```
 
 ---
@@ -195,7 +196,7 @@ Your `rpt.conf` and backups in `/etc/asterisk/` are **not** deleted.
 
 **Service won't start:**
 ```bash
-journalctl -u asl3-rpt-editor -n 50
+journalctl -u ASL3-EZ -n 50
 ```
 
 **Permission denied saving rpt.conf:**
@@ -207,7 +208,7 @@ journalctl -u asl3-rpt-editor -n 50
 - The service must run as root to call `systemctl restart asterisk`
 
 **Can't reach web UI:**
-- Check the service is running: `systemctl status asl3-rpt-editor`
+- Check the service is running: `systemctl status ASL3-EZ`
 - Check firewall: `sudo ufw status`
 - Verify the port: `ss -tlnp | grep 5000`
 
@@ -216,12 +217,12 @@ journalctl -u asl3-rpt-editor -n 50
 ## Project Structure
 
 ```
-asl3-rpt-editor/
+ASL3-EZ/
 ├── app.py                  # Flask application (backend)
 ├── templates/
 │   └── index.html          # Single-page web UI
 ├── requirements.txt        # Python dependencies (Flask only)
-├── asl3-rpt-editor.service # systemd service unit file
+├── ASL3-EZ.service # systemd service unit file
 ├── install.sh              # Automated installer
 ├── uninstall.sh            # Uninstaller
 ├── sample-rpt.conf         # Sample rpt.conf for testing
@@ -247,4 +248,4 @@ Pull requests welcome! Areas for improvement:
 
 ---
 
-*73 de the author — happy linking!* 📻
+*73 de N8GMZ — happy linking!*
