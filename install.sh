@@ -11,7 +11,7 @@ PORT="${PORT:-5000}"
 echo ""
 echo "============================================"
 echo "  ASL3-EZ rpt.conf Editor - Installer"
-echo "  by N8GMZ"
+echo "  by N8GMZ - Version 0.0.2 BETA"
 echo "============================================"
 echo ""
 
