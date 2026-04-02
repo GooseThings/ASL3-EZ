@@ -4,13 +4,13 @@
 
 set -e
 
-INSTALL_DIR="/opt/asl3-rpt-editor"
-SERVICE_NAME="asl3-rpt-editor"
+INSTALL_DIR="/opt/ASL3-EZ"
+SERVICE_NAME="ASL3-EZ"
 PORT="${PORT:-5000}"
 
 echo ""
 echo "============================================"
-echo "  ASL3 rpt.conf Editor - Installer"
+echo "  N8GMZ ASL3 rpt.conf Editor - Installer"
 echo "============================================"
 echo ""
 
