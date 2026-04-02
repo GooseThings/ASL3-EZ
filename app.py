@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ASL3 rpt.conf Web Editor
+ASL3-EZ rpt.conf Web Editor
 A simple web interface for editing AllStarLink 3 rpt.conf settings
 and restarting Asterisk.
 """
