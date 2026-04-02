@@ -220,14 +220,18 @@ Ensure the service runs as root: check `User=root` in `/etc/systemd/system/ASL3-
 ```
 ASL3-EZ/
 ├── app.py                  # Flask backend
+├── static/
+│   └── favicon.ico              # favicon image file
+│   └── asl3-ez-logo.png         # png logo image
+│   └── asl3-ez-logo-small.png   # small png logo image
 ├── templates/
-│   └── index.html          # Single-page web UI
-├── requirements.txt        # Python dependencies
-├── ASL3-EZ.service         # systemd service unit file
-├── install.sh              # Automated installer
-├── uninstall.sh            # Uninstaller
-├── sample-rpt.conf         # Sample config for testing
-└── README.md               # This file
+│   └── index.html               # Single-page web UI
+├── requirements.txt             # Python dependencies
+├── ASL3-EZ.service              # systemd service unit file
+├── install.sh                   # Automated installer
+├── uninstall.sh                 # Uninstaller
+├── sample-rpt.conf              # Sample config for testing
+└── README.md                    # This file
 ```
 
 ---
@@ -235,9 +239,9 @@ ASL3-EZ/
 ## Contact
 
 **N8GMZ**
-- 📧 [cq.n8gmz@gmail.com](mailto:cq.n8gmz@gmail.com)
-- 🌐 [www.we8chz.org](http://www.we8chz.org)
-- 💻 [github.com/GooseThings/ASL3-EZ](https://github.com/GooseThings/ASL3-EZ)
+- [cq.n8gmz@gmail.com](mailto:cq.n8gmz@gmail.com)
+- [www.we8chz.org](http://www.we8chz.org)
+- [github.com/GooseThings/ASL3-EZ](https://github.com/GooseThings/ASL3-EZ)
 
 ---
 
