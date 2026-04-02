@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/x-icon" href="/static/favicon.ico">
 <title>ASL3-EZ</title>
 <style>
   :root {
@@ -20,6 +21,11 @@
   .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 15px; }
   .logo-icon { width: 30px; height: 30px; background: linear-gradient(135deg,#238636,#1a7f37); border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
   .logo-sub { color: var(--text-muted); font-weight: 400; font-size: 11px; }
+  .nav-logo { width: 180px; height: auto; max-width: 100%; vertical-align: middle; }
+
+/* Optional: Adjust size specifically for very small mobile screens */
+/* @media (max-width: 480px) { .nav-logo { width: 120px; } } */
+
   .header-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
   .btn { display: inline-flex; align-items: center; gap: 5px; padding: 5px 12px; border-radius: var(--radius); border: 1px solid transparent; font-size: 12px; font-weight: 500; cursor: pointer; transition: all .15s; font-family: var(--font-sans); white-space: nowrap; }
   .btn:disabled { opacity: .5; cursor: not-allowed; }
@@ -155,7 +161,7 @@
 
 <header>
   <div class="logo">
-    <div class="logo-icon">📻</div>
+    <div class="logo-icon"><img src="/static/asl3-ez-logo.png" alt="ASL3-EZ Logo" class="nav-logo"></div>
     <div>ASL3-EZ <div class="logo-sub">AllStarLink 3 rpt.conf Editor by N8GMZ</div></div>
   </div>
   <div class="header-actions">
