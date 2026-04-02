@@ -1,5 +1,5 @@
 #!/bin/bash
-# ASL3 rpt.conf Editor - Installer
+# ASL3-EZ - Installer
 # Run as root: sudo bash install.sh
 
 set -e
@@ -10,7 +10,8 @@ PORT="${PORT:-5000}"
 
 echo ""
 echo "============================================"
-echo "  N8GMZ ASL3 rpt.conf Editor - Installer"
+echo "  ASL3-EZ rpt.conf Editor - Installer"
+echo "  by N8GMZ"
 echo "============================================"
 echo ""
 
@@ -22,35 +23,47 @@ fi
 
 # Check Python3
 if ! command -v python3 &>/dev/null; then
-  echo "ERROR: python3 not found. Install with: sudo apt install python3 python3-pip python3-venv"
-  exit 1
+  echo "Installing python3..."
+  apt install -y python3 python3-pip python3-venv python3-full
 fi
 
-echo "[1/5] Installing to $INSTALL_DIR..."
+echo "[1/6] Installing dependencies..."
+apt install -y python3-venv python3-full 2>/dev/null || true
+
+echo "[2/6] Installing to $INSTALL_DIR..."
 mkdir -p "$INSTALL_DIR"
 cp -r . "$INSTALL_DIR/"
 
-echo "[2/5] Creating Python virtual environment..."
+echo "[3/6] Creating Python virtual environment..."
 python3 -m venv "$INSTALL_DIR/venv"
 "$INSTALL_DIR/venv/bin/pip" install --quiet --upgrade pip
-"$INSTALL_DIR/venv/bin/pip" install --quiet -r "$INSTALL_DIR/requirements.txt"
+"$INSTALL_DIR/venv/bin/pip" install --quiet flask gunicorn
 
-echo "[3/5] Installing systemd service..."
-cp "$INSTALL_DIR/asl3-rpt-editor.service" /etc/systemd/system/
+echo "[4/6] Installing systemd service..."
+cp "$INSTALL_DIR/ASL3-EZ.service" /etc/systemd/system/
 systemctl daemon-reload
 
-echo "[4/5] Enabling and starting service..."
-systemctl enable "$SERVICE_NAME"
-systemctl start "$SERVICE_NAME"
+echo "[5/6] Opening firewall port $PORT..."
+if command -v firewall-cmd &>/dev/null; then
+  firewall-cmd --permanent --add-port=${PORT}/tcp 2>/dev/null && firewall-cmd --reload 2>/dev/null || true
+  echo "  firewalld: port $PORT opened."
+elif command -v ufw &>/dev/null; then
+  ufw allow ${PORT}/tcp 2>/dev/null || true
+  echo "  ufw: port $PORT opened."
+else
+  echo "  No firewall manager found - you may need to open port $PORT manually."
+fi
 
-echo "[5/5] Checking status..."
+echo "[6/6] Enabling and starting service..."
+systemctl enable "$SERVICE_NAME"
+systemctl restart "$SERVICE_NAME"
+
 sleep 2
 if systemctl is-active --quiet "$SERVICE_NAME"; then
   echo ""
   echo "============================================"
   echo "  ✅ Installation complete!"
   echo ""
-  # Get IP
   IP=$(hostname -I | awk '{print $1}')
   echo "  Open your browser and go to:"
   echo "  http://${IP}:${PORT}"

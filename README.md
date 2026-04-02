@@ -1,42 +1,46 @@
-# ASL3 EZ
-AllstarLink3 **E**ditor by N8GM**Z**
+# ASL3-EZ
 
-A clean, browser-based web interface for editing your **AllStarLink 3** `rpt.conf` configuration file — with live field editing, automatic backups, and one-click Asterisk restart.
+**AllStarLink 3 Editor by N8GMZ**
 
-![ASL3 rpt.conf Editor](https://img.shields.io/badge/AllStarLink-3-green?style=for-the-badge&logo=radio)
-![Python](https://img.shields.io/badge/Python-3.8+-blue?style=for-the-badge&logo=python)
+A browser-based web interface for editing your AllStarLink 3 `rpt.conf` configuration file — with organized field editors, DTMF function/macro/scheduler editors, COP command reference, automatic backups, and one-click Asterisk restart.
+
+![ASL3-EZ](https://img.shields.io/badge/AllStarLink-3-green?style=for-the-badge)
+![Python](https://img.shields.io/badge/Python-3.8+-blue?style=for-the-badge)
 ![Flask](https://img.shields.io/badge/Flask-3.x-lightgrey?style=for-the-badge)
 
 ---
 
 ## Features
 
-- **All rpt.conf settings** organized into logical sections (Basic, ID, Timers, Telemetry, DTMF, Nodes, Audio, and more)
-- **Toggle settings on/off** (comments/uncomments lines without deleting them)
-- **Automatic backups** — every save creates a timestamped backup in `/etc/asterisk/rpt_backups/`
-- **Backup browser** — view and restore any of the last 10 backups
-- **One-click Asterisk restart** or softer `module reload app_rpt.so`
-- **Raw editor** — edit rpt.conf directly as text when needed
-- **Dashboard** showing node summary and quick actions
-- **Dark theme** designed for terminal-comfortable sysadmins
+- 📻 **All rpt.conf settings** — every node stanza parameter organized into collapsible sections
+- 🔢 **Functions, Link Functions, Phone Functions** stanza editors — add/remove/edit DTMF commands with a table UI
+- 🎛️ **Macro editor** — define and edit macros in the `[macro]` stanza
+- 🕐 **Scheduler** — set up cron-style scheduled macro execution in `[schedule]`
+- 📢 **Telemetry stanza editor** — define courtesy tones and telemetry entries
+- 🌐 **Nodes stanza editor** — manage static node connection entries
+- 📋 **COP Commands reference** — full table of all COP, iLink, and Status commands
+- 🔄 **Toggle settings on/off** — comment/uncomment lines without deleting them
+- 💾 **Automatic backups** — every save creates a timestamped backup
+- 🗂 **Backup browser** — view and restore any of the last 10 backups with confirmation dialogs
+- ⚡ **One-click Asterisk restart** or softer module reload — both with confirmation dialog
+- 📝 **Raw text editor** — edit rpt.conf directly when needed
+- ℹ️ **About page** with contact information
 
 ---
 
 ## Requirements
 
-- AllStarLink 3 (Debian-based)
+- AllStarLink 3 (Debian-based — Raspberry Pi or x86)
 - Python 3.8 or later
-- `python3-venv` package
+- `python3-venv` and `python3-full` packages
 - Root/sudo access (needed to write `/etc/asterisk/rpt.conf` and restart Asterisk)
 
 ---
 
 ## Installation
 
-### Quick Install (Recommended)
-
 ```bash
-# Clone or download this repository
+# Clone the repository
 git clone https://github.com/GooseThings/ASL3-EZ.git
 cd ASL3-EZ
 
@@ -44,102 +48,112 @@ cd ASL3-EZ
 sudo bash install.sh
 ```
 
-The installer will:
-1. Copy files to `/opt/ASL3-EZ/`
-2. Create a Python virtual environment and install Flask
-3. Install and start a systemd service that auto-starts on boot
+The installer automatically:
+1. Installs `python3-venv` and `python3-full` (fixes the "externally managed environment" error)
+2. Copies files to `/opt/ASL3-EZ/`
+3. Creates a Python virtual environment and installs Flask + Gunicorn
+4. Installs and starts a systemd service that auto-starts on boot
+5. Opens port 5000 in the firewall (supports both `firewalld` and `ufw`)
 
-Then open your browser and go to:
+Then open your browser:
 ```
 http://YOUR_NODE_IP:5000
 ```
 
-### Manual Install (No systemd)
+---
+
+## Upgrading
+
+To upgrade to a newer version:
 
 ```bash
-git clone https://github.com/GooseThings/ASL3-EZ.git
-cd asl3-rpt-editor
-
-# Create virtualenv
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-
-# Run (as root so it can write rpt.conf and restart Asterisk)
-sudo venv/bin/python app.py
+cd ASL3-EZ
+git pull
+sudo bash install.sh
 ```
+
+The installer will overwrite the previous installation and restart the service.
 
 ---
 
 ## Usage
 
 ### Dashboard
-
-The **Dashboard** gives you an at-a-glance view of your configured nodes with quick links to configure each one.
+Overview of configured nodes with quick-action buttons.
 
 ### General Settings
-
-The **General** page lets you set the `[general]` stanza options introduced in ASL3, including node lookup method and DNS settings.
+Edit the `[general]` stanza — node lookup method and DNS settings (ASL3-specific).
 
 ### Node Settings
+Click any node in the sidebar to open the full settings editor. Sections include:
 
-Click any node in the left sidebar (e.g., **Node 1999**) to open the full settings editor for that node. Settings are organized into collapsible sections:
-
-| Section | Settings |
+| Section | Key Settings |
 |---|---|
-| Basic Node Settings | rxchannel, duplex, linktolink, callerid, context |
-| Station ID | idrecording, idtalkover, idtime, politeid |
-| Timers | hangtime, althangtime, totime, sleeptime, link activity timers |
-| Telemetry | telemdefault, telemdynamic, courtesy tones, ducking |
-| DTMF Settings | funcchar, endchar, functions stanzas |
-| Node Connections | extnodefile, nodenames, connect/disconnect scripts |
-| Audio & Streaming | linkmongain, echolink gains, notch filter, streaming |
+| Basic Node Settings | rxchannel, duplex, linktolink, callerid, context, startup_macro |
+| Station ID | idrecording, idtalkover, idtime, politeid, beaconing |
+| Timers | hangtime, althangtime, totime, sleeptime, link activity timers, remote timeouts |
+| Telemetry Settings | telemdefault, telemdynamic, courtesy tones, ducking levels |
+| DTMF Settings | funcchar, endchar, functions stanzas, dtmfkey, inxlat/outxlat |
+| Node Connections | extnodefile, nodenames, connect/disconnect scripts, stanza pointers |
+| Audio & Streaming | linkmongain, EchoLink gains, notch filter, streaming command |
+| EchoLink & GUI Linking | eannmode, echolink/gui/phone/tlb telemetry defaults |
 | Parrot / Echo Mode | parrot, parrottime |
 | RX Toneburst | rxburstfreq, rxburstthreshold, rxbursttime |
-| Archiving & Logging | archivedir, format, statpost settings |
-| Miscellaneous | controlstates, scheduler, tail messages, voter, APRS, Elke, MDC, LiTZ |
+| Long Tone Zero (LiTZ) | litzchar, litzcmd, litztime |
+| APRS & GPS | aprstt, beaconing |
+| Archiving & Logging | archivedir, archiveformat, archivedatefmt, statpost settings |
+| Tail Messages | tailmessagelist, tailmessagetime, tailsquashedtime |
+| VOTER / RTCM | votermode, votertype, votermargin |
+| Advanced | elke, iobase |
 
-### Toggling Settings On/Off
+### Toggle On/Off
+Each setting has a toggle switch. When **off**, the setting is commented out with `;` — preserved but inactive. Toggle back on to re-enable.
 
-Each setting has a small toggle switch. When **off**, the setting is commented out in `rpt.conf` (prefixed with `;`) — it's preserved but inactive. When **on**, it's active.
+### DTMF Stanzas (Functions / Link Functions / Phone Functions)
+Table editors for all three function stanzas. Add or remove rows, edit DTMF key and command values. Save each stanza independently. Use the **COP Commands** reference page as a guide.
+
+### Macros
+Edit the `[macro]` stanza with a table editor. Format: macro number = colon-separated DTMF command sequence.
+
+### Scheduler
+Edit the `[schedule]` stanza. Uses cron-style syntax: `macroN = minute hour dom month dow`. Use `*` for any.
+
+### Telemetry Stanza
+Edit courtesy tone definitions. Format: `name = |t(freq,freq2,ms,amplitude)...`
+
+### Nodes List
+Edit static node entries in the `[nodes]` stanza.
+
+### COP Commands Reference
+Full table of all COP, iLink, and Status commands — useful when building your [functions] stanza.
 
 ### Saving
-
-- Click **Save Changes** in the yellow bar that appears when you've modified settings
-- A timestamped backup is automatically created before every save
-- You can view and restore backups from the **Backups** page or sidebar
+Click **Save Changes** in the yellow bar at the bottom of the screen. A confirmation dialog appears before writing. A timestamped backup is always created automatically.
 
 ### Restarting Asterisk
+Both **Reload Module** and **Restart Asterisk** buttons show a confirmation dialog before executing.
 
-- **Reload Module** — runs `asterisk -rx "module reload app_rpt.so"` — softer, faster, but not always sufficient
-- **Restart Asterisk** — runs `systemctl restart asterisk` — full restart, briefly drops all connections
+- **Reload Module** — `asterisk -rx "module reload app_rpt.so"` — softer, faster
+- **Restart Asterisk** — `systemctl restart asterisk` — full restart, briefly drops all connections
 
 ### Raw Editor
-
-The **Raw Editor** lets you edit `rpt.conf` as plain text. This is useful for editing stanzas not covered by the GUI (like `[functions]`, `[telemetry]`, `[nodes]`, `[morse]`). A backup is still created on save.
+Edit `rpt.conf` as plain text. Useful for stanzas not in the GUI. Confirmation dialog before saving.
 
 ---
 
 ## Configuration
 
-Environment variables can be set in the systemd service file (`/etc/systemd/system/asl3-rpt-editor.service`) or passed directly:
+Environment variables in the systemd service file:
 
 | Variable | Default | Description |
 |---|---|---|
-| `RPT_CONF_PATH` | `/etc/asterisk/rpt.conf` | Path to your rpt.conf |
-| `BACKUP_DIR` | `/etc/asterisk/rpt_backups` | Where backups are stored |
-| `RESTART_CMD` | `systemctl restart asterisk` | Command to restart Asterisk |
+| `RPT_CONF_PATH` | `/etc/asterisk/rpt.conf` | Path to rpt.conf |
+| `BACKUP_DIR` | `/etc/asterisk/rpt_backups` | Backup directory |
+| `RESTART_CMD` | `systemctl restart asterisk` | Asterisk restart command |
 | `PORT` | `5000` | Web server port |
 | `HOST` | `0.0.0.0` | Bind address |
-| `SECRET_KEY` | `asl3-editor-change-me` | Flask secret key (change this!) |
 
-To change settings, edit the service file:
-
-```bash
-sudo systemctl edit ASL3-EZ
-```
-
-Or edit directly:
+To change settings:
 ```bash
 sudo nano /etc/systemd/system/ASL3-EZ.service
 sudo systemctl daemon-reload
@@ -148,44 +162,21 @@ sudo systemctl restart ASL3-EZ
 
 ---
 
-## Testing Without a Real ASL3 Node
-
-A `sample-rpt.conf` is included. To test with it:
-
-```bash
-RPT_CONF_PATH=$(pwd)/sample-rpt.conf python app.py
-```
-
-Then open `http://localhost:5000` in your browser.
-
----
-
 ## Security Notes
 
-⚠️ **This web app runs as root** (required to write `/etc/asterisk/rpt.conf` and restart Asterisk). Recommendations:
+⚠️ **This app runs as root** — required to write `/etc/asterisk/rpt.conf` and restart Asterisk.
 
-1. **Bind to localhost only** if you're using an SSH tunnel or reverse proxy:
-   ```
-   HOST=127.0.0.1
-   ```
-
-2. **Change the SECRET_KEY** in the service file to a long random string
-
-3. **Use a firewall** to restrict access to port 5000 to trusted IPs only:
-   ```bash
-   sudo ufw allow from YOUR_ADMIN_IP to any port 5000
-   ```
-
-4. **Consider HTTPS** using nginx as a reverse proxy with a self-signed cert
-
-This tool is designed for use on a private/home network. Do not expose it directly to the internet without authentication.
+Recommendations:
+1. **Restrict to your LAN** — the firewall rule added by the installer allows all IPs on port 5000. Tighten it if needed.
+2. **Do not expose to the internet** without adding authentication.
+3. **Change the SECRET_KEY** in the service file.
 
 ---
 
 ## Uninstall
 
 ```bash
-sudo bash /opt/asl3-rpt-editor/uninstall.sh
+sudo bash /opt/ASL3-EZ/uninstall.sh
 ```
 
 Your `rpt.conf` and backups in `/etc/asterisk/` are **not** deleted.
@@ -199,18 +190,28 @@ Your `rpt.conf` and backups in `/etc/asterisk/` are **not** deleted.
 journalctl -u ASL3-EZ -n 50
 ```
 
+**Page won't load from another PC:**
+```bash
+# Open the firewall port manually if the installer didn't do it:
+sudo firewall-cmd --permanent --add-port=5000/tcp
+sudo firewall-cmd --reload
+# or for ufw:
+sudo ufw allow 5000/tcp
+```
+
+**"externally managed environment" pip error:**
+The installer now handles this automatically by using a virtual environment with `python3-full`. If running manually:
+```bash
+sudo apt install python3-venv python3-full -y
+python3 -m venv venv
+venv/bin/pip install flask gunicorn
+```
+
+**Segfault / empty reply from server:**
+The installer now uses Gunicorn instead of Flask's built-in development server, which resolves segfaults seen on Raspberry Pi.
+
 **Permission denied saving rpt.conf:**
-- Make sure the service is running as root (check `User=root` in the service file)
-- Check file permissions: `ls -la /etc/asterisk/rpt.conf`
-
-**Asterisk restart fails:**
-- Verify Asterisk is managed by systemd: `systemctl status asterisk`
-- The service must run as root to call `systemctl restart asterisk`
-
-**Can't reach web UI:**
-- Check the service is running: `systemctl status ASL3-EZ`
-- Check firewall: `sudo ufw status`
-- Verify the port: `ss -tlnp | grep 5000`
+Ensure the service runs as root: check `User=root` in `/etc/systemd/system/ASL3-EZ.service`.
 
 ---
 
@@ -218,34 +219,30 @@ journalctl -u ASL3-EZ -n 50
 
 ```
 ASL3-EZ/
-├── app.py                  # Flask application (backend)
+├── app.py                  # Flask backend
 ├── templates/
 │   └── index.html          # Single-page web UI
-├── requirements.txt        # Python dependencies (Flask only)
-├── ASL3-EZ.service # systemd service unit file
+├── requirements.txt        # Python dependencies
+├── ASL3-EZ.service         # systemd service unit file
 ├── install.sh              # Automated installer
 ├── uninstall.sh            # Uninstaller
-├── sample-rpt.conf         # Sample rpt.conf for testing
+├── sample-rpt.conf         # Sample config for testing
 └── README.md               # This file
 ```
 
 ---
 
+## Contact
+
+**N8GMZ**
+- 📧 [cq.n8gmz@gmail.com](mailto:cq.n8gmz@gmail.com)
+- 🌐 [www.we8chz.org](http://www.we8chz.org)
+- 💻 [github.com/GooseThings/ASL3-EZ](https://github.com/GooseThings/ASL3-EZ)
+
+---
+
 ## License
 
-GNU GPU License — use freely, at your own risk. Not affiliated with AllStarLink
+GNU GPL v2 — Not affiliated with AllStarLink, Inc. Use at your own risk.
 
----
-
-## Contributing
-
-Pull requests welcome! Areas for improvement:
-- Authentication (login page)
-- Support for editing `[functions]`, `[telemetry]`, `[nodes]` stanzas via GUI
-- Multi-node support with per-node settings isolation
-- Dark/light theme toggle
-- Config validation before save
-
----
-
-*73 de N8GMZ — happy linking!*
+*73 de N8GMZ — happy linking!* 📻
