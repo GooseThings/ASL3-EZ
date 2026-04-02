@@ -233,7 +233,7 @@ ASL3-EZ/
 
 ## License
 
-MIT License — use freely, at your own risk. Not affiliated with AllStarLink, Inc.
+GNU License — use freely, at your own risk. Not affiliated with AllStarLink
 
 ---
 
