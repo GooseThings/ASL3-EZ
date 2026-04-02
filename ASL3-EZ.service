@@ -5,8 +5,8 @@ After=network.target asterisk.service
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/opt/asl3-rpt-editor
-ExecStart=/opt/asl3-rpt-editor/venv/bin/python app.py
+WorkingDirectory=/opt/ASL3-EZ
+ExecStart=/opt/ASL3-EZ/venv/bin/python app.py
 Restart=on-failure
 RestartSec=5
 Environment=PORT=5000
