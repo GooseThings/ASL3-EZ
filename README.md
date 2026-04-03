@@ -13,7 +13,7 @@ A browser-based web interface for managing your AllStarLink 3 node:
 
 ## Requirements
 
-- AllStarLink 3 on Debian 12 (Bookworm) or 13 (Trixie)
+- AllStarLink 3 on Debian 12 (Bookworm)
 - Python 3.8 or later
 - Root access (required to write `/etc/asterisk/rpt.conf` and restart Asterisk)
 
@@ -148,6 +148,6 @@ ASL3-EZ/
 
 ## License
 
-GPL-2.0 — use freely, at your own risk. Not affiliated with AllStarLink.
+GPL-2.0 — use freely, at your own risk. Not affiliated with AllStarLink, Inc.
 
 *73 de N8GMZ*

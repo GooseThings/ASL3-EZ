@@ -110,308 +110,321 @@ def get_db():
 # ---------------------------------------------------------------------------
 def parse_manager_conf():
     """
-    Return dict with keys: user, secret, host, port.
+    Return dict: {user, secret, host, port}.
 
     Priority:
-      1. AMI_USER + AMI_SECRET environment variables  (set in service file)
-      2. Parse /etc/asterisk/manager.conf directly
+      1. AMI_USER + AMI_SECRET env vars  (set in the service file — PREFERRED)
+      2. Parse manager.conf directly
 
-    The original code had a subtle bug: it required both 'write' containing
-    'command' AND 'enabled = yes' to be explicitly present.  In many ASL3
-    default manager.conf files the 'enabled' line is absent (defaults true).
-    Fixed: assume enabled=True unless explicitly set to 'no'.
+    Parser is intentionally permissive:
+      - A user stanza only needs 'secret'.
+      - 'enabled' defaults to True if absent (ASL3 default manager.conf omits it).
+      - 'write' line is NOT required — we accept any user that has a secret.
+        The write= check was the root cause of auth failures on stock ASL3
+        installs where manager.conf has no explicit write= line.
+      - Commented-out lines (;) are skipped.
+      - Inline comments after values are stripped.
     """
     result = {"user": None, "secret": None, "host": AMI_HOST, "port": AMI_PORT}
 
     env_user   = os.environ.get("AMI_USER",   "").strip()
     env_secret = os.environ.get("AMI_SECRET", "").strip()
     if env_user and env_secret:
-        log("INFO", f"[AMI-CREDS] Using env vars: user='{env_user}'")
+        log("INFO", f"[AMI-CREDS] Using env vars AMI_USER='{env_user}'")
         result["user"]   = env_user
         result["secret"] = env_secret
         return result
 
-    log("INFO", f"[AMI-CREDS] AMI_USER/AMI_SECRET not set, parsing {MANAGER_CONF}")
+    log("INFO", f"[AMI-CREDS] Env vars not set — parsing {MANAGER_CONF}")
     try:
         with open(MANAGER_CONF) as f:
             raw = f.read()
     except FileNotFoundError:
-        log("ERROR", f"[AMI-CREDS] {MANAGER_CONF} not found")
+        log("ERROR", f"[AMI-CREDS] {MANAGER_CONF} not found — set AMI_USER/AMI_SECRET in service file")
         return result
     except PermissionError:
-        log("ERROR", f"[AMI-CREDS] Permission denied reading {MANAGER_CONF}")
+        log("ERROR", f"[AMI-CREDS] Cannot read {MANAGER_CONF} (permission denied) — set AMI_USER/AMI_SECRET in service file")
         return result
     except Exception as e:
-        log("ERROR", f"[AMI-CREDS] Error reading manager.conf: {e}")
+        log("ERROR", f"[AMI-CREDS] Error reading {MANAGER_CONF}: {e}")
         return result
 
-    # Grab port from [general]
+    # Extract port from [general]
     m = re.search(r'^\s*port\s*=\s*(\d+)', raw, re.MULTILINE)
     if m:
         result["port"] = int(m.group(1))
-        log("INFO", f"[AMI-CREDS] manager.conf port = {result['port']}")
+        log("INFO", f"[AMI-CREDS] AMI port from manager.conf: {result['port']}")
 
-    # Split into stanzas
-    sections = re.split(r'(?m)^(?=\[)', raw)
-    for sec in sections:
-        lines = sec.strip().splitlines()
-        if not lines:
+    # Walk stanzas — take the FIRST non-[general] stanza that has a secret
+    # and is not explicitly disabled. Do NOT require a write= line.
+    current_header = None
+    current_secret = None
+    current_enabled = True
+
+    for raw_line in raw.splitlines():
+        line = raw_line.strip()
+        # Skip blank lines and full-line comments
+        if not line or line.startswith(";"):
             continue
-        hdr_m = re.match(r'^\[([^\]]+)\]', lines[0])
-        if not hdr_m:
+
+        # New stanza header
+        hdr = re.match(r'^\[([^\]]+)\]', line)
+        if hdr:
+            # Commit previous stanza if it had a secret
+            if current_header and current_header.lower() != "general" and current_secret and current_enabled:
+                log("INFO", f"[AMI-CREDS] Using manager.conf user: '{current_header}'")
+                result["user"]   = current_header
+                result["secret"] = current_secret
+                return result
+            current_header  = hdr.group(1).strip()
+            current_secret  = None
+            current_enabled = True
+            log("DEBUG", f"[AMI-CREDS] Entering stanza [{current_header}]")
             continue
-        header = hdr_m.group(1).strip()
-        if header.lower() == "general":
-            continue
 
-        secret    = None
-        enabled   = True   # default: enabled unless explicitly 'no'
-        can_write = False
+        # Key = value (strip inline comments)
+        if "=" in line:
+            kv = line.split(";", 1)[0]   # strip inline comment
+            key = kv.split("=", 1)[0].strip().lower()
+            val = kv.split("=", 1)[1].strip()
 
-        for line in lines[1:]:
-            stripped = line.strip()
-            if stripped.startswith(";") or not stripped:
-                continue
-            key_part = stripped.split("=", 1)[0].strip().lower()
-            val_part = stripped.split("=", 1)[1].split(";")[0].strip() if "=" in stripped else ""
+            if key == "secret":
+                current_secret = val
+                log("DEBUG", f"[AMI-CREDS] [{current_header}] secret found")
+            elif key == "enabled":
+                current_enabled = val.lower() not in ("no", "false", "0")
+                log("DEBUG", f"[AMI-CREDS] [{current_header}] enabled={current_enabled}")
 
-            if key_part == "secret":
-                secret = val_part
-            elif key_part == "enabled":
-                enabled = val_part.lower() not in ("no", "false", "0")
-            elif key_part == "write":
-                # accept: all, system, command (any of these grant command exec)
-                write_vals = [v.strip().lower() for v in val_part.split(",")]
-                if any(v in ("all", "system", "command") for v in write_vals):
-                    can_write = True
+    # Commit last stanza
+    if current_header and current_header.lower() != "general" and current_secret and current_enabled:
+        log("INFO", f"[AMI-CREDS] Using manager.conf user: '{current_header}'")
+        result["user"]   = current_header
+        result["secret"] = current_secret
+        return result
 
-        log("DEBUG", f"[AMI-CREDS] Section [{header}]: secret={'(set)' if secret else 'MISSING'}, "
-                      f"enabled={enabled}, can_write={can_write}")
-
-        if secret and enabled and can_write:
-            result["user"]   = header
-            result["secret"] = secret
-            log("INFO", f"[AMI-CREDS] Selected AMI user: '{header}'")
-            return result
-
-    log("ERROR", "[AMI-CREDS] No valid AMI user found in manager.conf. "
-                 "Set AMI_USER and AMI_SECRET in the service file.")
+    log("ERROR",
+        "[AMI-CREDS] No usable AMI user found in manager.conf. "
+        "Add a user stanza with 'secret = ...' OR set AMI_USER and AMI_SECRET "
+        "in /etc/systemd/system/ASL3-EZ.service then: "
+        "systemctl daemon-reload && systemctl restart ASL3-EZ")
     return result
 
 
 # ---------------------------------------------------------------------------
-# AMI TCP client  (raw socket, matching AllScan's proven approach)
+# AMI TCP client
+#
+# Protocol reference (confirmed against Asterisk 20 / ASL3):
+#   1. TCP connect to port 5038
+#   2. Asterisk sends ONE line: "Asterisk Call Manager/X.Y.Z\r\n"
+#      — this is NOT a key:value packet, it has no \r\n\r\n terminator
+#   3. Client sends Login action (terminated by blank line = \r\n\r\n)
+#   4. Asterisk responds with Response: Success\r\n\r\n  (or Error)
+#   5. All subsequent actions end with \r\n\r\n
+#   6. AMI Command responses accumulate lines starting with "Output:"
+#      and end with "--END COMMAND--\r\n\r\n"
 # ---------------------------------------------------------------------------
 class AMIClient:
-    """
-    Low-level Asterisk Manager Interface client over a raw TCP socket.
 
-    Key fixes vs original:
-      - Banner is fully drained before sending Login (Asterisk sends the
-        banner as a standalone packet ending with \r\n\r\n; not doing this
-        causes the first read_packet() call to mix banner + login response).
-      - Packet delimiter is always \r\n\r\n (two CRLF pairs).
-      - After login Asterisk may flood queued events; we drain them until
-        we see the actual Login Response packet.
-      - Command output is read until '--END COMMAND--' sentinel OR timeout.
-      - All steps are logged at DEBUG level for dashboard visibility.
-    """
-
-    def __init__(self, host, port, user, secret, timeout=10):
+    def __init__(self, host, port, user, secret, timeout=12):
         self.host    = host
         self.port    = port
         self.user    = user
         self.secret  = secret
         self.timeout = timeout
         self._sock   = None
-        self._buf    = ""
 
-    # ------------------------------------------------------------------ I/O
-    def _raw_send(self, data: str):
-        self._sock.sendall(data.encode("utf-8"))
+    # ── low-level I/O ────────────────────────────────────────────────────────
 
-    def _raw_recv(self) -> str:
-        try:
-            data = self._sock.recv(4096)
-            if not data:
-                return ""
-            return data.decode("utf-8", errors="replace")
-        except socket.timeout:
-            return ""
+    def _send(self, text: str):
+        """Send raw UTF-8 text."""
+        self._sock.sendall(text.encode("utf-8"))
 
-    def _read_packet(self) -> dict:
+    def _recv_until(self, sentinel: str, timeout: float = None) -> str:
         """
-        Read from the socket until we have a complete AMI packet
-        (terminated by \\r\\n\\r\\n), then parse into a dict.
+        Read bytes from the socket accumulating into a string until
+        `sentinel` appears in the accumulated data, or timeout elapses.
+        Returns the full accumulated string (may contain more than sentinel).
         """
-        deadline = time.time() + self.timeout
-        while "\r\n\r\n" not in self._buf:
-            if time.time() > deadline:
-                log("WARN", "[AMI] Timeout waiting for packet delimiter")
+        deadline = time.time() + (timeout or self.timeout)
+        buf = ""
+        self._sock.settimeout(0.5)   # short poll interval
+        while time.time() < deadline:
+            try:
+                chunk = self._sock.recv(4096)
+                if not chunk:
+                    break
+                buf += chunk.decode("utf-8", errors="replace")
+                if sentinel in buf:
+                    break
+            except socket.timeout:
+                continue
+            except Exception as e:
+                log("WARN", f"[AMI] recv error: {e}")
                 break
-            chunk = self._raw_recv()
-            if chunk:
-                self._buf += chunk
-
-        if "\r\n\r\n" in self._buf:
-            packet_raw, self._buf = self._buf.split("\r\n\r\n", 1)
-        else:
-            packet_raw = self._buf
-            self._buf  = ""
-
-        result = {}
-        for line in packet_raw.splitlines():
-            if ":" in line:
-                k, _, v = line.partition(":")
-                result[k.strip()] = v.strip()
-        return result
+        self._sock.settimeout(self.timeout)
+        return buf
 
     def _send_action(self, params: dict):
+        """Send an AMI action packet (key: value pairs terminated by blank line)."""
         msg = "".join(f"{k}: {v}\r\n" for k, v in params.items()) + "\r\n"
-        log("DEBUG", f"[AMI] >> Action: {params.get('Action', '?')}")
-        self._raw_send(msg)
+        log("DEBUG", f"[AMI] >> {list(params.items())[:3]}")
+        self._send(msg)
 
-    # --------------------------------------------------------------- connect
+    def _parse_packet(self, raw: str) -> dict:
+        """Parse an AMI key:value block into a dict."""
+        result = {}
+        for line in raw.splitlines():
+            if ":" in line:
+                k, _, v = line.partition(":")
+                k = k.strip()
+                v = v.strip()
+                if k:
+                    result[k] = v
+        return result
+
+    # ── connect / login ───────────────────────────────────────────────────────
+
     def connect(self):
-        log("INFO", f"[AMI] Connecting to {self.host}:{self.port}")
+        log("INFO", f"[AMI] Connecting to {self.host}:{self.port} as '{self.user}'")
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._sock.settimeout(self.timeout)
+
         try:
             self._sock.connect((self.host, self.port))
         except ConnectionRefusedError:
             raise Exception(
-                f"AMI connection refused at {self.host}:{self.port}. "
-                "Is Asterisk running? Is manager.conf 'enabled = yes'?"
+                f"AMI connection refused ({self.host}:{self.port}). "
+                "Is Asterisk running? Check: systemctl status asterisk"
             )
-        except socket.timeout:
-            raise Exception(
-                f"AMI connection timed out to {self.host}:{self.port}"
-            )
+        except OSError as e:
+            raise Exception(f"AMI connect failed: {e}")
 
-        # Drain the banner line (e.g. "Asterisk Call Manager/6.0.0\r\n")
-        # The banner is NOT a key:value packet — read it as raw text.
-        deadline = time.time() + 5
-        banner   = ""
-        while "\r\n" not in banner:
-            if time.time() > deadline:
-                break
-            chunk = self._raw_recv()
-            if chunk:
-                banner += chunk
+        # ── Step 1: Read the banner line ──────────────────────────────────────
+        # Asterisk 20 sends exactly ONE line: "Asterisk Call Manager/X.Y.Z\r\n"
+        # Read until we see \r\n (NOT \r\n\r\n — there is only one CRLF).
+        banner = self._recv_until("\r\n", timeout=5)
         banner = banner.strip()
-        log("INFO", f"[AMI] Banner received: {banner!r}")
+        log("INFO", f"[AMI] Banner: {banner!r}")
+        if not banner:
+            raise Exception(
+                "AMI: no banner received. Is Asterisk running and "
+                "manager.conf 'enabled = yes'?"
+            )
+        if "Asterisk Call Manager" not in banner:
+            log("WARN", f"[AMI] Unexpected banner (continuing anyway): {banner!r}")
 
-        # Send Login
-        self._send_action({
-            "Action":   "Login",
-            "Username": self.user,
-            "Secret":   self.secret,
-            "Events":   "off",   # suppress event flood during command sessions
-        })
+        # ── Step 2: Send Login ────────────────────────────────────────────────
+        login_action = (
+            f"Action: Login\r\n"
+            f"Username: {self.user}\r\n"
+            f"Secret: {self.secret}\r\n"
+            f"Events: off\r\n"
+            f"\r\n"
+        )
+        log("DEBUG", f"[AMI] Sending Login for user '{self.user}'")
+        self._send(login_action)
 
-        # Read packets until we find the Login Response
-        # (Asterisk may send queued events before the response)
-        for attempt in range(20):
-            pkt = self._read_packet()
-            log("DEBUG", f"[AMI] Login read [{attempt}]: {pkt}")
-            if pkt.get("Response"):
-                if pkt["Response"] == "Success":
-                    log("INFO", f"[AMI] Login successful as '{self.user}'")
-                    return
-                else:
-                    msg = pkt.get("Message", "unknown error")
-                    raise Exception(
-                        f"AMI login failed: {msg} "
-                        f"(user='{self.user}', host={self.host}:{self.port}). "
-                        "Check AMI_USER/AMI_SECRET in the service file and "
-                        "that manager.conf has 'write = system,call,log,verbose,command,agent,user,config,dtmf,reporting,cdr,dialplan'."
-                    )
-        raise Exception("[AMI] Never received Login Response after 20 packets")
+        # ── Step 3: Read login response ───────────────────────────────────────
+        # Read until we see \r\n\r\n (packet terminator)
+        resp_raw = self._recv_until("\r\n\r\n", timeout=self.timeout)
+        log("DEBUG", f"[AMI] Login raw response: {resp_raw!r}")
+
+        # The response may be preceded by a stray event or extra \r\n;
+        # find the last complete packet in the buffer.
+        # Split on double-CRLF and examine each chunk.
+        chunks = [c.strip() for c in resp_raw.split("\r\n\r\n") if c.strip()]
+        login_response = {}
+        for chunk in chunks:
+            pkt = self._parse_packet(chunk)
+            if "Response" in pkt:
+                login_response = pkt
+                # Don't break — take the LAST Response: packet in case of flooding
+
+        log("DEBUG", f"[AMI] Login response parsed: {login_response}")
+
+        if not login_response:
+            raise Exception(
+                f"AMI: No Response packet received after Login. "
+                f"Raw data was: {resp_raw!r}"
+            )
+
+        if login_response.get("Response") == "Success":
+            log("INFO", f"[AMI] Authenticated successfully as '{self.user}'")
+        else:
+            msg = login_response.get("Message", "unknown")
+            raise Exception(
+                f"AMI authentication failed: {msg}\n"
+                f"  User:   '{self.user}'\n"
+                f"  Host:   {self.host}:{self.port}\n"
+                f"  Fix:    Set AMI_USER and AMI_SECRET in ASL3-EZ.service to match\n"
+                f"          the [username] and secret= in /etc/asterisk/manager.conf\n"
+                f"  Then:   systemctl daemon-reload && systemctl restart ASL3-EZ"
+            )
 
     def close(self):
         try:
             if self._sock:
-                self._send_action({"Action": "Logoff"})
+                self._send("Action: Logoff\r\n\r\n")
                 self._sock.close()
         except Exception:
             pass
         self._sock = None
-        log("DEBUG", "[AMI] Connection closed")
+        log("DEBUG", "[AMI] Session closed")
 
-    # ---------------------------------------------------------- AMI Command
+    # ── AMI Command ───────────────────────────────────────────────────────────
+
     def command(self, cmd: str) -> list:
         """
-        Send an AMI Command action and collect all Output: lines until
-        the '--END COMMAND--' sentinel appears.
-        Returns a list of output line strings.
+        Send AMI Command action. Collect Output: lines until --END COMMAND--.
+        Returns list of output strings.
         """
-        log("INFO", f"[AMI] Command: {cmd!r}")
-        self._send_action({"Action": "Command", "Command": cmd})
+        log("INFO", f"[AMI] CMD: {cmd!r}")
+        action = (
+            f"Action: Command\r\n"
+            f"Command: {cmd}\r\n"
+            f"\r\n"
+        )
+        self._send(action)
 
-        output_lines = []
-        raw_accum    = ""
-        deadline     = time.time() + self.timeout
+        # Read until --END COMMAND-- sentinel
+        raw = self._recv_until("--END COMMAND--", timeout=self.timeout)
+        log("DEBUG", f"[AMI] CMD raw ({len(raw)} bytes): {raw[:300]!r}")
 
-        while time.time() < deadline:
-            chunk = self._raw_recv()
-            if chunk:
-                raw_accum += chunk
-            if "--END COMMAND--" in raw_accum:
-                break
-            # Also stop on a Response: Error
-            if "Response: Error" in raw_accum and "\r\n\r\n" in raw_accum:
-                break
-
-        # Consume from buffer so next read starts clean
-        if "\r\n\r\n" in raw_accum:
-            # There may be multiple packets; consume all
-            self._buf = raw_accum.split("\r\n\r\n")[-1]
-        
-        for line in raw_accum.splitlines():
+        output = []
+        for line in raw.splitlines():
             line = line.strip()
             if line.startswith("Output:"):
-                output_lines.append(line[7:].strip())
+                output.append(line[7:].strip())
             elif line.startswith("Response: Error"):
-                log("WARN", f"[AMI] Command error response for: {cmd!r}")
+                log("WARN", f"[AMI] Command returned error for: {cmd!r}")
 
-        log("DEBUG", f"[AMI] Command output lines: {len(output_lines)}")
-        return output_lines
+        log("DEBUG", f"[AMI] CMD output lines: {len(output)}")
+        return output
 
-    # --------------------------------------------------- app_rpt helpers
+    # ── app_rpt helpers ───────────────────────────────────────────────────────
+
     def rpt_cmd(self, node: str, subcmd: str) -> list:
-        """
-        Issue: rpt cmd <node> <subcmd>
-        This is the correct AMI command syntax for app_rpt in ASL3.
-        """
+        """Issue: rpt cmd <node> <subcmd>  (correct syntax for ASL3 app_rpt)."""
         return self.command(f"rpt cmd {node} {subcmd}")
 
     def get_node_status(self, node: str) -> dict:
-        """
-        Use 'rpt show variables <node>' to get keyed status and linked nodes.
-        Falls back to 'rpt lstats <node>' if variables returns nothing useful.
-        """
-        status = {"keyed": False, "connected": [], "raw": []}
+        status = {"keyed": False, "connected": [], "raw": [], "lstats": []}
 
         lines = self.command(f"rpt show variables {node}")
         status["raw"] = lines
-        log("DEBUG", f"[AMI] rpt show variables {node}: {lines}")
-
+        log("DEBUG", f"[AMI] rpt show variables {node} -> {lines}")
         for line in lines:
             if "RPT_RXKEYED" in line and "=1" in line:
                 status["keyed"] = True
-            # Collect linked node numbers
-            nums = re.findall(r'\b(\d{4,7})\b', line)
-            for n in nums:
+            for n in re.findall(r'\b(\d{4,7})\b', line):
                 if n != str(node) and n not in status["connected"]:
                     status["connected"].append(n)
 
-        # Also pull lstats for richer connected-node info
         lstats = self.command(f"rpt lstats {node}")
-        log("DEBUG", f"[AMI] rpt lstats {node}: {lstats}")
         status["lstats"] = lstats
+        log("DEBUG", f"[AMI] rpt lstats {node} -> {lstats}")
         for line in lstats:
-            nums = re.findall(r'\b(\d{4,7})\b', line)
-            for n in nums:
+            for n in re.findall(r'\b(\d{4,7})\b', line):
                 if n != str(node) and n not in status["connected"]:
                     status["connected"].append(n)
 
@@ -422,9 +435,10 @@ def ami_session() -> AMIClient:
     cfg = parse_manager_conf()
     if not cfg.get("user") or not cfg.get("secret"):
         raise Exception(
-            "AMI credentials not configured. "
-            "Set AMI_USER and AMI_SECRET in /etc/systemd/system/ASL3-EZ.service "
-            "then run: systemctl daemon-reload && systemctl restart ASL3-EZ"
+            "AMI credentials not configured.\n"
+            "Set AMI_USER and AMI_SECRET in /etc/systemd/system/ASL3-EZ.service\n"
+            "then run: systemctl daemon-reload && systemctl restart ASL3-EZ\n"
+            "See the AMI Diagnostics page for a step-by-step setup guide."
         )
     client = AMIClient(cfg["host"], cfg["port"], cfg["user"], cfg["secret"])
     client.connect()
@@ -1095,3 +1109,141 @@ if __name__ == "__main__":
     log("INFO", "Starting in direct-run mode (not via gunicorn)")
     load_astdb()
     app.run(host=HOST, port=PORT, debug=False)
+
+
+# ── Raw AMI debug — dumps exact bytes for troubleshooting ────────────────────
+
+@app.route("/api/ami/raw_test")
+def api_ami_raw_test():
+    """
+    Low-level AMI socket test that logs every byte exchanged.
+    Returns a full transcript visible in the browser.
+    Use this when normal AMI test fails to see exactly what Asterisk returns.
+    """
+    log("INFO", "[API] /api/ami/raw_test")
+    creds = parse_manager_conf()
+    transcript = []
+
+    def note(s):
+        transcript.append(s)
+        log("DEBUG", f"[RAW-TEST] {s}")
+
+    if not creds.get("user") or not creds.get("secret"):
+        return jsonify({
+            "error": "Credentials not configured",
+            "transcript": transcript,
+            "fix": "Set AMI_USER and AMI_SECRET in /etc/systemd/system/ASL3-EZ.service"
+        }), 500
+
+    host, port = creds["host"], creds["port"]
+    user, secret = creds["user"], creds["secret"]
+
+    note(f"Connecting to {host}:{port}")
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(8)
+        s.connect((host, port))
+        note("TCP connect: OK")
+    except Exception as e:
+        return jsonify({"error": str(e), "transcript": transcript}), 500
+
+    # Read banner (single \r\n terminated line)
+    buf = b""
+    deadline = time.time() + 4
+    while time.time() < deadline:
+        s.settimeout(0.5)
+        try:
+            chunk = s.recv(256)
+            if chunk:
+                buf += chunk
+                if b"\r\n" in buf:
+                    break
+        except socket.timeout:
+            continue
+
+    banner = buf.decode("utf-8", errors="replace").strip()
+    note(f"Banner: {banner!r}")
+
+    # Send Login
+    login = (
+        f"Action: Login\r\n"
+        f"Username: {user}\r\n"
+        f"Secret: {secret}\r\n"
+        f"Events: off\r\n"
+        f"\r\n"
+    )
+    note(f"Sending Login (user='{user}')")
+    try:
+        s.sendall(login.encode("utf-8"))
+    except Exception as e:
+        s.close()
+        return jsonify({"error": f"Send failed: {e}", "transcript": transcript}), 500
+
+    # Read response (wait for \r\n\r\n)
+    resp_buf = b""
+    deadline = time.time() + 6
+    s.settimeout(0.5)
+    while time.time() < deadline:
+        try:
+            chunk = s.recv(1024)
+            if chunk:
+                resp_buf += chunk
+                if b"\r\n\r\n" in resp_buf:
+                    break
+        except socket.timeout:
+            continue
+
+    resp_str = resp_buf.decode("utf-8", errors="replace")
+    note(f"Raw response ({len(resp_buf)} bytes): {resp_str!r}")
+
+    success, message = False, ""
+    for line in resp_str.splitlines():
+        line = line.strip()
+        if line.startswith("Response:"):
+            val = line.split(":", 1)[1].strip()
+            note(f"Parsed Response: {val!r}")
+            success = (val == "Success")
+        elif line.startswith("Message:"):
+            message = line.split(":", 1)[1].strip()
+            note(f"Parsed Message: {message!r}")
+
+    cmd_output = []
+    if success:
+        note("Auth OK — testing 'core show version'")
+        try:
+            s.sendall(b"Action: Command\r\nCommand: core show version\r\n\r\n")
+            cmd_buf = b""
+            deadline = time.time() + 5
+            s.settimeout(0.5)
+            while time.time() < deadline:
+                try:
+                    chunk = s.recv(2048)
+                    if chunk:
+                        cmd_buf += chunk
+                        if b"--END COMMAND--" in cmd_buf:
+                            break
+                except socket.timeout:
+                    continue
+            for line in cmd_buf.decode("utf-8", errors="replace").splitlines():
+                if line.startswith("Output:"):
+                    cmd_output.append(line[7:].strip())
+            note(f"core show version: {cmd_output}")
+        except Exception as e:
+            note(f"Command error: {e}")
+
+    try:
+        s.sendall(b"Action: Logoff\r\n\r\n")
+        s.close()
+    except Exception:
+        pass
+
+    return jsonify({
+        "success":      success,
+        "banner":       banner,
+        "response_raw": resp_str,
+        "message":      message,
+        "ami_user":     user,
+        "ami_host":     f"{host}:{port}",
+        "cmd_output":   cmd_output,
+        "transcript":   transcript,
+    })

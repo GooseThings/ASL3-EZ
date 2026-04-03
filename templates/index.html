@@ -688,10 +688,14 @@ input:checked + .slider::before     { transform: translateX(16px); background: v
 
       <div class="card">
         <div class="card-header"><h2>Connection Test</h2>
-          <button class="btn btn-primary" onclick="testAMI()">Run Test</button>
+          <div class="btn-row">
+            <button class="btn btn-primary" onclick="testAMI()">Run Test</button>
+            <button class="btn" onclick="rawTestAMI()">Raw Socket Test</button>
+          </div>
         </div>
         <div class="card-body">
           <div id="ami-test-result"><div class="muted">Click Run Test to check AMI connectivity.</div></div>
+          <div id="ami-raw-result" style="margin-top:14px"></div>
         </div>
       </div>
 
@@ -1469,7 +1473,31 @@ async function testAMI() {
   }
 }
 
-async function loadSysInfo() {
+async function rawTestAMI() {
+  const el = document.getElementById('ami-raw-result');
+  el.innerHTML = '<div class="muted"><span class="spinner"></span> Running raw socket test...</div>';
+  log('Running raw AMI socket test...', 'DEBUG');
+  const r = await api('/api/ami/raw_test');
+  const d = r.data;
+  const color = d.success ? 'var(--accent2)' : 'var(--danger)';
+  let html = `<div style="border:1px solid ${color};border-radius:4px;padding:12px;background:var(--bg3)">`;
+  html += `<div style="font-weight:600;color:${color};margin-bottom:8px">`;
+  html += d.success ? 'Raw test: PASSED' : 'Raw test: FAILED';
+  html += `</div>`;
+  if (d.banner)       html += `<div class="muted" style="font-size:0.85rem">Banner: <span class="mono">${escHtml(d.banner)}</span></div>`;
+  if (d.ami_user)     html += `<div class="muted" style="font-size:0.85rem">User: <span class="mono">${escHtml(d.ami_user)}</span> at <span class="mono">${escHtml(d.ami_host||'')}</span></div>`;
+  if (d.message)      html += `<div style="color:var(--danger);font-size:0.85rem">Asterisk message: ${escHtml(d.message)}</div>`;
+  if (d.cmd_output && d.cmd_output.length) html += `<div class="muted" style="font-size:0.85rem;margin-top:6px">Asterisk: ${escHtml(d.cmd_output[0]||'')}</div>`;
+  html += `<details style="margin-top:10px"><summary style="cursor:pointer;font-size:0.85rem;color:var(--text2)">Full transcript (${(d.transcript||[]).length} lines)</summary>`;
+  html += `<div class="log-panel" style="height:180px;margin-top:6px">`;
+  for (const line of (d.transcript || [])) {
+    html += `<div style="font-size:0.8rem">${escHtml(line)}</div>`;
+  }
+  html += '</div></details></div>';
+  el.innerHTML = html;
+  if (d.success) logOk('Raw AMI test passed. ' + (d.cmd_output||[]).join(' '));
+  else logErr('Raw AMI test failed: ' + (d.message || d.error || 'unknown'));
+}
   const r = await api('/api/sysinfo');
   const el = document.getElementById('sysinfo-display');
   if (!r.ok) { el.innerHTML = '<div class="muted">Failed to load system info.</div>'; return; }
