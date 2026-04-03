@@ -1,9 +1,9 @@
 # ASL3-EZ - DO NOT RUN
 Stuff is broken right now. Mostly the AMI.
 
-**AllStarLink 3 Editor by N8GMZ**
+**AllStarLink 3 Dashboard by N8GMZ**
 
-A browser-based web interface for editing your AllStarLink 3 `rpt.conf` configuration file — with organized field editors, DTMF function/macro/scheduler editors, COP command reference, automatic backups, and one-click Asterisk restart.
+A browser-based web interface for connecting to nodes and editing your AllStarLink 3 `rpt.conf` configuration file — with organized field editors, DTMF function/macro/scheduler editors, COP command reference, automatic backups, and one-click Asterisk restart.
 
 ![ASL3-EZ](https://img.shields.io/badge/AllStarLink-3-green?style=for-the-badge)
 ![Python](https://img.shields.io/badge/Python-3.8+-blue?style=for-the-badge)
