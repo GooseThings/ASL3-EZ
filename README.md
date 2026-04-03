@@ -1,19 +1,18 @@
-# ASL3-EZ
+# ASL3-EZ - AllStarLink 3 Node Manager
 
-AllStarLink 3 Node Manager — by N8GMZ
-
-A browser-based web interface for managing your AllStarLink 3 node:
+A browser-based web interface for managing your AllStarLink 3 nodes:
 - Edit `rpt.conf` with field-by-field or raw text editing
 - Connect, disconnect, and monitor nodes via AMI (Asterisk Manager Interface)
 - Automatic backups on every save
 - Dashboard with system status and verbose debug logging
 - Node lookup from local astdb and AllStarLink stats API
+- Restart Asterisk from the Dashboard
 
 ---
 
 ## Requirements
 
-- AllStarLink 3 on Debian 12 (Bookworm)
+- AllStarLink 3 on Debian 12 (Bookworm) or 13 (Trixie)
 - Python 3.8 or later
 - Root access (required to write `/etc/asterisk/rpt.conf` and restart Asterisk)
 
@@ -31,7 +30,9 @@ Then open: `http://YOUR_NODE_IP:5000`
 
 ---
 
-## AMI Setup (Required for Node Control)
+## Manual AMI Setup (Required for Node Control)
+!!! Do not do this if automatic setup worked !!!
+Check in AMI Diagnostics in the Dashboard
 
 The Node Control and status features require AMI credentials.
 
