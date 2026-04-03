@@ -140,7 +140,7 @@ class AMIClient:
         self._sock   = None
         self._buf    = ""
 
-      def connect(self):
+    def connect(self):
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._sock.settimeout(self.timeout)
         
