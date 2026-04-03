@@ -34,7 +34,8 @@ apt-get install -y python3-venv python3-full 2>/dev/null || true
 echo "[2/7] Installing to $INSTALL_DIR..."
 mkdir -p "$INSTALL_DIR"
 cp -r . "$INSTALL_DIR/"
-chmod 750 "$INSTALL_DIR"
+chmod 755 "$INSTALL_DIR"          # standard app dir: owner rwx, group rx, others rx
+chmod +x "$INSTALL_DIR/"*.sh 2>/dev/null || true
 
 # ── Virtual environment ───────────────────────────────────
 echo "[3/7] Creating Python virtual environment..."
@@ -45,7 +46,7 @@ python3 -m venv "$INSTALL_DIR/venv"
 # ── rpt_backups directory ─────────────────────────────────
 echo "[4/7] Creating backup directory..."
 mkdir -p /etc/asterisk/rpt_backups
-chmod 750 /etc/asterisk/rpt_backups
+chmod 755 /etc/asterisk/rpt_backups  # readable by all, writable by root only
 
 # ── Verify rpt.conf accessible ────────────────────────────
 echo "[5/7] Checking rpt.conf..."
