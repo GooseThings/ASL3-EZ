@@ -1,5 +1,6 @@
 #!/bin/bash
 # ASL3-EZ - Installer
+# https://www.github.com/GooseThings/ASL3-EZ/
 # Run as root: sudo bash install.sh
 set -e
 
