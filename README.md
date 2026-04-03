@@ -1,7 +1,7 @@
-!!! Warning - There are known issues with rpt.conf editing and saving where it will nuke your rpt.conf file. !!!
-
-!!! Use at your own risk. !!!
-
+## !!! Warning - There are known issues with rpt.conf !!!
+It's currently not saving with proper permissions. If you want to help throw a PR out there.
+## !!! Use at your own risk. !!!
+At least it looks really cool, right?
 # ASL3-EZ - AllStarLink 3 Node Manager
 
 A browser-based web interface for managing your AllStarLink 3 nodes:
