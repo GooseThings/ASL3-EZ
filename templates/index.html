@@ -458,6 +458,11 @@ pre.codeblock { background: var(--bg3); padding: 12px; border-radius: 4px; font-
     <div class="card">
       <div class="card-header"><h2>Configuration Guide</h2></div>
       <div class="card-body">
+        <div class="alert alert-warn" style="margin-bottom:14px">
+          <strong>Quick fix:</strong> Run the AMI setup script on your node:<br>
+          <span class="mono" style="font-size:0.9rem">sudo bash /opt/ASL3-EZ/ami-setup.sh</span><br>
+          This reads manager.conf, tests the connection, and updates the service file automatically.
+        </div>
         <p style="margin-bottom:10px">Step 1 &mdash; <span class="mono">/etc/asterisk/manager.conf</span> must have a user stanza:</p>
         <pre class="codeblock">[general]
 enabled = yes

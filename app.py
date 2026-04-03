@@ -129,13 +129,22 @@ def parse_manager_conf():
 
     env_user   = os.environ.get("AMI_USER",   "").strip()
     env_secret = os.environ.get("AMI_SECRET", "").strip()
-    if env_user and env_secret:
-        log("INFO", f"[AMI-CREDS] Using env vars AMI_USER='{env_user}'")
+
+    # Ignore placeholder values that ship in the default service file
+    PLACEHOLDERS = {"yourpassword", "your_secret_here", "changeme", "amp111", ""}
+
+    if env_user and env_secret and env_secret.lower() not in PLACEHOLDERS:
+        log("INFO", f"[AMI-CREDS] Using env vars: AMI_USER='{env_user}'")
         result["user"]   = env_user
         result["secret"] = env_secret
         return result
+    elif env_user and env_secret and env_secret.lower() in PLACEHOLDERS:
+        log("WARN", f"[AMI-CREDS] AMI_SECRET is a placeholder ('{env_secret}') — "
+                    "falling through to read manager.conf directly")
+    else:
+        log("INFO", f"[AMI-CREDS] AMI_USER/AMI_SECRET not set — reading {MANAGER_CONF} directly")
 
-    log("INFO", f"[AMI-CREDS] Env vars not set — parsing {MANAGER_CONF}")
+    log("INFO", f"[AMI-CREDS] Parsing {MANAGER_CONF} for credentials")
     try:
         with open(MANAGER_CONF) as f:
             raw = f.read()
@@ -194,6 +203,10 @@ def parse_manager_conf():
             elif key == "enabled":
                 current_enabled = val.lower() not in ("no", "false", "0")
                 log("DEBUG", f"[AMI-CREDS] [{current_header}] enabled={current_enabled}")
+            elif key == "permit":
+                log("DEBUG", f"[AMI-CREDS] [{current_header}] permit={val} (must include 127.0.0.1)")
+            elif key == "deny":
+                log("WARN", f"[AMI-CREDS] [{current_header}] deny={val} (check this doesn't block localhost)")
 
     # Commit last stanza
     if current_header and current_header.lower() != "general" and current_secret and current_enabled:
@@ -1086,18 +1099,36 @@ def api_ami_test():
         "error":      None,
     }
     if not result["creds_found"]:
-        result["error"] = ("AMI credentials not found. Set AMI_USER and AMI_SECRET "
-                           "in /etc/systemd/system/ASL3-EZ.service")
+        result["error"] = (
+            "AMI credentials not found in manager.conf. "
+            "Run: sudo bash /opt/ASL3-EZ/ami-setup.sh"
+        )
         return jsonify(result), 500
+
+    # Reload the manager module first so Asterisk picks up any recent
+    # edits to manager.conf before we attempt to authenticate.
+    try:
+        subprocess.run([ASTERISK_PATH, "-rx", "module reload manager"],
+                       capture_output=True, text=True, timeout=8)
+        import time as _time; _time.sleep(0.5)
+        log("INFO", "[AMI-TEST] Reloaded manager module before test")
+    except Exception as reload_err:
+        log("WARN", f"[AMI-TEST] Could not reload manager module: {reload_err}")
+
     try:
         ami = ami_session()
-        # Run a benign command to confirm we can issue commands
         out = ami.command("core show version")
         ami.close()
-        result["connected"]      = True
-        result["asterisk_info"]  = out[0] if out else "connected"
+        result["connected"]     = True
+        result["asterisk_info"] = out[0] if out else "connected"
+        result["creds_source"]  = "env vars" if os.environ.get("AMI_SECRET","").strip().lower() not in {"yourpassword","your_secret_here","changeme","amp111",""} else "manager.conf"
     except Exception as e:
         result["error"] = str(e)
+        result["hint"]  = (
+            "Run: sudo bash /opt/ASL3-EZ/ami-setup.sh\n"
+            "This script reads manager.conf directly, tests the connection, "
+            "and updates the service file automatically."
+        )
         return jsonify(result), 500
     return jsonify(result)
 
