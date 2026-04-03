@@ -5,29 +5,28 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ASL3-EZ | AllStarLink 3 Node Manager</title>
 <style>
-/* ── Reset & Base ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg:        #0e1117;
-  --bg2:       #161b22;
-  --bg3:       #1f2937;
-  --border:    #30363d;
-  --accent:    #58a6ff;
-  --accent2:   #3fb950;
-  --warn:      #d29922;
-  --danger:    #f85149;
-  --text:      #e6edf3;
-  --text2:     #8b949e;
-  --text3:     #c9d1d9;
-  --radius:    6px;
-  --mono:      'Courier New', Courier, monospace;
+  --bg:      #0e1117;
+  --bg2:     #161b22;
+  --bg3:     #1f2937;
+  --border:  #30363d;
+  --accent:  #58a6ff;
+  --green:   #3fb950;
+  --warn:    #d29922;
+  --danger:  #f85149;
+  --text:    #e6edf3;
+  --text2:   #8b949e;
+  --text3:   #c9d1d9;
+  --radius:  6px;
+  --mono:    'Courier New', Courier, monospace;
 }
 
 html { font-size: 16px; }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
   font-size: 1rem;
   line-height: 1.6;
   background: var(--bg);
@@ -35,389 +34,163 @@ body {
   min-height: 100vh;
 }
 
-/* ── Layout ── */
 .layout { display: flex; min-height: 100vh; }
 
 .sidebar {
-  width: 230px;
-  min-width: 230px;
+  width: 230px; min-width: 230px;
   background: var(--bg2);
   border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  padding: 0;
-  position: sticky;
-  top: 0;
-  height: 100vh;
+  display: flex; flex-direction: column;
+  position: sticky; top: 0; height: 100vh;
   overflow-y: auto;
 }
 
-.sidebar-header {
-  padding: 18px 16px 12px;
-  border-bottom: 1px solid var(--border);
-}
-
-.sidebar-header h1 {
-  font-size: 1.2rem;
-  font-weight: 700;
-  color: var(--accent);
-  letter-spacing: 0.5px;
-}
-
-.sidebar-header p {
-  font-size: 0.8rem;
-  color: var(--text2);
-  margin-top: 2px;
-}
+.sidebar-header { padding: 18px 16px 12px; border-bottom: 1px solid var(--border); }
+.sidebar-header h1 { font-size: 1.2rem; font-weight: 700; color: var(--accent); }
+.sidebar-header p  { font-size: 0.8rem; color: var(--text2); margin-top: 2px; }
 
 .sidebar-nav { padding: 10px 0; flex: 1; }
 
 .nav-section {
-  padding: 6px 16px 2px;
-  font-size: 0.72rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  color: var(--text2);
+  padding: 8px 16px 3px; font-size: 0.72rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.8px; color: var(--text2); margin-top: 4px;
 }
 
 .nav-item {
-  display: block;
-  padding: 8px 16px;
-  font-size: 0.95rem;
-  color: var(--text3);
-  text-decoration: none;
-  cursor: pointer;
-  border: none;
-  background: none;
-  width: 100%;
-  text-align: left;
-  transition: background 0.15s, color 0.15s;
-  border-left: 3px solid transparent;
+  display: block; padding: 8px 16px; font-size: 0.95rem; color: var(--text3);
+  cursor: pointer; border: none; border-left: 3px solid transparent;
+  background: none; width: 100%; text-align: left; transition: background 0.12s, color 0.12s;
 }
-
-.nav-item:hover { background: var(--bg3); color: var(--text); }
-.nav-item.active {
-  background: rgba(88,166,255,0.1);
-  color: var(--accent);
-  border-left-color: var(--accent);
-  font-weight: 600;
-}
+.nav-item:hover  { background: var(--bg3); color: var(--text); }
+.nav-item.active { background: rgba(88,166,255,0.1); color: var(--accent); border-left-color: var(--accent); font-weight: 600; }
 
 .node-badge {
-  display: inline-block;
-  font-size: 0.7rem;
-  background: var(--bg3);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 1px 7px;
-  margin-left: 6px;
-  color: var(--text2);
+  display: inline-block; font-size: 0.7rem; background: var(--bg3);
+  border: 1px solid var(--border); border-radius: 10px; padding: 1px 7px;
+  margin-left: 6px; color: var(--text2);
 }
 
-.main { flex: 1; padding: 28px 32px; max-width: 1100px; }
+.main { flex: 1; padding: 28px 32px; max-width: 1100px; overflow-x: hidden; }
 
-/* ── Page sections ── */
-.page { display: none; }
+.page        { display: none; }
 .page.active { display: block; }
 
-/* ── Cards ── */
-.card {
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  margin-bottom: 20px;
-}
-
+.card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 20px; }
 .card-header {
-  padding: 14px 18px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  padding: 14px 18px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
 }
-
-.card-header h2 {
-  font-size: 1.05rem;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.card-header h3 {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--text);
-}
-
+.card-header h2 { font-size: 1.05rem; font-weight: 600; }
 .card-body { padding: 18px; }
 
-/* ── Status grid ── */
-.stat-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  gap: 14px;
-  margin-bottom: 0;
-}
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(185px, 1fr)); gap: 14px; }
+.stat-box  { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+.stat-label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text2); margin-bottom: 4px; }
+.stat-value { font-size: 1.1rem; font-weight: 600; color: var(--text); }
+.stat-value.ok    { color: var(--green);  }
+.stat-value.warn  { color: var(--warn);   }
+.stat-value.error { color: var(--danger); }
 
-.stat-box {
-  background: var(--bg3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 14px 16px;
-}
-
-.stat-label {
-  font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-  color: var(--text2);
-  margin-bottom: 4px;
-}
-
-.stat-value {
-  font-size: 1.15rem;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.stat-value.ok    { color: var(--accent2); }
-.stat-value.warn  { color: var(--warn);    }
-.stat-value.error { color: var(--danger);  }
-
-/* ── Buttons ── */
 .btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  font-size: 0.9rem;
-  font-weight: 500;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  cursor: pointer;
-  background: var(--bg3);
-  color: var(--text);
-  transition: all 0.15s;
-  text-decoration: none;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; font-size: 0.9rem; font-weight: 500;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  cursor: pointer; background: var(--bg3); color: var(--text);
+  transition: all 0.12s; text-decoration: none; white-space: nowrap;
 }
-
-.btn:hover           { background: var(--bg); color: var(--accent); border-color: var(--accent); }
-.btn.btn-primary     { background: var(--accent); color: #000; border-color: var(--accent); }
-.btn.btn-primary:hover { background: #4898ef; color: #000; }
-.btn.btn-success     { background: var(--accent2); color: #000; border-color: var(--accent2); }
-.btn.btn-success:hover { background: #35a344; }
-.btn.btn-danger      { background: var(--danger); color: #fff; border-color: var(--danger); }
-.btn.btn-danger:hover  { background: #da3f36; }
-.btn.btn-warn        { background: var(--warn); color: #000; border-color: var(--warn); }
-.btn.btn-sm          { padding: 5px 10px; font-size: 0.82rem; }
-.btn:disabled        { opacity: 0.45; cursor: not-allowed; }
-
+.btn:hover             { background: var(--bg); color: var(--accent); border-color: var(--accent); }
+.btn.btn-primary       { background: var(--accent); color: #000; border-color: var(--accent); }
+.btn.btn-primary:hover { background: #4898ef; }
+.btn.btn-success       { background: var(--green); color: #000; border-color: var(--green); }
+.btn.btn-danger        { background: var(--danger); color: #fff; border-color: var(--danger); }
+.btn.btn-warn          { background: var(--warn); color: #000; border-color: var(--warn); }
+.btn.btn-sm            { padding: 5px 10px; font-size: 0.82rem; }
+.btn:disabled          { opacity: 0.45; cursor: not-allowed; }
 .btn-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 
-/* ── Forms ── */
 .form-group { margin-bottom: 16px; }
-.form-label {
-  display: block;
-  font-size: 0.88rem;
-  font-weight: 500;
-  color: var(--text3);
-  margin-bottom: 5px;
-}
-.form-label .hint {
-  font-weight: 400;
-  color: var(--text2);
-  font-size: 0.8rem;
-  margin-left: 6px;
-}
+.form-label { display: block; font-size: 0.88rem; font-weight: 500; color: var(--text3); margin-bottom: 5px; }
+.form-row   { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 
 input[type=text], input[type=number], input[type=password], select, textarea {
-  width: 100%;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  color: var(--text);
-  padding: 8px 12px;
-  font-size: 0.95rem;
-  font-family: inherit;
-  transition: border-color 0.15s;
+  width: 100%; background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--text); padding: 8px 12px;
+  font-size: 0.95rem; font-family: inherit; transition: border-color 0.12s;
 }
-input:focus, select:focus, textarea:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-textarea { resize: vertical; font-family: var(--mono); font-size: 0.9rem; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+textarea { resize: vertical; font-family: var(--mono); font-size: 0.88rem; }
 
-.form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
-}
-
-/* ── Toggle switch ── */
 .toggle-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 9px 0;
-  border-bottom: 1px solid var(--border);
-  gap: 10px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 0; border-bottom: 1px solid var(--border); gap: 10px;
 }
 .toggle-row:last-child { border-bottom: none; }
-.toggle-info { flex: 1; }
-.toggle-key  { font-size: 0.92rem; font-family: var(--mono); color: var(--accent); }
-.toggle-desc { font-size: 0.8rem; color: var(--text2); margin-top: 2px; }
-
+.toggle-info  { flex: 1; min-width: 0; }
+.toggle-key   { font-size: 0.9rem; font-family: var(--mono); color: var(--accent); }
+.toggle-desc  { font-size: 0.78rem; color: var(--text2); margin-top: 1px; }
 .switch { position: relative; display: inline-block; width: 38px; height: 22px; flex-shrink: 0; }
 .switch input { opacity: 0; width: 0; height: 0; }
-.slider {
-  position: absolute; inset: 0;
-  background: var(--bg3); border: 1px solid var(--border);
-  border-radius: 22px; cursor: pointer; transition: .2s;
-}
-.slider::before {
-  content: "";
-  position: absolute;
-  height: 14px; width: 14px;
-  left: 3px; bottom: 3px;
-  background: var(--text2);
-  border-radius: 50%;
-  transition: .2s;
-}
-input:checked + .slider             { background: rgba(63,185,80,0.2); border-color: var(--accent2); }
-input:checked + .slider::before     { transform: translateX(16px); background: var(--accent2); }
+.slider { position: absolute; inset: 0; background: var(--bg3); border: 1px solid var(--border); border-radius: 22px; cursor: pointer; transition: .2s; }
+.slider::before { content: ""; position: absolute; height: 14px; width: 14px; left: 3px; bottom: 3px; background: var(--text2); border-radius: 50%; transition: .2s; }
+input:checked + .slider          { background: rgba(63,185,80,0.2); border-color: var(--green); }
+input:checked + .slider::before  { transform: translateX(16px); background: var(--green); }
 
-/* ── Log / debug panel ── */
 .log-panel {
-  background: #0a0e14;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  font-family: var(--mono);
-  font-size: 0.85rem;
-  line-height: 1.5;
-  padding: 14px;
-  height: 280px;
-  overflow-y: auto;
-  color: #a0b0c0;
+  background: #080c12; border: 1px solid var(--border); border-radius: var(--radius);
+  font-family: var(--mono); font-size: 0.84rem; line-height: 1.5;
+  padding: 12px; height: 260px; overflow-y: auto; color: #90a0b0;
 }
-.log-panel .log-time   { color: #555f6e; }
-.log-panel .log-ok     { color: var(--accent2); }
-.log-panel .log-warn   { color: var(--warn); }
-.log-panel .log-error  { color: var(--danger); }
-.log-panel .log-info   { color: var(--accent); }
-.log-panel .log-debug  { color: #6e7681; }
-.log-panel .log-ami    { color: #c9a227; }
+.log-panel div { margin-bottom: 1px; word-break: break-all; }
+.lt    { color: #4a5568; }
+.lOK   { color: var(--green); }
+.lWARN { color: var(--warn); }
+.lERR  { color: var(--danger); }
+.lINFO { color: var(--accent); }
+.lDBG  { color: #5a6478; }
+.lAMI  { color: #c9a227; }
 
-/* ── Alert banner ── */
-.alert {
-  padding: 11px 16px;
-  border-radius: var(--radius);
-  border: 1px solid;
-  margin-bottom: 16px;
-  font-size: 0.92rem;
-}
+.alert { padding: 11px 16px; border-radius: var(--radius); border: 1px solid; margin-bottom: 14px; font-size: 0.92rem; }
 .alert-info    { background: rgba(88,166,255,0.08);  border-color: rgba(88,166,255,0.3);  color: var(--accent); }
-.alert-success { background: rgba(63,185,80,0.08);   border-color: rgba(63,185,80,0.3);   color: var(--accent2); }
+.alert-success { background: rgba(63,185,80,0.08);   border-color: rgba(63,185,80,0.3);   color: var(--green); }
 .alert-warn    { background: rgba(210,153,34,0.08);  border-color: rgba(210,153,34,0.3);  color: var(--warn); }
 .alert-danger  { background: rgba(248,81,73,0.08);   border-color: rgba(248,81,73,0.3);   color: var(--danger); }
 
-/* ── Section collapsible ── */
-.section-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  cursor: pointer;
-  padding: 12px 18px;
-  border-bottom: 1px solid var(--border);
-  user-select: none;
-}
-.section-toggle:hover { background: rgba(255,255,255,0.02); }
-.section-toggle h3 { font-size: 0.95rem; font-weight: 600; }
-.section-toggle .arrow { color: var(--text2); transition: transform 0.2s; font-size: 0.8rem; }
-.section-toggle.open .arrow { transform: rotate(90deg); }
-.section-body { padding: 14px 18px; display: none; }
-.section-body.open { display: block; }
+.sec-toggle { display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: 12px 18px; border-bottom: 1px solid var(--border); user-select: none; }
+.sec-toggle:hover { background: rgba(255,255,255,0.02); }
+.sec-toggle h3 { font-size: 0.95rem; font-weight: 600; }
+.sec-toggle .arr { color: var(--text2); transition: transform 0.2s; font-size: 0.8rem; }
+.sec-toggle.open .arr { transform: rotate(90deg); }
+.sec-body { padding: 14px 18px; display: none; }
+.sec-body.open { display: block; }
 
-/* ── Node control table ── */
-.node-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.92rem;
-}
-.node-table th {
-  text-align: left;
-  padding: 8px 12px;
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text2);
-  border-bottom: 1px solid var(--border);
-}
-.node-table td {
-  padding: 9px 12px;
-  border-bottom: 1px solid var(--border);
-  vertical-align: middle;
-}
-.node-table tr:last-child td { border-bottom: none; }
-.node-table tr:hover td { background: rgba(255,255,255,0.02); }
+.tbl { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+.tbl th { text-align: left; padding: 8px 12px; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text2); border-bottom: 1px solid var(--border); }
+.tbl td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.tbl tr:last-child td { border-bottom: none; }
+.tbl tr:hover td { background: rgba(255,255,255,0.02); }
 
-.badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 12px;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-.badge-connected { background: rgba(63,185,80,0.15);  color: var(--accent2); border: 1px solid rgba(63,185,80,0.3);  }
-.badge-offline   { background: rgba(248,81,73,0.1);   color: var(--danger);  border: 1px solid rgba(248,81,73,0.2);  }
-.badge-unknown   { background: rgba(139,148,158,0.1); color: var(--text2);   border: 1px solid var(--border); }
+.badge     { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.74rem; font-weight: 600; }
+.badge-ok  { background: rgba(63,185,80,0.15);  color: var(--green);  border: 1px solid rgba(63,185,80,0.3);  }
+.badge-err { background: rgba(248,81,73,0.1);   color: var(--danger); border: 1px solid rgba(248,81,73,0.2);  }
+.badge-unk { background: rgba(139,148,158,0.1); color: var(--text2);  border: 1px solid var(--border); }
 
-/* ── Raw editor ── */
-.raw-editor { font-family: var(--mono); font-size: 0.9rem; width: 100%; min-height: 420px; }
-
-/* ── Unsaved changes bar ── */
-#unsaved-bar {
-  position: sticky; top: 0; z-index: 50;
-  background: rgba(210,153,34,0.12);
-  border: 1px solid rgba(210,153,34,0.4);
-  border-radius: var(--radius);
-  padding: 10px 18px;
-  display: none;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-  font-size: 0.92rem;
-  color: var(--warn);
-}
-#unsaved-bar.visible { display: flex; }
-
-/* ── Tabs ── */
-.tab-bar { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 18px; }
-.tab {
-  padding: 9px 18px;
-  font-size: 0.92rem;
-  cursor: pointer;
-  color: var(--text2);
-  border-bottom: 2px solid transparent;
-  transition: all 0.15s;
-}
-.tab:hover { color: var(--text); }
-.tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
-
-.tab-panel { display: none; }
-.tab-panel.active { display: block; }
-
-/* ── Misc ── */
-.muted { color: var(--text2); font-size: 0.88rem; }
-.mono  { font-family: var(--mono); }
-.separator { height: 1px; background: var(--border); margin: 16px 0; }
-.spinner { display: inline-block; width: 14px; height: 14px;
-           border: 2px solid var(--border); border-top-color: var(--accent);
-           border-radius: 50%; animation: spin 0.7s linear infinite; }
+.muted      { color: var(--text2); font-size: 0.9rem; }
+.mono       { font-family: var(--mono); }
+.page-title { font-size: 1.4rem; font-weight: 700; margin-bottom: 4px; }
+.page-sub   { font-size: 0.9rem; color: var(--text2); margin-bottom: 22px; }
+.spinner    { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.page-title { font-size: 1.4rem; font-weight: 700; margin-bottom: 6px; }
-.page-sub   { font-size: 0.9rem; color: var(--text2); margin-bottom: 22px; }
+#unsaved-bar {
+  display: none; position: sticky; top: 0; z-index: 50;
+  background: rgba(210,153,34,0.12); border: 1px solid rgba(210,153,34,0.4);
+  border-radius: var(--radius); padding: 10px 18px; margin-bottom: 16px;
+  align-items: center; justify-content: space-between; gap: 10px;
+  font-size: 0.92rem; color: var(--warn);
+}
+#unsaved-bar.show { display: flex; }
+
+pre.codeblock { background: var(--bg3); padding: 12px; border-radius: 4px; font-size: 0.84rem; overflow-x: auto; font-family: var(--mono); white-space: pre; margin-bottom: 12px; }
 
 @media (max-width: 768px) {
   .layout { flex-direction: column; }
@@ -430,284 +203,263 @@ input:checked + .slider::before     { transform: translateX(16px); background: v
 <body>
 <div class="layout">
 
-  <!-- ── Sidebar ────────────────────────────────────────── -->
-  <aside class="sidebar">
-    <div class="sidebar-header">
-      <h1>ASL3-EZ</h1>
-      <p>AllStarLink 3 Manager</p>
-    </div>
-    <nav class="sidebar-nav">
-      <div class="nav-section">Main</div>
-      <button class="nav-item active" onclick="showPage('dashboard')">Dashboard</button>
-      <button class="nav-item" onclick="showPage('node-control')">Node Control</button>
+<!-- Sidebar -->
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <h1>ASL3-EZ</h1>
+    <p>AllStarLink 3 Manager</p>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-section">Main</div>
+    <button class="nav-item active" onclick="showPage('dashboard')">Dashboard</button>
+    <button class="nav-item" onclick="showPage('node-control')">Node Control</button>
 
-      <div class="nav-section" style="margin-top:8px">rpt.conf Editor</div>
-      <button class="nav-item" onclick="showPage('general')">General Settings</button>
-
-      <div id="node-nav-list">
-        {% for node in nodes %}
-        <button class="nav-item" onclick="showPage('node-{{ node }}')">
-          Node {{ node }}<span class="node-badge">{{ node }}</span>
-        </button>
-        {% endfor %}
-      </div>
-
-      <div class="nav-section" style="margin-top:8px">Tools</div>
-      <button class="nav-item" onclick="showPage('raw-editor')">Raw Editor</button>
-      <button class="nav-item" onclick="showPage('backups')">Backups</button>
-      <button class="nav-item" onclick="showPage('ami-diag')">AMI Diagnostics</button>
-    </nav>
-  </aside>
-
-  <!-- ── Main content ───────────────────────────────────── -->
-  <main class="main">
-    <div id="unsaved-bar">
-      <span id="unsaved-msg">You have unsaved changes.</span>
-      <div class="btn-row">
-        <button class="btn btn-warn btn-sm" onclick="saveChanges()">Save Changes</button>
-        <button class="btn btn-sm" onclick="discardChanges()">Discard</button>
-      </div>
-    </div>
-
-    <!-- ══ Dashboard ══════════════════════════════════════ -->
-    <section class="page active" id="page-dashboard">
-      <div class="page-title">Dashboard</div>
-      <div class="page-sub">System overview — <span id="dash-updated" class="muted"></span>
-        <button class="btn btn-sm" style="margin-left:10px" onclick="refreshDashboard()">Refresh</button>
-      </div>
-
-      <div class="stat-grid" id="stat-grid">
-        <div class="stat-box"><div class="stat-label">Asterisk</div><div class="stat-value" id="stat-ast">...</div></div>
-        <div class="stat-box"><div class="stat-label">ASL Version</div><div class="stat-value" id="stat-asl">...</div></div>
-        <div class="stat-box"><div class="stat-label">CPU Temp</div><div class="stat-value" id="stat-temp">...</div></div>
-        <div class="stat-box"><div class="stat-label">Uptime</div><div class="stat-value" id="stat-uptime">...</div></div>
-        <div class="stat-box"><div class="stat-label">Disk Used</div><div class="stat-value" id="stat-disk">...</div></div>
-        <div class="stat-box"><div class="stat-label">AMI User</div><div class="stat-value" id="stat-ami">...</div></div>
-        <div class="stat-box"><div class="stat-label">Running As</div><div class="stat-value" id="stat-uid">...</div></div>
-        <div class="stat-box"><div class="stat-label">rpt.conf</div><div class="stat-value" id="stat-conf">...</div></div>
-      </div>
-
-      <div class="card" style="margin-top:20px">
-        <div class="card-header">
-          <h2>Quick Actions</h2>
-        </div>
-        <div class="card-body">
-          <div class="btn-row">
-            <button class="btn btn-danger" onclick="restartAsterisk()">Restart Asterisk</button>
-            <button class="btn" onclick="reloadModule()">Reload app_rpt.so</button>
-            <button class="btn btn-primary" onclick="showPage('node-control')">Node Control</button>
-            <button class="btn" onclick="showPage('ami-diag')">Test AMI</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-header">
-          <h2>Debug Log</h2>
-          <button class="btn btn-sm" onclick="clearLog()">Clear</button>
-        </div>
-        <div class="log-panel" id="log-panel"></div>
-      </div>
-    </section>
-
-    <!-- ══ Node Control ════════════════════════════════════ -->
-    <section class="page" id="page-node-control">
-      <div class="page-title">Node Control</div>
-      <div class="page-sub">Connect, disconnect, and monitor your node via AMI.</div>
-
-      <div class="card">
-        <div class="card-header"><h2>Local Node</h2></div>
-        <div class="card-body">
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">Local Node Number</label>
-              <select id="nc-local-node">
-                {% for node in nodes %}
-                <option value="{{ node }}">{{ node }}</option>
-                {% endfor %}
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Remote Node Number</label>
-              <input type="text" id="nc-remote-node" placeholder="e.g. 27096" maxlength="7">
-            </div>
-          </div>
-          <div class="btn-row" style="margin-bottom:14px">
-            <button class="btn btn-primary" onclick="ncConnect('3')">Connect (Transceive)</button>
-            <button class="btn" onclick="ncConnect('2')">Connect (Monitor)</button>
-            <button class="btn btn-success" onclick="ncConnect('13')">Perm Connect</button>
-            <button class="btn btn-danger" onclick="ncDisconnect()">Disconnect</button>
-            <button class="btn btn-danger" onclick="ncDisconnectAll()">Disconnect All</button>
-          </div>
-          <div class="form-group">
-            <label class="form-label">
-              <input type="checkbox" id="nc-disc-first" style="width:auto;margin-right:6px">
-              Disconnect before connect
-            </label>
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-header">
-          <h2>Node Status</h2>
-          <button class="btn btn-sm" onclick="ncRefreshStatus()">Refresh Status</button>
-        </div>
-        <div class="card-body">
-          <div id="nc-status-display" class="muted">Click Refresh Status to poll AMI.</div>
-          <div id="nc-connected-list" style="margin-top:12px"></div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-header"><h2>Node Lookup</h2></div>
-        <div class="card-body">
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">Node Number</label>
-              <input type="text" id="lookup-node-input" placeholder="Node number">
-            </div>
-            <div class="form-group" style="align-self:flex-end">
-              <button class="btn btn-primary" onclick="lookupNode()">Look Up</button>
-              <button class="btn" onclick="lookupNodeStats()" style="margin-left:8px">Get Stats</button>
-            </div>
-          </div>
-          <div id="lookup-result" style="margin-top:10px"></div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-header"><h2>Favorites</h2>
-          <button class="btn btn-sm btn-primary" onclick="showAddFavorite()">Add Node</button>
-        </div>
-        <div id="fav-add-form" style="display:none;padding:14px 18px;border-bottom:1px solid var(--border)">
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">Node Number</label>
-              <input type="text" id="fav-node-input" placeholder="Node number">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Label (optional)</label>
-              <input type="text" id="fav-label-input" placeholder="Auto-filled from astdb">
-            </div>
-          </div>
-          <div class="btn-row">
-            <button class="btn btn-success btn-sm" onclick="addFavorite()">Add</button>
-            <button class="btn btn-sm" onclick="hideFavAdd()">Cancel</button>
-          </div>
-        </div>
-        <div id="fav-table-wrap">
-          <table class="node-table">
-            <thead><tr>
-              <th>Node</th><th>Label</th><th>Callsign</th><th>Location</th><th>Actions</th>
-            </tr></thead>
-            <tbody id="fav-tbody"><tr><td colspan="5" class="muted" style="padding:14px">Loading...</td></tr></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-header"><h2>Node Control Log</h2>
-          <button class="btn btn-sm" onclick="clearNcLog()">Clear</button>
-        </div>
-        <div class="log-panel" id="nc-log-panel"></div>
-      </div>
-    </section>
-
-    <!-- ══ General Settings ════════════════════════════════ -->
-    <section class="page" id="page-general">
-      <div class="page-title">General Settings</div>
-      <div class="page-sub">Edit the <span class="mono">[general]</span> section of rpt.conf.</div>
-
-      <div id="general-editor-content">
-        <div class="muted">Loading...</div>
-      </div>
-    </section>
-
-    <!-- ══ Per-node pages (generated dynamically) ══════════ -->
+    <div class="nav-section">rpt.conf Editor</div>
+    <button class="nav-item" onclick="showPage('general')">General Settings</button>
     {% for node in nodes %}
-    <section class="page" id="page-node-{{ node }}">
-      <div class="page-title">Node {{ node }}</div>
-      <div class="page-sub">Settings for <span class="mono">[{{ node }}]</span> stanza.</div>
-      <div id="node-editor-{{ node }}"><div class="muted">Loading...</div></div>
-    </section>
+    <button class="nav-item" onclick="showPage('node-{{ node }}')">
+      Node {{ node }}<span class="node-badge">{{ node }}</span>
+    </button>
     {% endfor %}
 
-    <!-- ══ Raw Editor ══════════════════════════════════════ -->
-    <section class="page" id="page-raw-editor">
-      <div class="page-title">Raw Editor</div>
-      <div class="page-sub">Edit rpt.conf as plain text. A backup is created on every save.</div>
+    <div class="nav-section">Tools</div>
+    <button class="nav-item" onclick="showPage('raw-editor')">Raw Editor</button>
+    <button class="nav-item" onclick="showPage('backups')">Backups</button>
+    <button class="nav-item" onclick="showPage('ami-diag')">AMI Diagnostics</button>
+  </nav>
+</aside>
 
-      <div class="card">
-        <div class="card-header">
-          <h2>{{ conf_path }}</h2>
-          <div class="btn-row">
-            <button class="btn btn-success" onclick="rawSave()">Save</button>
-            <button class="btn" onclick="rawReload()">Reload from Disk</button>
+<!-- Main content -->
+<main class="main">
+
+  <div id="unsaved-bar">
+    <span id="unsaved-msg">Unsaved changes.</span>
+    <div class="btn-row">
+      <button class="btn btn-warn btn-sm" onclick="saveChanges()">Save Changes</button>
+      <button class="btn btn-sm" onclick="discardChanges()">Discard</button>
+    </div>
+  </div>
+
+  <!-- Dashboard -->
+  <section class="page active" id="page-dashboard">
+    <div class="page-title">Dashboard</div>
+    <div class="page-sub">
+      System overview &mdash; <span id="dash-ts" class="muted">loading...</span>
+      <button class="btn btn-sm" style="margin-left:10px" onclick="refreshDashboard()">Refresh</button>
+    </div>
+
+    <div class="stat-grid" style="margin-bottom:20px">
+      <div class="stat-box"><div class="stat-label">Asterisk</div><div class="stat-value" id="s-ast">...</div></div>
+      <div class="stat-box"><div class="stat-label">ASL Version</div><div class="stat-value" id="s-asl">...</div></div>
+      <div class="stat-box"><div class="stat-label">CPU Temp</div><div class="stat-value" id="s-temp">...</div></div>
+      <div class="stat-box"><div class="stat-label">Uptime</div><div class="stat-value" id="s-uptime">...</div></div>
+      <div class="stat-box"><div class="stat-label">Disk Used</div><div class="stat-value" id="s-disk">...</div></div>
+      <div class="stat-box"><div class="stat-label">AMI User</div><div class="stat-value" id="s-ami">...</div></div>
+      <div class="stat-box"><div class="stat-label">Running As</div><div class="stat-value" id="s-uid">...</div></div>
+      <div class="stat-box"><div class="stat-label">rpt.conf</div><div class="stat-value" id="s-conf">...</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>Quick Actions</h2></div>
+      <div class="card-body">
+        <div class="btn-row">
+          <button class="btn btn-danger" onclick="doRestart()">Restart Asterisk</button>
+          <button class="btn" onclick="doReload()">Reload app_rpt.so</button>
+          <button class="btn btn-primary" onclick="showPage('node-control')">Node Control</button>
+          <button class="btn" onclick="showPage('ami-diag')">AMI Diagnostics</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2>Debug Log</h2>
+        <button class="btn btn-sm" onclick="clearLog('main-log')">Clear</button>
+      </div>
+      <div class="log-panel" id="main-log"></div>
+    </div>
+  </section>
+
+  <!-- Node Control -->
+  <section class="page" id="page-node-control">
+    <div class="page-title">Node Control</div>
+    <div class="page-sub">Connect, disconnect, and monitor nodes via Asterisk AMI.</div>
+
+    <div class="card">
+      <div class="card-header"><h2>Connect / Disconnect</h2></div>
+      <div class="card-body">
+        <div class="form-row" style="margin-bottom:14px">
+          <div class="form-group">
+            <label class="form-label">Local Node</label>
+            <select id="nc-local">
+              {% for node in nodes %}
+              <option value="{{ node }}">{{ node }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Remote Node</label>
+            <input type="text" id="nc-remote" placeholder="e.g. 27096" maxlength="7">
           </div>
         </div>
-        <div class="card-body">
-          <div id="raw-alert"></div>
-          <textarea class="raw-editor" id="raw-textarea" spellcheck="false" rows="30"></textarea>
+        <div class="btn-row" style="margin-bottom:12px">
+          <button class="btn btn-primary" onclick="ncConnect(3)">Connect (Transceive)</button>
+          <button class="btn" onclick="ncConnect(2)">Connect (Monitor)</button>
+          <button class="btn btn-success" onclick="ncConnect(13)">Perm Connect</button>
+          <button class="btn btn-danger" onclick="ncDisconnect(false)">Disconnect Node</button>
+          <button class="btn btn-danger" onclick="ncDisconnect(true)">Disconnect All</button>
         </div>
+        <label class="form-label" style="display:inline-flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="nc-disc-first" style="width:auto">
+          Disconnect before connect
+        </label>
       </div>
-    </section>
+    </div>
 
-    <!-- ══ Backups ══════════════════════════════════════════ -->
-    <section class="page" id="page-backups">
-      <div class="page-title">Backups</div>
-      <div class="page-sub">Last 10 automatic backups of rpt.conf.</div>
-
-      <div class="card">
-        <div class="card-header"><h2>Available Backups</h2>
-          <button class="btn btn-sm" onclick="loadBackups()">Refresh</button>
-        </div>
-        <div class="card-body">
-          <div id="backup-list"><div class="muted">Loading...</div></div>
-        </div>
+    <div class="card">
+      <div class="card-header">
+        <h2>Node Status</h2>
+        <button class="btn btn-sm" onclick="ncStatus()">Refresh Status</button>
       </div>
+      <div class="card-body">
+        <div id="nc-status"><span class="muted">Click Refresh Status to poll AMI.</span></div>
+      </div>
+    </div>
 
-      <div class="card" id="backup-preview-card" style="display:none">
-        <div class="card-header">
-          <h2 id="backup-preview-title">Preview</h2>
-          <div class="btn-row">
-            <button class="btn btn-warn" onclick="restoreBackup()">Restore This Backup</button>
-            <button class="btn btn-sm" onclick="document.getElementById('backup-preview-card').style.display='none'">Close</button>
+    <div class="card">
+      <div class="card-header"><h2>Node Lookup</h2></div>
+      <div class="card-body">
+        <div style="display:flex;gap:10px;margin-bottom:12px">
+          <input type="text" id="lookup-input" placeholder="Node number" style="max-width:200px">
+          <button class="btn btn-primary" onclick="doLookup()">Look Up</button>
+          <button class="btn" onclick="doStats()">ASL Stats</button>
+        </div>
+        <div id="lookup-result"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2>Favorites</h2>
+        <button class="btn btn-sm btn-primary" onclick="toggleFavForm()">Add Node</button>
+      </div>
+      <div id="fav-form" style="display:none;padding:14px 18px;border-bottom:1px solid var(--border)">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Node Number</label>
+            <input type="text" id="fav-node" placeholder="Node number">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Label (optional)</label>
+            <input type="text" id="fav-label" placeholder="Auto-filled from astdb">
           </div>
         </div>
-        <div class="card-body">
-          <textarea class="raw-editor" id="backup-preview-text" readonly rows="22"></textarea>
+        <div class="btn-row">
+          <button class="btn btn-success btn-sm" onclick="addFavorite()">Add</button>
+          <button class="btn btn-sm" onclick="toggleFavForm()">Cancel</button>
         </div>
       </div>
-    </section>
+      <table class="tbl">
+        <thead><tr><th>Node</th><th>Label</th><th>Callsign</th><th>Location</th><th>Actions</th></tr></thead>
+        <tbody id="fav-tbody">
+          <tr><td colspan="5" class="muted" style="padding:14px">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
 
-    <!-- ══ AMI Diagnostics ══════════════════════════════════ -->
-    <section class="page" id="page-ami-diag">
-      <div class="page-title">AMI Diagnostics</div>
-      <div class="page-sub">Test and troubleshoot the Asterisk Manager Interface connection.</div>
+    <div class="card">
+      <div class="card-header">
+        <h2>Node Control Log</h2>
+        <button class="btn btn-sm" onclick="clearLog('nc-log')">Clear</button>
+      </div>
+      <div class="log-panel" id="nc-log"></div>
+    </div>
+  </section>
 
-      <div class="card">
-        <div class="card-header"><h2>Connection Test</h2>
-          <div class="btn-row">
-            <button class="btn btn-primary" onclick="testAMI()">Run Test</button>
-            <button class="btn" onclick="rawTestAMI()">Raw Socket Test</button>
-          </div>
-        </div>
-        <div class="card-body">
-          <div id="ami-test-result"><div class="muted">Click Run Test to check AMI connectivity.</div></div>
-          <div id="ami-raw-result" style="margin-top:14px"></div>
+  <!-- General Settings -->
+  <section class="page" id="page-general">
+    <div class="page-title">General Settings</div>
+    <div class="page-sub">Edit the <span class="mono">[general]</span> stanza of rpt.conf.</div>
+    <div id="general-content"><div class="muted">Loading...</div></div>
+  </section>
+
+  <!-- Per-node pages -->
+  {% for node in nodes %}
+  <section class="page" id="page-node-{{ node }}">
+    <div class="page-title">Node {{ node }}</div>
+    <div class="page-sub">Settings for stanza <span class="mono">[{{ node }}]</span></div>
+    <div id="node-content-{{ node }}"><div class="muted">Loading...</div></div>
+  </section>
+  {% endfor %}
+
+  <!-- Raw Editor -->
+  <section class="page" id="page-raw-editor">
+    <div class="page-title">Raw Editor</div>
+    <div class="page-sub">Edit rpt.conf as plain text. A backup is created on every save.</div>
+    <div class="card">
+      <div class="card-header">
+        <h2>{{ conf_path }}</h2>
+        <div class="btn-row">
+          <button class="btn btn-success" onclick="rawSave()">Save</button>
+          <button class="btn" onclick="rawLoad()">Reload from Disk</button>
         </div>
       </div>
+      <div class="card-body">
+        <div id="raw-alert"></div>
+        <textarea id="raw-ta" spellcheck="false" rows="32" style="width:100%;font-family:var(--mono);font-size:0.88rem"></textarea>
+      </div>
+    </div>
+  </section>
 
-      <div class="card">
-        <div class="card-header"><h2>Configuration Guide</h2></div>
-        <div class="card-body">
-          <p style="margin-bottom:12px;font-size:0.95rem">
-            AMI requires credentials set in the systemd service file at
-            <span class="mono">/etc/systemd/system/ASL3-EZ.service</span>.
-          </p>
-          <p class="muted" style="margin-bottom:10px">Step 1: Ensure manager.conf has a user with command write access:</p>
-          <pre style="background:var(--bg3);padding:12px;border-radius:4px;font-size:0.85rem;overflow-x:auto">[general]
+  <!-- Backups -->
+  <section class="page" id="page-backups">
+    <div class="page-title">Backups</div>
+    <div class="page-sub">Last 10 automatic backups of rpt.conf.</div>
+    <div class="card">
+      <div class="card-header">
+        <h2>Available Backups</h2>
+        <button class="btn btn-sm" onclick="loadBackups()">Refresh</button>
+      </div>
+      <div class="card-body" id="backup-list"><span class="muted">Loading...</span></div>
+    </div>
+    <div class="card" id="backup-preview" style="display:none">
+      <div class="card-header">
+        <h2 id="backup-preview-title">Preview</h2>
+        <div class="btn-row">
+          <button class="btn btn-warn" onclick="restoreBackup()">Restore This Backup</button>
+          <button class="btn btn-sm" onclick="document.getElementById('backup-preview').style.display='none'">Close</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <textarea id="backup-preview-ta" readonly rows="22" style="width:100%;font-family:var(--mono);font-size:0.85rem"></textarea>
+      </div>
+    </div>
+  </section>
+
+  <!-- AMI Diagnostics -->
+  <section class="page" id="page-ami-diag">
+    <div class="page-title">AMI Diagnostics</div>
+    <div class="page-sub">Test and troubleshoot the Asterisk Manager Interface connection.</div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2>Connection Test</h2>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="testAMI()">Run Test</button>
+          <button class="btn" onclick="rawTestAMI()">Raw Socket Test</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div id="ami-test-out"><span class="muted">Click Run Test to check AMI connectivity.</span></div>
+        <div id="ami-raw-out" style="margin-top:14px"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>Configuration Guide</h2></div>
+      <div class="card-body">
+        <p style="margin-bottom:10px">Step 1 &mdash; <span class="mono">/etc/asterisk/manager.conf</span> must have a user stanza:</p>
+        <pre class="codeblock">[general]
 enabled = yes
 port = 5038
 bindaddr = 127.0.0.1
@@ -717,813 +469,740 @@ secret = your_secret_here
 read = system,call,log,verbose,command,agent,user,config,dtmf,reporting,cdr,dialplan
 write = system,call,log,verbose,command,agent,user,config,dtmf,reporting,cdr,dialplan
 permit = 127.0.0.1/255.255.255.0</pre>
-          <p class="muted" style="margin:12px 0 8px">Step 2: Set matching credentials in the service file:</p>
-          <pre style="background:var(--bg3);padding:12px;border-radius:4px;font-size:0.85rem;overflow-x:auto">Environment="AMI_USER=admin"
+        <p style="margin-bottom:10px">Step 2 &mdash; Set credentials in the service file:</p>
+        <pre class="codeblock">sudo nano /etc/systemd/system/ASL3-EZ.service
+# Set these two Environment lines:
+Environment="AMI_USER=admin"
 Environment="AMI_SECRET=your_secret_here"</pre>
-          <p class="muted" style="margin:12px 0 8px">Step 3: Reload and restart:</p>
-          <pre style="background:var(--bg3);padding:12px;border-radius:4px;font-size:0.85rem;overflow-x:auto">sudo systemctl daemon-reload
-sudo systemctl restart ASL3-EZ</pre>
-        </div>
+        <p style="margin-bottom:10px">Step 3 &mdash; Apply changes:</p>
+        <pre class="codeblock">sudo systemctl daemon-reload
+sudo systemctl restart ASL3-EZ
+sudo asterisk -rx "module reload manager"</pre>
       </div>
+    </div>
 
-      <div class="card">
-        <div class="card-header"><h2>System Info</h2>
-          <button class="btn btn-sm" onclick="loadSysInfo()">Refresh</button>
-        </div>
-        <div class="card-body" id="sysinfo-display"><div class="muted">Loading...</div></div>
+    <div class="card">
+      <div class="card-header">
+        <h2>System Info</h2>
+        <button class="btn btn-sm" onclick="loadSysInfo()">Refresh</button>
       </div>
-    </section>
+      <div class="card-body" id="sysinfo-out"><span class="muted">Loading...</span></div>
+    </div>
+  </section>
 
-  </main>
+</main>
 </div>
 
-<!-- ══════════════════════════════════════════════════════════
-     JavaScript
-══════════════════════════════════════════════════════════ -->
 <script>
 'use strict';
 
-// ── State ─────────────────────────────────────────────────
-let pendingChanges   = {};
-let currentSection   = "";
-let currentPage      = "dashboard";
-let rawBackupLoaded  = null;
+/* ── State ─────────────────────────────────────────────────────────────── */
+var pendingChanges = {};
+var currentSection = '';
+var currentPage    = 'dashboard';
+var backupFile     = null;
+var favFormOpen    = false;
 
-// ── Logging ───────────────────────────────────────────────
-function ts() {
-  return new Date().toLocaleTimeString('en-US', {hour12:false});
+/* ── Logging ────────────────────────────────────────────────────────────── */
+function nowTs() {
+  return new Date().toLocaleTimeString('en-US', {hour12: false});
 }
 
-function logMsg(level, msg, panelId) {
-  const panel = document.getElementById(panelId || 'log-panel');
+function addLog(panelId, level, msg) {
+  var panel = document.getElementById(panelId);
   if (!panel) return;
-  const div = document.createElement('div');
-  const cls = {INFO:'log-info', OK:'log-ok', WARN:'log-warn',
-               ERROR:'log-error', DEBUG:'log-debug', AMI:'log-ami'}[level] || '';
-  div.innerHTML = `<span class="log-time">[${ts()}]</span> `
-                + `<span class="${cls}">[${level}]</span> ${escHtml(msg)}`;
-  panel.appendChild(div);
+  var cls = {OK:'lOK', WARN:'lWARN', ERROR:'lERR', INFO:'lINFO', DEBUG:'lDBG', AMI:'lAMI'}[level] || 'lINFO';
+  var d   = document.createElement('div');
+  d.innerHTML = '<span class="lt">[' + nowTs() + ']</span> '
+              + '<span class="' + cls + '">[' + level + ']</span> '
+              + esc(msg);
+  panel.appendChild(d);
   panel.scrollTop = panel.scrollHeight;
 }
 
-function log(msg, level, panel)    { logMsg(level||'INFO',  msg, panel); }
-function logOk(msg, panel)         { logMsg('OK',   msg, panel); }
-function logWarn(msg, panel)       { logMsg('WARN', msg, panel); }
-function logErr(msg, panel)        { logMsg('ERROR',msg, panel); }
-function logDebug(msg, panel)      { logMsg('DEBUG',msg, panel); }
-function logAMI(msg, panel)        { logMsg('AMI',  msg, panel); }
+function log(msg, level)   { addLog('main-log', level || 'INFO', msg); }
+function ncLog(msg, level) { addLog('nc-log',   level || 'INFO', msg); }
 
-function clearLog() {
-  const p = document.getElementById('log-panel');
-  if (p) p.innerHTML = '';
-}
-function clearNcLog() {
-  const p = document.getElementById('nc-log-panel');
+function clearLog(id) {
+  var p = document.getElementById(id);
   if (p) p.innerHTML = '';
 }
 
-function escHtml(s) {
+function esc(s) {
   return String(s)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;')
     .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// ── Navigation ────────────────────────────────────────────
-function showPage(id) {
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+/* ── API ────────────────────────────────────────────────────────────────── */
+async function api(url, opts) {
+  try {
+    var r    = await fetch(url, opts);
+    var data = await r.json();
+    return {ok: r.ok, status: r.status, data: data};
+  } catch(e) {
+    return {ok: false, status: 0, data: {error: String(e)}};
+  }
+}
 
-  const page = document.getElementById('page-' + id);
+/* ── Navigation ─────────────────────────────────────────────────────────── */
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
+  document.querySelectorAll('.nav-item').forEach(function(b) { b.classList.remove('active'); });
+
+  var page = document.getElementById('page-' + id);
   if (page) page.classList.add('active');
 
-  document.querySelectorAll('.nav-item').forEach(btn => {
-    if (btn.getAttribute('onclick') === `showPage('${id}')`)
-      btn.classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(function(b) {
+    if (b.getAttribute('onclick') === "showPage('" + id + "')") b.classList.add('active');
   });
 
   currentPage = id;
 
-  // Lazy-load content on first visit
-  if (id === 'dashboard')    refreshDashboard();
-  else if (id === 'raw-editor') rawReload();
-  else if (id === 'backups')    loadBackups();
-  else if (id === 'node-control') { loadFavorites(); }
-  else if (id === 'ami-diag')   loadSysInfo();
-  else if (id === 'general')    loadGeneralEditor();
-  else if (id.startsWith('node-') && id !== 'node-control') {
-    const node = id.replace('node-', '');
-    if (/^\d+$/.test(node)) loadNodeEditor(node);
+  if      (id === 'dashboard')   refreshDashboard();
+  else if (id === 'node-control'){ loadFavorites(); }
+  else if (id === 'raw-editor')  rawLoad();
+  else if (id === 'backups')     loadBackups();
+  else if (id === 'ami-diag')    loadSysInfo();
+  else if (id === 'general')     loadGeneralEditor();
+  else {
+    var m = id.match(/^node-(\d+)$/);
+    if (m) loadNodeEditor(m[1]);
   }
 }
 
-// ── API helper ────────────────────────────────────────────
-async function api(path, opts) {
-  try {
-    const r = await fetch(path, opts);
-    const data = await r.json();
-    return { ok: r.ok, status: r.status, data };
-  } catch (e) {
-    return { ok: false, status: 0, data: { error: e.message } };
-  }
-}
-
-// ── Dashboard ─────────────────────────────────────────────
-async function refreshDashboard() {
-  log('Fetching system info...', 'DEBUG');
-  document.getElementById('dash-updated').textContent = 'refreshing...';
-  const r = await api('/api/sysinfo');
-  if (!r.ok) {
-    logErr('sysinfo failed: ' + (r.data.error || r.status));
-    return;
-  }
-  const d = r.data;
-
-  setStatVal('stat-ast',    d.asterisk_active ? 'Running' : 'Stopped',
-                            d.asterisk_active ? 'ok' : 'error');
-  setStatVal('stat-asl',    d.asl_version || 'unknown');
-  setStatVal('stat-temp',   d.cpu_temp != null ? d.cpu_temp + ' C' : 'N/A',
-                            d.cpu_temp > 75 ? 'warn' : '');
-  setStatVal('stat-uptime', d.uptime || 'unknown');
-  setStatVal('stat-disk',   d.disk ? `${d.disk.used} / ${d.disk.total} (${d.disk.pct})` : 'N/A');
-  setStatVal('stat-ami',    d.ami_user || 'NOT SET', d.ami_user && d.ami_user !== 'NOT CONFIGURED' ? 'ok' : 'error');
-  setStatVal('stat-uid',    d.running_as || 'unknown',
-                            d.running_as === 'root' ? 'ok' : 'warn');
-  setStatVal('stat-conf',   d.rpt_conf_exists
-                              ? (d.rpt_conf_writable ? 'Exists + Writable' : 'Exists (read-only)')
-                              : 'NOT FOUND',
-                            d.rpt_conf_exists && d.rpt_conf_writable ? 'ok'
-                              : d.rpt_conf_exists ? 'warn' : 'error');
-
-  document.getElementById('dash-updated').textContent =
-    'Last updated: ' + new Date().toLocaleTimeString();
-
-  log(`Asterisk: ${d.asterisk_active ? 'running' : 'stopped'} | ASL: ${d.asl_version} | Temp: ${d.cpu_temp}C | AMI user: ${d.ami_user}`, 'OK');
-
-  if (!d.asterisk_active)
-    logWarn('Asterisk is not running. Use Restart Asterisk to start it.');
-  if (d.ami_user === 'NOT CONFIGURED')
-    logErr('AMI credentials not configured. See AMI Diagnostics page.');
-  if (d.running_as !== 'root')
-    logWarn('Service is NOT running as root. rpt.conf save and Asterisk restart will fail.');
-  if (!d.rpt_conf_writable && d.rpt_conf_exists)
-    logWarn('rpt.conf exists but is not writable by current user.');
-}
-
-function setStatVal(id, val, cls) {
-  const el = document.getElementById(id);
+/* ── Stat helpers ───────────────────────────────────────────────────────── */
+function setStat(id, val, cls) {
+  var el = document.getElementById(id);
   if (!el) return;
   el.textContent = val;
   el.className   = 'stat-value' + (cls ? ' ' + cls : '');
 }
 
-// ── Asterisk restart / reload ─────────────────────────────
-async function restartAsterisk() {
-  if (!confirm('Restart Asterisk? This will briefly drop all active connections.')) return;
-  log('Sending restart command to Asterisk...', 'WARN');
-  const r = await api('/api/restart', {method:'POST'});
+/* ── Dashboard ──────────────────────────────────────────────────────────── */
+async function refreshDashboard() {
+  log('Fetching system info...', 'DEBUG');
+  document.getElementById('dash-ts').textContent = 'refreshing...';
+
+  var r = await api('/api/sysinfo');
+  if (!r.ok) {
+    log('sysinfo error: ' + (r.data.error || r.status), 'ERROR');
+    document.getElementById('dash-ts').textContent = 'Error loading';
+    return;
+  }
+  var d = r.data;
+
+  setStat('s-ast',    d.asterisk_active ? 'Running' : 'Stopped',
+                      d.asterisk_active ? 'ok' : 'error');
+  setStat('s-asl',    d.asl_version || 'unknown');
+  setStat('s-temp',   d.cpu_temp != null ? d.cpu_temp + ' C' : 'N/A',
+                      d.cpu_temp > 75 ? 'warn' : '');
+  setStat('s-uptime', d.uptime || 'unknown');
+  setStat('s-disk',   d.disk ? d.disk.used + ' / ' + d.disk.total + ' (' + d.disk.pct + ')' : 'N/A');
+  setStat('s-ami',    d.ami_user || 'NOT SET',
+                      (d.ami_user && d.ami_user !== 'NOT CONFIGURED') ? 'ok' : 'error');
+  setStat('s-uid',    d.running_as || 'unknown',
+                      d.running_as === 'root' ? 'ok' : 'warn');
+  setStat('s-conf',
+    d.rpt_conf_exists ? (d.rpt_conf_writable ? 'Exists + Writable' : 'Exists (read-only)') : 'NOT FOUND',
+    (d.rpt_conf_exists && d.rpt_conf_writable) ? 'ok' : d.rpt_conf_exists ? 'warn' : 'error');
+
+  document.getElementById('dash-ts').textContent = 'Updated: ' + new Date().toLocaleTimeString();
+
+  log('Asterisk=' + (d.asterisk_active ? 'running' : 'stopped')
+    + ' | ASL=' + d.asl_version
+    + ' | Temp=' + d.cpu_temp + 'C'
+    + ' | AMI=' + d.ami_user, 'OK');
+
+  if (!d.asterisk_active)
+    log('Asterisk is not running. Use Restart Asterisk.', 'WARN');
+  if (!d.ami_user || d.ami_user === 'NOT CONFIGURED')
+    log('AMI credentials not configured. See AMI Diagnostics page.', 'ERROR');
+  if (d.running_as !== 'root')
+    log('Not running as root. rpt.conf save and Asterisk restart will fail.', 'WARN');
+}
+
+/* ── Restart / reload ───────────────────────────────────────────────────── */
+async function doRestart() {
+  if (!confirm('Restart Asterisk? This drops all active connections briefly.')) return;
+  log('Sending restart command...', 'WARN');
+  var r = await api('/api/restart', {method: 'POST'});
   if (r.ok) {
-    logOk('Asterisk restart sent. ' + (r.data.output || ''));
+    log('Restart sent. ' + (r.data.output || ''), 'OK');
     setTimeout(refreshDashboard, 4000);
   } else {
-    logErr('Restart failed: ' + (r.data.error || r.status));
-    if (r.data.hint) logWarn('Hint: ' + r.data.hint);
+    log('Restart failed: ' + (r.data.error || r.status), 'ERROR');
+    if (r.data.hint) log('Hint: ' + r.data.hint, 'WARN');
   }
 }
 
-async function reloadModule() {
+async function doReload() {
   log('Reloading app_rpt.so...', 'INFO');
-  const r = await api('/api/reload', {method:'POST'});
-  if (r.ok)
-    logOk('Module reload: ' + (r.data.output || 'sent'));
-  else
-    logErr('Reload failed: ' + (r.data.error || r.status));
+  var r = await api('/api/reload', {method: 'POST'});
+  if (r.ok) log('Reload: ' + (r.data.output || 'sent'), 'OK');
+  else      log('Reload failed: ' + (r.data.error || r.status), 'ERROR');
 }
 
-// ── rpt.conf editor helpers ───────────────────────────────
-async function loadConf() {
-  const r = await api('/api/conf');
+/* ── conf helpers ───────────────────────────────────────────────────────── */
+async function fetchConf() {
+  var r = await api('/api/conf');
   if (!r.ok) {
-    logErr('Failed to load rpt.conf: ' + (r.data.error || r.status));
-    if (r.data.hint) logWarn(r.data.hint);
+    log('Cannot load rpt.conf: ' + (r.data.error || r.status), 'ERROR');
+    if (r.data.hint) log(r.data.hint, 'WARN');
     return null;
   }
   return r.data;
 }
 
 function makeToggleRow(key, value, commented, desc) {
-  return `
-  <div class="toggle-row" id="tr-${escHtml(key)}">
-    <div class="toggle-info">
-      <div class="toggle-key">${escHtml(key)}</div>
-      ${desc ? `<div class="toggle-desc">${escHtml(desc)}</div>` : ''}
-    </div>
-    <div style="display:flex;align-items:center;gap:12px;flex-shrink:0">
-      <input type="text" value="${escHtml(value)}"
-             style="width:220px;font-family:var(--mono);font-size:0.88rem"
-             onchange="markChange('${escHtml(key)}', this.value)">
-      <label class="switch">
-        <input type="checkbox" ${commented ? '' : 'checked'}
-               onchange="markToggle('${escHtml(key)}', this)">
-        <span class="slider"></span>
-      </label>
-    </div>
-  </div>`;
+  var checked = commented ? '' : 'checked';
+  return '<div class="toggle-row">'
+    + '<div class="toggle-info">'
+    + '<div class="toggle-key">' + esc(key) + '</div>'
+    + (desc ? '<div class="toggle-desc">' + esc(desc) + '</div>' : '')
+    + '</div>'
+    + '<div style="display:flex;align-items:center;gap:12px;flex-shrink:0">'
+    + '<input type="text" value="' + esc(value) + '" '
+    + 'style="width:220px;font-family:var(--mono);font-size:0.85rem" '
+    + 'onchange="markChange(\'' + esc(key) + '\',this.value)">'
+    + '<label class="switch">'
+    + '<input type="checkbox" ' + checked + ' onchange="markToggle(\'' + esc(key) + '\',this)">'
+    + '<span class="slider"></span>'
+    + '</label>'
+    + '</div></div>';
 }
 
 function markChange(key, val) {
   if (!pendingChanges[currentSection]) pendingChanges[currentSection] = {};
   if (!pendingChanges[currentSection][key]) pendingChanges[currentSection][key] = {};
   pendingChanges[currentSection][key].value = val;
-  showUnsaved(`Change pending: ${key} = ${val}`);
+  showUnsaved('Change pending: ' + key + ' = ' + val);
 }
 
 function markToggle(key, cb) {
   if (!pendingChanges[currentSection]) pendingChanges[currentSection] = {};
   if (!pendingChanges[currentSection][key]) pendingChanges[currentSection][key] = {};
   pendingChanges[currentSection][key].enabled = cb.checked;
-  showUnsaved(`Toggle: ${key} -> ${cb.checked ? 'enabled' : 'commented out'}`);
+  showUnsaved('Toggle: ' + key + ' -> ' + (cb.checked ? 'enabled' : 'commented'));
 }
 
 function showUnsaved(msg) {
-  const bar = document.getElementById('unsaved-bar');
-  bar.classList.add('visible');
-  document.getElementById('unsaved-msg').textContent = msg || 'You have unsaved changes.';
+  var bar = document.getElementById('unsaved-bar');
+  bar.classList.add('show');
+  document.getElementById('unsaved-msg').textContent = msg || 'Unsaved changes.';
 }
 
 function hideUnsaved() {
-  document.getElementById('unsaved-bar').classList.remove('visible');
+  document.getElementById('unsaved-bar').classList.remove('show');
 }
 
 async function saveChanges() {
-  const section  = currentSection;
-  const changes  = pendingChanges[section];
-  if (!changes || Object.keys(changes).length === 0) {
-    logWarn('No changes to save.');
-    return;
-  }
-  log(`Saving ${Object.keys(changes).length} change(s) to section [${section}]...`, 'INFO');
-  const r = await api('/api/save', {
+  var section = currentSection;
+  var changes = pendingChanges[section];
+  if (!changes || !Object.keys(changes).length) { log('No changes to save.', 'WARN'); return; }
+  log('Saving ' + Object.keys(changes).length + ' change(s) to [' + section + ']...', 'INFO');
+  var r = await api('/api/save', {
     method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ section, changes })
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({section: section, changes: changes})
   });
   if (r.ok) {
-    logOk('Saved. ' + (r.data.message || ''));
+    log('Saved. ' + (r.data.message || ''), 'OK');
     delete pendingChanges[section];
     hideUnsaved();
   } else {
-    logErr('Save failed: ' + (r.data.error || r.status));
-    if (r.data.hint) logWarn('Hint: ' + r.data.hint);
+    log('Save failed: ' + (r.data.error || r.status), 'ERROR');
+    if (r.data.hint) log(r.data.hint, 'WARN');
   }
 }
 
 function discardChanges() {
   pendingChanges = {};
   hideUnsaved();
-  // Reload current page editor
-  if (currentPage === 'general')
-    loadGeneralEditor();
-  else if (currentPage.startsWith('node-')) {
-    const node = currentPage.replace('node-', '');
-    if (/^\d+$/.test(node)) loadNodeEditor(node);
+  if (currentPage === 'general') loadGeneralEditor();
+  else {
+    var m = currentPage.match(/^node-(\d+)$/);
+    if (m) loadNodeEditor(m[1]);
   }
 }
 
-// ── General settings editor ───────────────────────────────
-const GENERAL_SETTINGS_META = [
-  {key:'lknoderegister',    desc:'Register node with AllStarLink (yes/no)'},
-  {key:'registerserver',    desc:'Registration server hostname'},
-  {key:'noreg',             desc:'Disable registration if set to 1'},
-  {key:'statpost_url',      desc:'URL for posting node stats'},
-  {key:'statpost_program',  desc:'Program for posting stats'},
+/* ── General editor ─────────────────────────────────────────────────────── */
+var GENERAL_META = [
+  {key:'node_lookup_method', desc:'Node lookup: both | dns | file'},
+  {key:'dns_node_domain',    desc:'DNS domain for node lookups'},
+  {key:'lknoderegister',     desc:'Register with AllStarLink (yes/no)'},
+  {key:'registerserver',     desc:'Registration server'},
+  {key:'statpost_url',       desc:'Stats POST URL'},
+  {key:'statpost_program',   desc:'Stats POST program'},
 ];
 
 async function loadGeneralEditor() {
   currentSection = 'general';
-  const container = document.getElementById('general-editor-content');
-  container.innerHTML = '<div class="muted">Loading...</div>';
-  const conf = await loadConf();
-  if (!conf) { container.innerHTML = '<div class="alert alert-danger">Failed to load rpt.conf</div>'; return; }
-
-  const settings = conf.general_settings;
-  let html = '<div class="card"><div class="card-body">';
-  for (const meta of GENERAL_SETTINGS_META) {
-    const s = settings[meta.key];
-    const val      = s ? s.value    : '';
-    const commented= s ? s.commented: true;
-    html += makeToggleRow(meta.key, val, commented, meta.desc);
+  var el   = document.getElementById('general-content');
+  el.innerHTML = '<div class="muted">Loading...</div>';
+  var conf = await fetchConf();
+  if (!conf) {
+    el.innerHTML = '<div class="alert alert-danger">Failed to load rpt.conf. Check permissions.</div>';
+    return;
   }
+  var s    = conf.general_settings || {};
+  var html = '<div class="card"><div class="card-body">';
+  GENERAL_META.forEach(function(m) {
+    var st = s[m.key] || {};
+    html += makeToggleRow(m.key, st.value || '', st.commented !== false, m.desc);
+  });
   html += '</div></div>';
-  container.innerHTML = html;
-  log('General settings loaded.', 'DEBUG');
+  el.innerHTML = html;
+  log('General editor loaded.', 'DEBUG');
 }
 
-// ── Node editor ───────────────────────────────────────────
-const NODE_SETTINGS_SECTIONS = [
-  { title: 'Basic Node Settings', settings: [
-    {key:'rxchannel',     desc:'Receive channel (e.g. Radio/usb1999)'},
-    {key:'duplex',        desc:'Duplex mode: 0=simplex, 1=half, 2=full, 3=full+, 4=full full'},
-    {key:'linktolink',    desc:'Allow this node to link to other links (yes/no)'},
-    {key:'callerid',      desc:'Caller ID string (e.g. "Node 1999" <1999>)'},
-    {key:'context',       desc:'Asterisk dialplan context'},
-    {key:'accountcode',   desc:'Asterisk account code'},
+/* ── Node editor ────────────────────────────────────────────────────────── */
+var NODE_SECS = [
+  {title:'Basic Node Settings', keys:[
+    {key:'rxchannel',      desc:'Receive channel (e.g. SimpleUSB/usb_1999)'},
+    {key:'duplex',         desc:'Duplex: 0=simplex 1=half 2=full 3=full+ 4=full-full'},
+    {key:'linktolink',     desc:'Allow linking to other links (yes/no)'},
+    {key:'callerid',       desc:'Caller ID string'},
+    {key:'context',        desc:'Asterisk dialplan context'},
+    {key:'accountcode',    desc:'Asterisk account code'},
   ]},
-  { title: 'Station ID', settings: [
-    {key:'idrecording',   desc:'ID recording filename'},
-    {key:'idtalkover',    desc:'ID talkover recording'},
-    {key:'idtime',        desc:'ID interval in ms (default 300000)'},
-    {key:'politeid',      desc:'Delay ID until channel clear (yes/no)'},
-    {key:'idverbtablenum',desc:'Verbose ID table number'},
+  {title:'Station ID', keys:[
+    {key:'idrecording',    desc:'Voice ID recording filename'},
+    {key:'idtalkover',     desc:'ID talkover recording'},
+    {key:'idtime',         desc:'ID interval in ms (300000 = 5 min)'},
+    {key:'politeid',       desc:'Delay ID until channel clear (ms)'},
   ]},
-  { title: 'Timers', settings: [
-    {key:'hangtime',      desc:'Hang time in ms after last transmission'},
-    {key:'althangtime',   desc:'Alternate hang time in ms'},
-    {key:'totime',        desc:'Timeout time in ms'},
-    {key:'sleeptime',     desc:'Sleep mode delay in ms'},
-    {key:'duplex3',       desc:'Duplex 3 hang time (ms)'},
-    {key:'linkacttime',   desc:'Link activity timer (ms)'},
-    {key:'linkactmacro',  desc:'Macro to run on link activity timeout'},
-    {key:'connpgm',       desc:'Program to run on connect'},
-    {key:'discpgm',       desc:'Program to run on disconnect'},
+  {title:'Timers', keys:[
+    {key:'hangtime',       desc:'Repeater hang time in ms'},
+    {key:'althangtime',    desc:'Alternate hang time in ms'},
+    {key:'totime',         desc:'Transmit timeout in ms'},
+    {key:'sleeptime',      desc:'Sleep mode delay in ms'},
+    {key:'duplex3',        desc:'Duplex 3 hang time (ms)'},
   ]},
-  { title: 'Telemetry', settings: [
-    {key:'telemdefault',  desc:'Default telemetry mode (1=enabled, 2=verbose, 0=off)'},
-    {key:'telemdynamic',  desc:'Allow telemetry mode change via DTMF (yes/no)'},
-    {key:'litztime',      desc:'LITZ tone time (ms)'},
-    {key:'litzchar',      desc:'LITZ Morse character'},
-    {key:'holdofftelem',  desc:'Hold off telemetry (yes/no)'},
-    {key:'telemdefault',  desc:'Default telemetry level'},
-    {key:'beaconing',     desc:'Enable beaconing (yes/no)'},
+  {title:'Telemetry', keys:[
+    {key:'telemdefault',   desc:'Telemetry mode: 0=off 1=on 2=verbose'},
+    {key:'telemdynamic',   desc:'Allow DTMF telemetry change (yes/no)'},
+    {key:'holdofftelem',   desc:'Hold off telemetry (yes/no)'},
+    {key:'telemduckdb',    desc:'Telemetry ducking dB (e.g. -15)'},
+    {key:'unlinkedct',     desc:'Courtesy tone when unlinked'},
+    {key:'remotect',       desc:'Courtesy tone when remote linked'},
+    {key:'linkunkeyct',    desc:'Link unkey courtesy tone'},
   ]},
-  { title: 'DTMF / Functions', settings: [
-    {key:'funcchar',      desc:'DTMF function character (default *)'},
-    {key:'endchar',       desc:'DTMF end character (default #)'},
-    {key:'nobusyout',     desc:'No busy-out on DTMF decode failure (yes/no)'},
-    {key:'dtmfkeys',      desc:'DTMF key string for node'},
+  {title:'DTMF / Functions', keys:[
+    {key:'funcchar',       desc:'DTMF function character (default *)'},
+    {key:'endchar',        desc:'DTMF end character (default #)'},
+    {key:'functions',      desc:'Functions stanza name'},
+    {key:'link_functions', desc:'Link functions stanza name'},
+    {key:'phone_functions',desc:'Phone functions stanza name'},
   ]},
-  { title: 'Audio', settings: [
-    {key:'linkmongain',   desc:'Monitor gain (dB) for linked audio'},
-    {key:'discpgm',       desc:'Disconnect program'},
-    {key:'notchfilter',   desc:'Enable notch filter (yes/no)'},
-    {key:'notchfreq',     desc:'Notch filter frequency (Hz)'},
-    {key:'notchbw',       desc:'Notch filter bandwidth (Hz)'},
+  {title:'Node Connections', keys:[
+    {key:'extnodefile',    desc:'External node file path'},
+    {key:'nodenames',      desc:'Node names file path'},
+    {key:'startup_macro',  desc:'Macro to run at startup'},
+    {key:'connpgm',        desc:'Program to run on connect'},
+    {key:'discpgm',        desc:'Program to run on disconnect'},
   ]},
-  { title: 'Parrot / Echo', settings: [
-    {key:'parrot',        desc:'Enable parrot/echo mode (yes/no)'},
-    {key:'parrottime',    desc:'Parrot delay time (ms)'},
+  {title:'Audio', keys:[
+    {key:'linkmongain',    desc:'Monitor gain dB for linked audio'},
+    {key:'notchfilter',    desc:'Enable notch filter (yes/no)'},
+    {key:'notchfreq',      desc:'Notch filter frequency Hz'},
+    {key:'notchbw',        desc:'Notch filter bandwidth Hz'},
   ]},
-  { title: 'Node Connections', settings: [
-    {key:'extnodefile',   desc:'Path to external node file'},
-    {key:'nodenames',     desc:'Alternate node names file'},
-    {key:'startup_macro', desc:'Macro to run at startup'},
+  {title:'Parrot / Echo', keys:[
+    {key:'parrot',         desc:'Enable parrot/echo mode (yes/no)'},
+    {key:'parrottime',     desc:'Parrot delay time (ms)'},
   ]},
-  { title: 'Archiving & Stats', settings: [
-    {key:'archivedir',    desc:'Directory for audio archives'},
-    {key:'archformat',    desc:'Archive format'},
-    {key:'statpost_url',  desc:'Stats POST URL'},
-    {key:'statpost_program', desc:'Stats POST program'},
+  {title:'Archiving & Stats', keys:[
+    {key:'archivedir',        desc:'Directory for audio archives'},
+    {key:'statpost_url',      desc:'Stats POST URL'},
+    {key:'statpost_program',  desc:'Stats POST program'},
   ]},
 ];
 
 async function loadNodeEditor(node) {
   currentSection = node;
-  const container = document.getElementById(`node-editor-${node}`);
-  if (!container) return;
-  container.innerHTML = '<div class="muted">Loading rpt.conf...</div>';
+  var el = document.getElementById('node-content-' + node);
+  if (!el) return;
+  el.innerHTML = '<div class="muted">Loading rpt.conf...</div>';
 
-  const conf = await loadConf();
+  var conf = await fetchConf();
   if (!conf) {
-    container.innerHTML = '<div class="alert alert-danger">Failed to load rpt.conf. Check permissions.</div>';
+    el.innerHTML = '<div class="alert alert-danger">Failed to load rpt.conf. Service must run as root.</div>';
     return;
   }
-
-  const settings = conf.general_settings; // all key=value pairs
-  let html = '';
-
-  for (let i = 0; i < NODE_SETTINGS_SECTIONS.length; i++) {
-    const sec = NODE_SETTINGS_SECTIONS[i];
-    html += `
-    <div class="card" style="margin-bottom:12px">
-      <div class="section-toggle${i===0?' open':''}" onclick="toggleSection(this)">
-        <h3>${escHtml(sec.title)}</h3>
-        <span class="arrow">&#9658;</span>
-      </div>
-      <div class="section-body${i===0?' open':''}">`;
-
-    for (const meta of sec.settings) {
-      const s        = settings[meta.key];
-      const val      = s ? s.value     : '';
-      const commented= s ? s.commented : true;
-      html += makeToggleRow(meta.key, val, commented, meta.desc);
-    }
+  var s    = conf.general_settings || {};
+  var html = '';
+  NODE_SECS.forEach(function(sec, i) {
+    var open = i === 0 ? ' open' : '';
+    html += '<div class="card" style="margin-bottom:12px">'
+          + '<div class="sec-toggle' + open + '" onclick="toggleSec(this)">'
+          + '<h3>' + esc(sec.title) + '</h3><span class="arr">&#9658;</span></div>'
+          + '<div class="sec-body' + open + '">';
+    sec.keys.forEach(function(m) {
+      var st = s[m.key] || {};
+      html += makeToggleRow(m.key, st.value || '', st.commented !== false, m.desc);
+    });
     html += '</div></div>';
-  }
-
-  container.innerHTML = html;
-  log(`Node ${node} editor loaded.`, 'DEBUG');
+  });
+  el.innerHTML = html;
+  log('Node ' + node + ' editor loaded.', 'DEBUG');
 }
 
-function toggleSection(el) {
+function toggleSec(el) {
   el.classList.toggle('open');
-  const body = el.nextElementSibling;
+  var body = el.nextElementSibling;
   if (body) body.classList.toggle('open');
 }
 
-// ── Raw editor ────────────────────────────────────────────
-async function rawReload() {
-  logDebug('Loading raw rpt.conf from disk...');
-  const r = await api('/api/conf');
+/* ── Raw editor ─────────────────────────────────────────────────────────── */
+async function rawLoad() {
+  log('Loading raw rpt.conf...', 'DEBUG');
+  var r = await api('/api/conf');
   if (!r.ok) {
     document.getElementById('raw-alert').innerHTML =
-      `<div class="alert alert-danger">${escHtml(r.data.error || 'Failed to load')}${r.data.hint ? ' — ' + r.data.hint : ''}</div>`;
+      '<div class="alert alert-danger">' + esc(r.data.error || 'Load failed') + '</div>';
     return;
   }
-  document.getElementById('raw-textarea').value = r.data.content;
+  document.getElementById('raw-ta').value = r.data.content;
   document.getElementById('raw-alert').innerHTML =
-    '<div class="alert alert-info">Loaded from ' + escHtml('{{ conf_path }}') + '</div>';
-  logOk('Raw editor loaded (' + r.data.content.length + ' bytes)');
+    '<div class="alert alert-info">Loaded ' + r.data.content.length + ' bytes from {{ conf_path }}</div>';
+  log('Raw editor: ' + r.data.content.length + ' bytes.', 'OK');
 }
 
 async function rawSave() {
-  const content = document.getElementById('raw-textarea').value;
-  log('Saving raw rpt.conf (' + content.length + ' bytes)...', 'INFO');
-  const r = await api('/api/save', {
+  var content = document.getElementById('raw-ta').value;
+  log('Saving raw (' + content.length + ' bytes)...', 'INFO');
+  var r = await api('/api/save', {
     method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ raw_content: content })
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({raw_content: content})
   });
-  const alertEl = document.getElementById('raw-alert');
+  var alertEl = document.getElementById('raw-alert');
   if (r.ok) {
-    alertEl.innerHTML = `<div class="alert alert-success">Saved. Backup: ${escHtml(r.data.backup || '')}</div>`;
-    logOk('Raw save successful. Backup: ' + (r.data.backup || 'none'));
+    alertEl.innerHTML = '<div class="alert alert-success">Saved. Backup: ' + esc(r.data.backup || '') + '</div>';
+    log('Saved. Backup: ' + (r.data.backup || ''), 'OK');
   } else {
-    alertEl.innerHTML = `<div class="alert alert-danger">${escHtml(r.data.error || 'Save failed')}</div>`;
-    logErr('Raw save failed: ' + (r.data.error || r.status));
-    if (r.data.hint) logWarn('Hint: ' + r.data.hint);
+    alertEl.innerHTML = '<div class="alert alert-danger">' + esc(r.data.error || 'Save failed') + '</div>';
+    log('Save failed: ' + (r.data.error || r.status), 'ERROR');
+    if (r.data.hint) log(r.data.hint, 'WARN');
   }
 }
 
-// ── Backups ───────────────────────────────────────────────
+/* ── Backups ─────────────────────────────────────────────────────────────── */
 async function loadBackups() {
-  const r = await api('/api/backups');
-  const el = document.getElementById('backup-list');
-  if (!r.ok || !r.data.backups) {
-    el.innerHTML = '<div class="muted">No backups found.</div>';
+  var el = document.getElementById('backup-list');
+  var r  = await api('/api/backups');
+  if (!r.ok || !r.data.backups || !r.data.backups.length) {
+    el.innerHTML = '<span class="muted">No backups found.</span>';
     return;
   }
-  if (r.data.backups.length === 0) {
-    el.innerHTML = `<div class="muted">No backups yet in ${escHtml(r.data.backup_dir || '')}</div>`;
-    return;
-  }
-  let html = '<table class="node-table"><thead><tr><th>Filename</th><th>Actions</th></tr></thead><tbody>';
-  for (const f of r.data.backups) {
-    html += `<tr><td class="mono">${escHtml(f)}</td><td>
-      <button class="btn btn-sm" onclick="previewBackup('${escHtml(f)}')">Preview</button>
-    </td></tr>`;
-  }
+  var html = '<table class="tbl"><thead><tr><th>Filename</th><th>Actions</th></tr></thead><tbody>';
+  r.data.backups.forEach(function(f) {
+    html += '<tr><td class="mono" style="font-size:0.85rem">' + esc(f) + '</td>'
+          + '<td><button class="btn btn-sm" onclick="previewBackup(\'' + esc(f) + '\')">Preview</button></td></tr>';
+  });
   html += '</tbody></table>';
   el.innerHTML = html;
 }
 
 async function previewBackup(filename) {
-  rawBackupLoaded = filename;
-  const r = await api('/api/backup/' + encodeURIComponent(filename));
-  if (!r.ok) { logErr('Failed to load backup: ' + filename); return; }
+  backupFile = filename;
+  var r = await api('/api/backup/' + encodeURIComponent(filename));
+  if (!r.ok) { log('Cannot load backup: ' + filename, 'ERROR'); return; }
   document.getElementById('backup-preview-title').textContent = 'Preview: ' + filename;
-  document.getElementById('backup-preview-text').value = r.data.content;
-  document.getElementById('backup-preview-card').style.display = 'block';
-  document.getElementById('backup-preview-card').scrollIntoView({behavior:'smooth'});
+  document.getElementById('backup-preview-ta').value = r.data.content;
+  document.getElementById('backup-preview').style.display = 'block';
+  document.getElementById('backup-preview').scrollIntoView({behavior: 'smooth'});
 }
 
 async function restoreBackup() {
-  if (!rawBackupLoaded) return;
-  if (!confirm('Restore this backup? The current rpt.conf will be backed up first.')) return;
-  const content = document.getElementById('backup-preview-text').value;
-  log('Restoring backup: ' + rawBackupLoaded, 'WARN');
-  const r = await api('/api/save', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ raw_content: content })
+  if (!backupFile) return;
+  if (!confirm('Restore this backup? Current rpt.conf will be backed up first.')) return;
+  var content = document.getElementById('backup-preview-ta').value;
+  log('Restoring: ' + backupFile, 'WARN');
+  var r = await api('/api/save', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({raw_content: content})
   });
   if (r.ok) {
-    logOk('Backup restored. New backup of previous: ' + (r.data.backup || ''));
-    document.getElementById('backup-preview-card').style.display = 'none';
+    log('Restored. New backup: ' + (r.data.backup || ''), 'OK');
+    document.getElementById('backup-preview').style.display = 'none';
   } else {
-    logErr('Restore failed: ' + (r.data.error || r.status));
+    log('Restore failed: ' + (r.data.error || r.status), 'ERROR');
   }
 }
 
-// ── Node control ──────────────────────────────────────────
-function ncLog(msg, level) {
-  logMsg(level||'INFO', msg, 'nc-log-panel');
-}
-
+/* ── Node Control ────────────────────────────────────────────────────────── */
 async function ncConnect(mode) {
-  const local  = document.getElementById('nc-local-node').value.trim();
-  const remote = document.getElementById('nc-remote-node').value.trim();
-  const disc   = document.getElementById('nc-disc-first').checked;
-
-  if (!local || !remote) {
-    ncLog('Both local and remote node numbers required.', 'WARN');
-    return;
-  }
-
-  const modeLabel = {2:'monitor', 3:'transceive', 13:'perm-transceive'}[mode] || mode;
-  ncLog(`Connecting ${local} -> ${remote} (mode=${mode} / ${modeLabel})...`, 'AMI');
-
-  const r = await api('/api/ami/connect', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({local_node:local, remote_node:remote,
-                          mode:String(mode), disconnect_first:disc})
+  var local  = document.getElementById('nc-local').value.trim();
+  var remote = document.getElementById('nc-remote').value.trim();
+  var disc   = document.getElementById('nc-disc-first').checked;
+  if (!local || !remote) { ncLog('Both local and remote node numbers required.', 'WARN'); return; }
+  var modeLabel = {2:'monitor', 3:'transceive', 13:'perm-transceive'}[mode] || String(mode);
+  ncLog('Connecting ' + local + ' -> ' + remote + ' (mode=' + mode + '/' + modeLabel + ')...', 'AMI');
+  var r = await api('/api/ami/connect', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({local_node: local, remote_node: remote, mode: String(mode), disconnect_first: disc})
   });
   if (r.ok) {
-    ncLog(`Connect command sent. Output: ${(r.data.output||[]).join(' | ')||'(none)'}`, 'OK');
-    ncLog(`Command: ${r.data.command || ''}`, 'DEBUG');
-    setTimeout(ncRefreshStatus, 1500);
+    ncLog('Connect sent. ' + (r.data.output || []).join(' | '), 'OK');
+    setTimeout(ncStatus, 1500);
   } else {
     ncLog('Connect failed: ' + (r.data.error || r.status), 'ERROR');
-    if (r.data.hint) ncLog('Hint: ' + r.data.hint, 'WARN');
+    if (r.data.hint) ncLog(r.data.hint, 'WARN');
   }
 }
 
-async function ncDisconnect() {
-  const local  = document.getElementById('nc-local-node').value.trim();
-  const remote = document.getElementById('nc-remote-node').value.trim();
-  ncLog(`Disconnecting ${local} from ${remote || 'all'}...`, 'AMI');
-  const r = await api('/api/ami/disconnect', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({local_node:local, remote_node:remote})
+async function ncDisconnect(all) {
+  var local  = document.getElementById('nc-local').value.trim();
+  var remote = all ? '' : document.getElementById('nc-remote').value.trim();
+  ncLog('Disconnecting ' + local + ' from ' + (remote || 'ALL') + '...', 'AMI');
+  var r = await api('/api/ami/disconnect', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({local_node: local, remote_node: remote})
   });
   if (r.ok) {
-    ncLog('Disconnect sent. ' + (r.data.output||[]).join(' '), 'OK');
-    setTimeout(ncRefreshStatus, 1500);
+    ncLog('Disconnect sent. ' + (r.data.output || []).join(' '), 'OK');
+    setTimeout(ncStatus, 1500);
   } else {
     ncLog('Disconnect failed: ' + (r.data.error || r.status), 'ERROR');
   }
 }
 
-async function ncDisconnectAll() {
-  const local = document.getElementById('nc-local-node').value.trim();
-  ncLog(`Disconnecting ALL from node ${local}...`, 'WARN');
-  const r = await api('/api/ami/disconnect', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({local_node:local, remote_node:''})
-  });
-  if (r.ok) {
-    ncLog('Disconnect all sent. ' + (r.data.output||[]).join(' '), 'OK');
-    setTimeout(ncRefreshStatus, 1500);
-  } else {
-    ncLog('Disconnect all failed: ' + (r.data.error || r.status), 'ERROR');
-  }
-}
-
-async function ncRefreshStatus() {
-  const local = document.getElementById('nc-local-node').value.trim();
-  ncLog(`Polling status for node ${local}...`, 'DEBUG');
-  const r = await api('/api/ami/status?node=' + encodeURIComponent(local));
-  const disp = document.getElementById('nc-status-display');
-  const list = document.getElementById('nc-connected-list');
-
+async function ncStatus() {
+  var local = document.getElementById('nc-local').value.trim();
+  ncLog('Polling status for node ' + local + '...', 'DEBUG');
+  var r  = await api('/api/ami/status?node=' + encodeURIComponent(local));
+  var el = document.getElementById('nc-status');
   if (!r.ok) {
-    disp.innerHTML = `<div class="alert alert-danger">${escHtml(r.data.error || 'Status fetch failed')}</div>`;
+    el.innerHTML = '<div class="alert alert-danger">' + esc(r.data.error || 'Status failed') + '</div>';
     ncLog('Status error: ' + (r.data.error || r.status), 'ERROR');
-    if (r.data.hint) ncLog(r.data.hint, 'WARN');
     return;
   }
-  const d = r.data;
-  const keyed = d.keyed ? '<span class="badge badge-connected">KEYED</span>' : '<span class="badge badge-unknown">NOT KEYED</span>';
-  disp.innerHTML = `Node <strong>${escHtml(String(local))}</strong> &mdash; ${keyed}`;
-
+  var d     = r.data;
+  var keyed = d.keyed
+    ? '<span class="badge badge-ok">KEYED</span>'
+    : '<span class="badge badge-unk">NOT KEYED</span>';
+  var html  = '<p style="margin-bottom:10px">Node <strong>' + esc(String(local)) + '</strong> &mdash; ' + keyed + '</p>';
   if (d.connected && d.connected.length) {
-    let tbl = '<table class="node-table" style="margin-top:12px"><thead><tr><th>Connected Node</th><th>Info</th></tr></thead><tbody>';
-    for (const n of d.connected) {
-      const info = await lookupNodeQuiet(n);
-      tbl += `<tr><td class="mono">${escHtml(n)}</td><td>${escHtml(info)}</td></tr>`;
-    }
-    tbl += '</tbody></table>';
-    list.innerHTML = tbl;
-    ncLog(`Status: keyed=${d.keyed}, connected=[${d.connected.join(', ')}]`, 'OK');
+    html += '<table class="tbl"><thead><tr><th>Connected Node</th></tr></thead><tbody>';
+    d.connected.forEach(function(n) { html += '<tr><td class="mono">' + esc(n) + '</td></tr>'; });
+    html += '</tbody></table>';
+    ncLog('Connected: [' + d.connected.join(', ') + ']', 'OK');
   } else {
-    list.innerHTML = '<div class="muted" style="margin-top:8px">No nodes currently connected.</div>';
-    ncLog(`Status: keyed=${d.keyed}, no connections.`, 'OK');
+    html += '<span class="muted">No nodes currently connected.</span>';
+    ncLog('No connections.', 'OK');
   }
-
-  if (d.raw && d.raw.length) {
-    ncLog('Raw rpt show variables: ' + d.raw.join(' | '), 'DEBUG');
-  }
+  if (d.raw && d.raw.length) ncLog('rpt show variables: ' + d.raw.join(' | '), 'DEBUG');
+  el.innerHTML = html;
 }
 
-async function lookupNodeQuiet(node) {
-  try {
-    const r = await api('/api/lookup/' + encodeURIComponent(node));
-    if (r.ok) {
-      const d = r.data;
-      return [d.callsign, d.desc, d.location].filter(Boolean).join(' - ') || 'Unknown';
-    }
-  } catch(e) {}
-  return '';
-}
-
-async function lookupNode() {
-  const node = document.getElementById('lookup-node-input').value.trim();
+async function doLookup() {
+  var node = document.getElementById('lookup-input').value.trim();
   if (!node) return;
   ncLog('Looking up node ' + node + '...', 'DEBUG');
-  const r = await api('/api/lookup/' + encodeURIComponent(node));
-  const el = document.getElementById('lookup-result');
+  var r  = await api('/api/lookup/' + encodeURIComponent(node));
+  var el = document.getElementById('lookup-result');
   if (r.ok) {
-    const d = r.data;
-    el.innerHTML = `
-    <div class="stat-grid" style="grid-template-columns:repeat(auto-fill,minmax(160px,1fr))">
-      <div class="stat-box"><div class="stat-label">Node</div><div class="stat-value">${escHtml(node)}</div></div>
-      <div class="stat-box"><div class="stat-label">Callsign</div><div class="stat-value">${escHtml(d.callsign||'N/A')}</div></div>
-      <div class="stat-box"><div class="stat-label">Description</div><div class="stat-value" style="font-size:0.9rem">${escHtml(d.desc||'N/A')}</div></div>
-      <div class="stat-box"><div class="stat-label">Location</div><div class="stat-value" style="font-size:0.9rem">${escHtml(d.location||'N/A')}</div></div>
-    </div>`;
-    ncLog(`Lookup ${node}: ${d.callsign||''} ${d.desc||''} ${d.location||''}`, 'OK');
+    var d = r.data;
+    el.innerHTML =
+      '<div class="stat-grid" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr));margin-top:8px">'
+      + '<div class="stat-box"><div class="stat-label">Node</div><div class="stat-value">' + esc(node) + '</div></div>'
+      + '<div class="stat-box"><div class="stat-label">Callsign</div><div class="stat-value">' + esc(d.callsign || 'N/A') + '</div></div>'
+      + '<div class="stat-box"><div class="stat-label">Description</div><div class="stat-value" style="font-size:0.9rem">' + esc(d.desc || 'N/A') + '</div></div>'
+      + '<div class="stat-box"><div class="stat-label">Location</div><div class="stat-value" style="font-size:0.9rem">' + esc(d.location || 'N/A') + '</div></div>'
+      + '</div>';
+    ncLog('Lookup ' + node + ': ' + (d.callsign || '') + ' ' + (d.desc || ''), 'OK');
   } else {
-    el.innerHTML = `<div class="muted">Not found in local astdb.</div>`;
-    ncLog('Lookup failed for ' + node, 'WARN');
+    el.innerHTML = '<span class="muted">Not found in local astdb.</span>';
+    ncLog('Not found: ' + node, 'WARN');
   }
 }
 
-async function lookupNodeStats() {
-  const node = document.getElementById('lookup-node-input').value.trim();
+async function doStats() {
+  var node = document.getElementById('lookup-input').value.trim();
   if (!node) return;
-  ncLog('Fetching AllStarLink stats for node ' + node + '...', 'DEBUG');
-  const r = await api('/api/nodestats/' + encodeURIComponent(node));
-  if (r.ok) {
-    ncLog('Stats for ' + node + ': ' + JSON.stringify(r.data).substring(0, 200), 'OK');
-  } else {
-    ncLog('Stats fetch failed for ' + node + ': ' + (r.data.error || r.status), 'WARN');
+  ncLog('Fetching ASL stats for node ' + node + '...', 'DEBUG');
+  var r = await api('/api/nodestats/' + encodeURIComponent(node));
+  if (r.ok) ncLog('Stats: ' + JSON.stringify(r.data).substring(0, 200), 'OK');
+  else      ncLog('Stats failed: ' + (r.data.error || r.status), 'WARN');
+}
+
+/* ── Favorites ───────────────────────────────────────────────────────────── */
+function toggleFavForm() {
+  favFormOpen = !favFormOpen;
+  document.getElementById('fav-form').style.display = favFormOpen ? 'block' : 'none';
+  if (!favFormOpen) {
+    document.getElementById('fav-node').value  = '';
+    document.getElementById('fav-label').value = '';
   }
 }
 
-// ── Favorites ─────────────────────────────────────────────
 async function loadFavorites() {
-  const tbody = document.getElementById('fav-tbody');
-  tbody.innerHTML = '<tr><td colspan="5" class="muted">Loading...</td></tr>';
-  const r = await api('/api/favorites');
+  var tbody = document.getElementById('fav-tbody');
+  tbody.innerHTML = '<tr><td colspan="5" class="muted" style="padding:14px">Loading...</td></tr>';
+  var r = await api('/api/favorites');
   if (!r.ok) {
-    tbody.innerHTML = `<tr><td colspan="5" class="muted">${escHtml(r.data.error||'Failed')}</td></tr>`;
+    tbody.innerHTML = '<tr><td colspan="5" class="muted" style="padding:14px">' + esc(r.data.error || 'Failed') + '</td></tr>';
     return;
   }
-  const favs = r.data.favorites;
-  if (!favs.length) {
-    tbody.innerHTML = '<tr><td colspan="5" class="muted">No favorites yet. Add a node above.</td></tr>';
+  var favs = r.data.favorites;
+  if (!favs || !favs.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="muted" style="padding:14px">No favorites yet. Use Add Node above.</td></tr>';
     return;
   }
-  tbody.innerHTML = favs.map(f => `
-  <tr>
-    <td class="mono">${escHtml(f.node)}</td>
-    <td>${escHtml(f.label)}</td>
-    <td>${escHtml(f.callsign||'')}</td>
-    <td>${escHtml(f.location||'')}</td>
-    <td>
-      <button class="btn btn-sm btn-primary" onclick="favConnect('${escHtml(f.node)}')">Connect</button>
-      <button class="btn btn-sm" onclick="favFill('${escHtml(f.node)}')">Fill</button>
-      <button class="btn btn-sm btn-danger" onclick="deleteFavorite('${escHtml(f.node)}')">Remove</button>
-    </td>
-  </tr>`).join('');
-  ncLog(`Favorites loaded: ${favs.length} node(s).`, 'DEBUG');
-}
-
-function showAddFavorite() {
-  document.getElementById('fav-add-form').style.display = 'block';
-}
-function hideFavAdd() {
-  document.getElementById('fav-add-form').style.display = 'none';
-  document.getElementById('fav-node-input').value  = '';
-  document.getElementById('fav-label-input').value = '';
+  tbody.innerHTML = favs.map(function(f) {
+    return '<tr>'
+      + '<td class="mono">' + esc(f.node) + '</td>'
+      + '<td>' + esc(f.label) + '</td>'
+      + '<td>' + esc(f.callsign || '') + '</td>'
+      + '<td>' + esc(f.location || '') + '</td>'
+      + '<td><div class="btn-row">'
+      + '<button class="btn btn-sm btn-primary" onclick="favConnect(\'' + esc(f.node) + '\')">Connect</button>'
+      + '<button class="btn btn-sm" onclick="favFill(\'' + esc(f.node) + '\')">Fill</button>'
+      + '<button class="btn btn-sm btn-danger" onclick="deleteFavorite(\'' + esc(f.node) + '\')">Remove</button>'
+      + '</div></td>'
+      + '</tr>';
+  }).join('');
+  ncLog('Favorites loaded: ' + favs.length, 'DEBUG');
 }
 
 async function addFavorite() {
-  const node  = document.getElementById('fav-node-input').value.trim();
-  const label = document.getElementById('fav-label-input').value.trim();
+  var node  = document.getElementById('fav-node').value.trim();
+  var label = document.getElementById('fav-label').value.trim();
   if (!node) { ncLog('Node number required.', 'WARN'); return; }
-  const r = await api('/api/favorites/add', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({node, label})
+  var r = await api('/api/favorites/add', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({node: node, label: label})
   });
   if (r.ok) {
-    ncLog('Added favorite: ' + node + ' (' + (r.data.label||'') + ')', 'OK');
-    hideFavAdd();
+    ncLog('Added: ' + node + ' (' + (r.data.label || '') + ')', 'OK');
+    toggleFavForm();
     loadFavorites();
   } else {
-    ncLog('Add favorite failed: ' + (r.data.error||r.status), 'ERROR');
+    ncLog('Add failed: ' + (r.data.error || r.status), 'ERROR');
   }
 }
 
 async function deleteFavorite(node) {
-  const r = await api('/api/favorites/delete', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({node})
+  var r = await api('/api/favorites/delete', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({node: node})
   });
-  if (r.ok) { loadFavorites(); }
-  else { ncLog('Delete failed: ' + (r.data.error||r.status), 'ERROR'); }
+  if (r.ok) loadFavorites();
+  else ncLog('Delete failed: ' + (r.data.error || r.status), 'ERROR');
 }
 
 function favFill(node) {
-  document.getElementById('nc-remote-node').value = node;
-  ncLog('Filled remote node: ' + node, 'DEBUG');
+  document.getElementById('nc-remote').value = node;
+  ncLog('Remote node set to: ' + node, 'DEBUG');
 }
 
 async function favConnect(node) {
-  const local = document.getElementById('nc-local-node').value.trim();
-  document.getElementById('nc-remote-node').value = node;
-  ncLog(`Connecting ${local} -> ${node} (transceive)...`, 'AMI');
-  const r = await api('/api/ami/connect', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({local_node:local, remote_node:node, mode:'3'})
+  var local = document.getElementById('nc-local').value.trim();
+  document.getElementById('nc-remote').value = node;
+  ncLog('Connecting ' + local + ' -> ' + node + '...', 'AMI');
+  var r = await api('/api/ami/connect', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({local_node: local, remote_node: node, mode: '3'})
   });
   if (r.ok) {
-    ncLog('Connect sent. ' + (r.data.output||[]).join(' | '), 'OK');
-    setTimeout(ncRefreshStatus, 1500);
+    ncLog('Connect sent. ' + (r.data.output || []).join(' | '), 'OK');
+    setTimeout(ncStatus, 1500);
   } else {
-    ncLog('Connect failed: ' + (r.data.error||r.status), 'ERROR');
-    if (r.data.hint) ncLog(r.data.hint, 'WARN');
+    ncLog('Connect failed: ' + (r.data.error || r.status), 'ERROR');
   }
 }
 
-// ── AMI Diagnostics ───────────────────────────────────────
+/* ── AMI Diagnostics ─────────────────────────────────────────────────────── */
 async function testAMI() {
-  const el = document.getElementById('ami-test-result');
-  el.innerHTML = '<div class="muted"><span class="spinner"></span> Testing AMI connection...</div>';
-  log('Running AMI connectivity test...', 'INFO');
-  const r = await api('/api/ami/test');
+  var el = document.getElementById('ami-test-out');
+  el.innerHTML = '<span class="muted"><span class="spinner"></span> Testing...</span>';
+  log('Running AMI test...', 'INFO');
+  var r = await api('/api/ami/test');
   if (r.ok && r.data.connected) {
-    el.innerHTML = `
-    <div class="alert alert-success">
-      AMI connected successfully as <strong>${escHtml(r.data.ami_user)}</strong>
-      at ${escHtml(r.data.ami_host)}.
-      ${r.data.asterisk_info ? '<br>Asterisk: ' + escHtml(r.data.asterisk_info) : ''}
-    </div>`;
-    log('AMI test PASSED: ' + JSON.stringify(r.data), 'OK');
+    el.innerHTML = '<div class="alert alert-success">AMI connected as <strong>'
+      + esc(r.data.ami_user) + '</strong> at ' + esc(r.data.ami_host || '')
+      + (r.data.asterisk_info ? '<br>' + esc(r.data.asterisk_info) : '') + '</div>';
+    log('AMI test PASSED.', 'OK');
   } else {
-    const err = r.data.error || 'Unknown error';
-    el.innerHTML = `
-    <div class="alert alert-danger">
-      <strong>AMI test failed</strong><br>
-      ${escHtml(err)}<br>
-      ${!r.data.creds_found ? '<br>Credentials not configured. See guide below.' : ''}
-    </div>`;
-    logErr('AMI test FAILED: ' + err);
+    var err = r.data.error || 'Unknown error';
+    el.innerHTML = '<div class="alert alert-danger"><strong>AMI test failed</strong><br>'
+      + esc(err)
+      + (!r.data.creds_found ? '<br>Credentials not set. See Configuration Guide below.' : '')
+      + '</div>';
+    log('AMI test FAILED: ' + err, 'ERROR');
   }
 }
 
 async function rawTestAMI() {
-  const el = document.getElementById('ami-raw-result');
-  el.innerHTML = '<div class="muted"><span class="spinner"></span> Running raw socket test...</div>';
-  log('Running raw AMI socket test...', 'DEBUG');
-  const r = await api('/api/ami/raw_test');
-  const d = r.data;
-  const color = d.success ? 'var(--accent2)' : 'var(--danger)';
-  let html = `<div style="border:1px solid ${color};border-radius:4px;padding:12px;background:var(--bg3)">`;
-  html += `<div style="font-weight:600;color:${color};margin-bottom:8px">`;
-  html += d.success ? 'Raw test: PASSED' : 'Raw test: FAILED';
-  html += `</div>`;
-  if (d.banner)       html += `<div class="muted" style="font-size:0.85rem">Banner: <span class="mono">${escHtml(d.banner)}</span></div>`;
-  if (d.ami_user)     html += `<div class="muted" style="font-size:0.85rem">User: <span class="mono">${escHtml(d.ami_user)}</span> at <span class="mono">${escHtml(d.ami_host||'')}</span></div>`;
-  if (d.message)      html += `<div style="color:var(--danger);font-size:0.85rem">Asterisk message: ${escHtml(d.message)}</div>`;
-  if (d.cmd_output && d.cmd_output.length) html += `<div class="muted" style="font-size:0.85rem;margin-top:6px">Asterisk: ${escHtml(d.cmd_output[0]||'')}</div>`;
-  html += `<details style="margin-top:10px"><summary style="cursor:pointer;font-size:0.85rem;color:var(--text2)">Full transcript (${(d.transcript||[]).length} lines)</summary>`;
-  html += `<div class="log-panel" style="height:180px;margin-top:6px">`;
-  for (const line of (d.transcript || [])) {
-    html += `<div style="font-size:0.8rem">${escHtml(line)}</div>`;
-  }
+  var el = document.getElementById('ami-raw-out');
+  el.innerHTML = '<span class="muted"><span class="spinner"></span> Raw socket test...</span>';
+  var r = await api('/api/ami/raw_test');
+  var d = r.data || {};
+  var color = d.success ? 'var(--green)' : 'var(--danger)';
+  var html  = '<div style="border:1px solid ' + color + ';border-radius:4px;padding:12px;background:var(--bg3)">';
+  html += '<div style="font-weight:600;color:' + color + ';margin-bottom:8px">'
+        + (d.success ? 'Raw test: PASSED' : 'Raw test: FAILED') + '</div>';
+  if (d.banner)   html += '<div class="muted" style="font-size:0.85rem">Banner: <span class="mono">' + esc(d.banner) + '</span></div>';
+  if (d.ami_user) html += '<div class="muted" style="font-size:0.85rem">User: <span class="mono">' + esc(d.ami_user) + '</span> at <span class="mono">' + esc(d.ami_host || '') + '</span></div>';
+  if (d.message)  html += '<div style="color:var(--danger);font-size:0.85rem;margin-top:4px">Asterisk message: ' + esc(d.message) + '</div>';
+  if (d.cmd_output && d.cmd_output.length)
+    html += '<div class="muted" style="font-size:0.85rem;margin-top:4px">Asterisk: ' + esc(d.cmd_output[0] || '') + '</div>';
+  var lines = d.transcript || [];
+  html += '<details style="margin-top:10px"><summary style="cursor:pointer;font-size:0.85rem;color:var(--text2)">Full transcript (' + lines.length + ' lines)</summary>';
+  html += '<div class="log-panel" style="height:180px;margin-top:6px">';
+  lines.forEach(function(line) { html += '<div style="font-size:0.8rem">' + esc(line) + '</div>'; });
   html += '</div></details></div>';
   el.innerHTML = html;
-  if (d.success) logOk('Raw AMI test passed. ' + (d.cmd_output||[]).join(' '));
-  else logErr('Raw AMI test failed: ' + (d.message || d.error || 'unknown'));
-}
-  const r = await api('/api/sysinfo');
-  const el = document.getElementById('sysinfo-display');
-  if (!r.ok) { el.innerHTML = '<div class="muted">Failed to load system info.</div>'; return; }
-  const d = r.data;
-  el.innerHTML = `
-  <table class="node-table">
-    <tr><td>Running as</td><td class="mono">${escHtml(d.running_as||'')}</td></tr>
-    <tr><td>Asterisk</td><td>${d.asterisk_active ? '<span class="badge badge-connected">Running</span>' : '<span class="badge badge-offline">Stopped</span>'}</td></tr>
-    <tr><td>Asterisk Version</td><td class="mono" style="font-size:0.85rem">${escHtml(d.asterisk_version||'')}</td></tr>
-    <tr><td>ASL Version</td><td class="mono">${escHtml(d.asl_version||'')}</td></tr>
-    <tr><td>AMI User</td><td class="mono">${escHtml(d.ami_user||'NOT CONFIGURED')}</td></tr>
-    <tr><td>AMI Host</td><td class="mono">${escHtml(d.ami_host||'')}</td></tr>
-    <tr><td>rpt.conf path</td><td class="mono">${escHtml(d.rpt_conf_path||'')}</td></tr>
-    <tr><td>rpt.conf exists</td><td>${d.rpt_conf_exists ? 'Yes' : '<span style="color:var(--danger)">No</span>'}</td></tr>
-    <tr><td>rpt.conf writable</td><td>${d.rpt_conf_writable ? 'Yes' : '<span style="color:var(--warn)">No (service needs User=root)</span>'}</td></tr>
-    <tr><td>CPU Temp</td><td>${d.cpu_temp != null ? d.cpu_temp + ' C' : 'N/A'}</td></tr>
-    <tr><td>Uptime</td><td>${escHtml(d.uptime||'')}</td></tr>
-    <tr><td>Disk</td><td>${d.disk ? `${d.disk.used} used / ${d.disk.total} total (${d.disk.pct})` : 'N/A'}</td></tr>
-  </table>`;
+  if (d.success) log('Raw AMI test passed. ' + (d.cmd_output || []).join(' '), 'OK');
+  else           log('Raw AMI test failed: ' + (d.message || d.error || 'unknown'), 'ERROR');
 }
 
-// ── Init ──────────────────────────────────────────────────
-window.addEventListener('DOMContentLoaded', () => {
-  log('ASL3-EZ frontend loaded.', 'INFO');
+async function loadSysInfo() {
+  var el = document.getElementById('sysinfo-out');
+  var r  = await api('/api/sysinfo');
+  if (!r.ok) { el.innerHTML = '<span class="muted">Failed to load system info.</span>'; return; }
+  var d  = r.data;
+  el.innerHTML =
+    '<table class="tbl">'
+    + '<tr><td>Running as</td><td class="mono">' + esc(d.running_as || '') + '</td></tr>'
+    + '<tr><td>Asterisk</td><td>'
+      + (d.asterisk_active ? '<span class="badge badge-ok">Running</span>' : '<span class="badge badge-err">Stopped</span>')
+      + '</td></tr>'
+    + '<tr><td>Asterisk Version</td><td class="mono" style="font-size:0.85rem">' + esc(d.asterisk_version || '') + '</td></tr>'
+    + '<tr><td>ASL Version</td><td class="mono">' + esc(d.asl_version || '') + '</td></tr>'
+    + '<tr><td>AMI User</td><td class="mono">' + esc(d.ami_user || 'NOT CONFIGURED') + '</td></tr>'
+    + '<tr><td>AMI Host</td><td class="mono">' + esc(d.ami_host || '') + '</td></tr>'
+    + '<tr><td>rpt.conf path</td><td class="mono">' + esc(d.rpt_conf_path || '') + '</td></tr>'
+    + '<tr><td>rpt.conf exists</td><td>' + (d.rpt_conf_exists ? 'Yes' : '<span style="color:var(--danger)">No</span>') + '</td></tr>'
+    + '<tr><td>rpt.conf writable</td><td>'
+      + (d.rpt_conf_writable ? 'Yes' : '<span style="color:var(--warn)">No (User=root needed in service file)</span>')
+      + '</td></tr>'
+    + '<tr><td>CPU Temp</td><td>' + (d.cpu_temp != null ? d.cpu_temp + ' C' : 'N/A') + '</td></tr>'
+    + '<tr><td>Uptime</td><td>' + esc(d.uptime || '') + '</td></tr>'
+    + '<tr><td>Disk</td><td>'
+      + (d.disk ? d.disk.used + ' used / ' + d.disk.total + ' total (' + d.disk.pct + ')' : 'N/A')
+      + '</td></tr>'
+    + '</table>';
+}
+
+/* ── Init ────────────────────────────────────────────────────────────────── */
+window.addEventListener('DOMContentLoaded', function() {
+  log('ASL3-EZ loaded.', 'INFO');
   {% if not conf_exists %}
-  logWarn('rpt.conf not found at {{ conf_path }}. Check the path and permissions.');
+  log('rpt.conf not found at {{ conf_path }}. Check path and permissions.', 'WARN');
+  {% endif %}
+  {% if nodes %}
+  log('Nodes in rpt.conf: {{ nodes|join(", ") }}', 'INFO');
+  {% else %}
+  log('No node stanzas found in rpt.conf.', 'WARN');
   {% endif %}
   refreshDashboard();
 });
