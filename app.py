@@ -140,31 +140,31 @@ class AMIClient:
         self._sock   = None
         self._buf    = ""
 
-    def connect(self):
-    self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    self._sock.settimeout(self.timeout)
-
-    print(f"[AMI] Connecting to {self.host}:{self.port} as '{self.user}'")
-
-    self._sock.connect((self.host, self.port))
-
-    banner = self._read_response()
-    print(f"[AMI] Banner: {banner}")
-
-    self._action({
-        "Action": "Login",
-        "Username": self.user,
-        "Secret": self.secret
-    })
-
-    resp = self._read_response()
-    print(f"[AMI] Login response: {resp}")
-
-    if resp.get("Response") != "Success":
-        raise Exception(
-            f"AMI login failed: {resp.get('Message', 'unknown')} "
-            f"(user={self.user})"
-        )
+      def connect(self):
+        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._sock.settimeout(self.timeout)
+        
+        print(f"[AMI] Connecting to {self.host}:{self.port} as '{self.user}'")
+        
+        self._sock.connect((self.host, self.port))
+        
+        banner = self._read_response()
+        print(f"[AMI] Banner: {banner}")
+        
+        self._action({
+            "Action": "Login",
+            "Username": self.user,
+            "Secret": self.secret
+        })
+        
+        resp = self._read_response()
+        print(f"[AMI] Login response: {resp}")
+        
+        if resp.get("Response") != "Success":
+            raise Exception(
+                f"AMI login failed: {resp.get('Message', 'unknown')} "
+                f"(user={self.user})"
+            )
     
     def close(self):
         try:
