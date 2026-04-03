@@ -1,3 +1,5 @@
+!!! Warning - There are known issues with rpt.conf editing and saving where it will nuke your rpt.conf file. Use at your own risk. !!!
+
 # ASL3-EZ - AllStarLink 3 Node Manager
 
 A browser-based web interface for managing your AllStarLink 3 nodes:
