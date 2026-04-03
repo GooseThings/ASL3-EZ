@@ -1,3 +1,8 @@
+###############################################
+###             ASL3-EZ Service             ###
+###############################################
+# https://www.github.com/GooseThings/ASL3-EZ/
+#
 [Unit]
 Description=ASL3-EZ AllStarLink 3 Node Manager
 After=network.target asterisk.service
