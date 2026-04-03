@@ -49,35 +49,83 @@ def get_db():
     return conn
 
 # ─── manager.conf reader ─────────────────────────────────────────────────────
-
 def parse_manager_conf():
-    """Return dict {user, secret, port} from manager.conf."""
-    result = {"user": "admin", "secret": "", "host": AMI_HOST, "port": AMI_PORT}
+    """
+    Return AMI credentials.
+
+    Priority:
+    1. Environment variables (RECOMMENDED)
+    2. Fallback to manager.conf parsing (safe + validated)
+    """
+    env_user   = os.environ.get("AMI_USER")
+    env_secret = os.environ.get("AMI_SECRET")
+
+    if env_user and env_secret:
+        return {
+            "user": env_user,
+            "secret": env_secret,
+            "host": AMI_HOST,
+            "port": AMI_PORT
+        }
+
+    # --- Fallback: parse manager.conf safely ---
+    result = {
+        "user": None,
+        "secret": None,
+        "host": AMI_HOST,
+        "port": AMI_PORT
+    }
+
     try:
         with open(MANAGER_CONF) as f:
             content = f.read()
-        # Find enabled port
+
+        # Port
         m = re.search(r'^\s*port\s*=\s*(\d+)', content, re.MULTILINE)
         if m:
             result["port"] = int(m.group(1))
-        # Find first [user] stanza that isn't [general]
+
         sections = re.split(r'^\[', content, flags=re.MULTILINE)
+
         for sec in sections:
             lines = sec.strip().splitlines()
             if not lines:
                 continue
+
             header = lines[0].rstrip(']').strip()
-            if header.lower() in ('general', ''):
+
+            if header.lower() in ("general", ""):
                 continue
-            result["user"] = header
+
+            secret = None
+            enabled = True   # default true if not specified
+            can_write = False
+
             for line in lines[1:]:
-                m2 = re.match(r'^\s*secret\s*=\s*(.+)', line)
-                if m2:
-                    result["secret"] = m2.group(1).strip()
-                    break
-            break
+                line = line.strip()
+
+                if line.startswith(";"):
+                    continue
+
+                if "secret" in line:
+                    secret = line.split("=", 1)[1].split(";")[0].strip()
+
+                if "enabled" in line:
+                    enabled = "yes" in line.lower()
+
+                if "write" in line:
+                    if "all" in line.lower() or "command" in line.lower():
+                        can_write = True
+
+            # Only accept VALID AMI users
+            if secret and enabled and can_write:
+                result["user"] = header
+                result["secret"] = secret
+                break
+
     except Exception as e:
-        pass
+        print(f"[AMI PARSE ERROR] {e}")
+
     return result
 
 # ─── AMI client ──────────────────────────────────────────────────────────────
@@ -93,15 +141,31 @@ class AMIClient:
         self._buf    = ""
 
     def connect(self):
-        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._sock.settimeout(self.timeout)
-        self._sock.connect((self.host, self.port))
-        self._read_response()   # banner
-        self._action({"Action": "Login", "Username": self.user, "Secret": self.secret})
-        resp = self._read_response()
-        if "Success" not in resp.get("Response", ""):
-            raise Exception("AMI login failed: " + resp.get("Message", "unknown"))
+    self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    self._sock.settimeout(self.timeout)
 
+    print(f"[AMI] Connecting to {self.host}:{self.port} as '{self.user}'")
+
+    self._sock.connect((self.host, self.port))
+
+    banner = self._read_response()
+    print(f"[AMI] Banner: {banner}")
+
+    self._action({
+        "Action": "Login",
+        "Username": self.user,
+        "Secret": self.secret
+    })
+
+    resp = self._read_response()
+    print(f"[AMI] Login response: {resp}")
+
+    if resp.get("Response") != "Success":
+        raise Exception(
+            f"AMI login failed: {resp.get('Message', 'unknown')} "
+            f"(user={self.user})"
+        )
+    
     def close(self):
         try:
             if self._sock:
@@ -189,14 +253,15 @@ class AMIClient:
         status["connected"] = list(set(status["connected"]))
         return status
 
-
 def ami_session():
-    """Create and return a connected AMIClient using manager.conf credentials."""
     cfg = parse_manager_conf()
+
+    if not cfg.get("user") or not cfg.get("secret"):
+        raise Exception("AMI credentials not configured (set AMI_USER / AMI_SECRET)")
+
     client = AMIClient(cfg["host"], cfg["port"], cfg["user"], cfg["secret"])
     client.connect()
     return client
-
 
 # ─── rpt.conf helpers ────────────────────────────────────────────────────────
 
