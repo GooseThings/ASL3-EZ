@@ -1,4 +1,5 @@
-# ASL3-EZ
+# ASL3-EZ - DO NOT RUN
+Stuff is broken right now. Mostly the AMI.
 
 **AllStarLink 3 Editor by N8GMZ**
 
