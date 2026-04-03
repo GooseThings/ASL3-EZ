@@ -1,7 +1,6 @@
 #!/bin/bash
 # ASL3-EZ - Installer
 # Run as root: sudo bash install.sh
-
 set -e
 
 INSTALL_DIR="/opt/ASL3-EZ"
@@ -10,70 +9,104 @@ PORT="${PORT:-5000}"
 
 echo ""
 echo "============================================"
-echo "  ASL3-EZ rpt.conf Editor - Installer"
-echo "  by N8GMZ"
+echo "  ASL3-EZ AllStarLink 3 Node Manager"
+echo "  Installer  -  by N8GMZ"
 echo "============================================"
 echo ""
 
-# Check root
+# ── Root check ────────────────────────────────────────────
 if [ "$EUID" -ne 0 ]; then
-  echo "ERROR: Please run as root: sudo bash install.sh"
-  exit 1
+    echo "ERROR: Please run as root: sudo bash install.sh"
+    exit 1
 fi
 
-# Check Python3
+# ── Python check ─────────────────────────────────────────
 if ! command -v python3 &>/dev/null; then
-  echo "Installing python3..."
-  apt install -y python3 python3-pip python3-venv python3-full
+    echo "[1/7] Installing Python 3..."
+    apt-get install -y python3 python3-pip python3-venv python3-full
+else
+    echo "[1/7] Python 3 found: $(python3 --version)"
 fi
 
-echo "[1/6] Installing dependencies..."
-apt install -y python3-venv python3-full 2>/dev/null || true
+apt-get install -y python3-venv python3-full 2>/dev/null || true
 
-echo "[2/6] Installing to $INSTALL_DIR..."
+# ── Copy files ────────────────────────────────────────────
+echo "[2/7] Installing to $INSTALL_DIR..."
 mkdir -p "$INSTALL_DIR"
 cp -r . "$INSTALL_DIR/"
+chmod 750 "$INSTALL_DIR"
 
-echo "[3/6] Creating Python virtual environment..."
+# ── Virtual environment ───────────────────────────────────
+echo "[3/7] Creating Python virtual environment..."
 python3 -m venv "$INSTALL_DIR/venv"
 "$INSTALL_DIR/venv/bin/pip" install --quiet --upgrade pip
 "$INSTALL_DIR/venv/bin/pip" install --quiet flask gunicorn
 
-echo "[4/6] Installing systemd service..."
+# ── rpt_backups directory ─────────────────────────────────
+echo "[4/7] Creating backup directory..."
+mkdir -p /etc/asterisk/rpt_backups
+chmod 750 /etc/asterisk/rpt_backups
+
+# ── Verify rpt.conf accessible ────────────────────────────
+echo "[5/7] Checking rpt.conf..."
+if [ -f /etc/asterisk/rpt.conf ]; then
+    echo "      Found: /etc/asterisk/rpt.conf"
+    ls -la /etc/asterisk/rpt.conf
+else
+    echo "      WARNING: /etc/asterisk/rpt.conf not found."
+    echo "      The editor will still start but rpt.conf must exist to edit."
+fi
+
+# ── Systemd service ───────────────────────────────────────
+echo "[6/7] Installing systemd service ($SERVICE_NAME)..."
+
+# Remove any old service under the previous name to avoid duplicates
+if [ -f /etc/systemd/system/asl3-rpt-editor.service ]; then
+    echo "      Removing old asl3-rpt-editor service..."
+    systemctl stop asl3-rpt-editor 2>/dev/null || true
+    systemctl disable asl3-rpt-editor 2>/dev/null || true
+    rm -f /etc/systemd/system/asl3-rpt-editor.service
+fi
+
 cp "$INSTALL_DIR/ASL3-EZ.service" /etc/systemd/system/
 systemctl daemon-reload
 
-echo "[5/6] Opening firewall port $PORT..."
+# ── Firewall ──────────────────────────────────────────────
+echo "      Opening firewall port $PORT..."
 if command -v firewall-cmd &>/dev/null; then
-  firewall-cmd --permanent --add-port=${PORT}/tcp 2>/dev/null && firewall-cmd --reload 2>/dev/null || true
-  echo "  firewalld: port $PORT opened."
+    firewall-cmd --permanent --add-port=${PORT}/tcp 2>/dev/null && firewall-cmd --reload 2>/dev/null || true
 elif command -v ufw &>/dev/null; then
-  ufw allow ${PORT}/tcp 2>/dev/null || true
-  echo "  ufw: port $PORT opened."
-else
-  echo "  No firewall manager found - you may need to open port $PORT manually."
+    ufw allow ${PORT}/tcp 2>/dev/null || true
 fi
 
-echo "[6/6] Enabling and starting service..."
+# ── Start service ─────────────────────────────────────────
+echo "[7/7] Enabling and starting $SERVICE_NAME..."
 systemctl enable "$SERVICE_NAME"
 systemctl restart "$SERVICE_NAME"
-
 sleep 2
+
 if systemctl is-active --quiet "$SERVICE_NAME"; then
-  echo ""
-  echo "============================================"
-  echo "  ✅ Installation complete!"
-  echo ""
-  IP=$(hostname -I | awk '{print $1}')
-  echo "  Open your browser and go to:"
-  echo "  http://${IP}:${PORT}"
-  echo ""
-  echo "  rpt.conf:  /etc/asterisk/rpt.conf"
-  echo "  Backups:   /etc/asterisk/rpt_backups/"
-  echo "  Logs:      journalctl -u $SERVICE_NAME -f"
-  echo "============================================"
+    IP=$(hostname -I | awk '{print $1}')
+    echo ""
+    echo "============================================"
+    echo "  Installation complete!"
+    echo ""
+    echo "  Open your browser:"
+    echo "    http://${IP}:${PORT}"
+    echo ""
+    echo "  IMPORTANT: Set your AMI credentials:"
+    echo "    sudo nano /etc/systemd/system/ASL3-EZ.service"
+    echo "    (Set AMI_USER and AMI_SECRET to match manager.conf)"
+    echo "    sudo systemctl daemon-reload"
+    echo "    sudo systemctl restart ASL3-EZ"
+    echo ""
+    echo "  rpt.conf:  /etc/asterisk/rpt.conf"
+    echo "  Backups:   /etc/asterisk/rpt_backups/"
+    echo "  Logs:      journalctl -u $SERVICE_NAME -f"
+    echo "============================================"
 else
-  echo ""
-  echo "WARNING: Service may not have started. Check:"
-  echo "  journalctl -u $SERVICE_NAME -n 30"
+    echo ""
+    echo "WARNING: Service may not have started. Check:"
+    echo "  journalctl -u $SERVICE_NAME -n 50"
+    echo "  systemctl status $SERVICE_NAME"
 fi
