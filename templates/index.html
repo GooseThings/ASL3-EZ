@@ -952,11 +952,13 @@ async function ncConnect(mode) {
     body: JSON.stringify({local_node: local, remote_node: remote, mode: String(mode), disconnect_first: disc})
   });
   if (r.ok) {
-    ncLog('Connect sent. ' + (r.data.output || []).join(' | '), 'OK');
-    setTimeout(ncStatus, 1500);
+    var outStr = (r.data.output || []).join(' | ') || '(no output - this is normal for ilink commands)';
+    ncLog('Connect command sent. ' + outStr, 'OK');
+    if (r.data.command) ncLog('Command: ' + r.data.command, 'DEBUG');
+    setTimeout(ncStatus, 2000);
   } else {
     ncLog('Connect failed: ' + (r.data.error || r.status), 'ERROR');
-    if (r.data.hint) ncLog(r.data.hint, 'WARN');
+    if (r.data.hint) ncLog('Hint: ' + r.data.hint, 'WARN');
   }
 }
 
@@ -970,8 +972,10 @@ async function ncDisconnect(all) {
     body: JSON.stringify({local_node: local, remote_node: remote})
   });
   if (r.ok) {
-    ncLog('Disconnect sent. ' + (r.data.output || []).join(' '), 'OK');
-    setTimeout(ncStatus, 1500);
+    var outStr = (r.data.output || []).join(' ') || '(no output - this is normal for ilink commands)';
+    ncLog('Disconnect sent. ' + outStr, 'OK');
+    if (r.data.command) ncLog('Command: ' + r.data.command, 'DEBUG');
+    setTimeout(ncStatus, 2000);
   } else {
     ncLog('Disconnect failed: ' + (r.data.error || r.status), 'ERROR');
   }
@@ -1020,7 +1024,8 @@ async function doLookup() {
       + '<div class="stat-box"><div class="stat-label">Description</div><div class="stat-value" style="font-size:0.9rem">' + esc(d.desc || 'N/A') + '</div></div>'
       + '<div class="stat-box"><div class="stat-label">Location</div><div class="stat-value" style="font-size:0.9rem">' + esc(d.location || 'N/A') + '</div></div>'
       + '</div>';
-    ncLog('Lookup ' + node + ': ' + (d.callsign || '') + ' ' + (d.desc || ''), 'OK');
+    ncLog('Lookup ' + node + ' [source=' + (d.source||'?') + ']: ' + (d.callsign || '(no callsign)') + ' ' + (d.desc || ''), d.callsign ? 'OK' : 'WARN');
+    if (!d.callsign) ncLog('No callsign found. Node DB may still be loading. Try: sudo asl3-update-astdb', 'WARN');
   } else {
     el.innerHTML = '<span class="muted">Not found in local astdb.</span>';
     ncLog('Not found: ' + node, 'WARN');
@@ -1210,7 +1215,23 @@ window.addEventListener('DOMContentLoaded', function() {
   log('No node stanzas found in rpt.conf.', 'WARN');
   {% endif %}
   refreshDashboard();
+  // Check node DB status and trigger load
+  checkNodeDB();
 });
+
+async function checkNodeDB() {
+  var r = await api('/api/debug/nodedb');
+  if (!r.ok) return;
+  var d = r.data;
+  if (d.allmondb_entries > 0) {
+    log('Node DB: ' + d.allmondb_entries + ' nodes loaded from AllStarLink API.', 'OK');
+  } else if (d.astdb_entries > 0) {
+    log('Node DB: ' + d.astdb_entries + ' nodes from local astdb.txt (API not yet fetched).', 'INFO');
+  } else {
+    log('Node DB: Not loaded yet. First lookup will fetch from AllStarLink API.', 'WARN');
+    log('For offline use, run: sudo asl3-update-astdb', 'DEBUG');
+  }
+}
 </script>
 </body>
 </html>

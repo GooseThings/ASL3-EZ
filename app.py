@@ -58,11 +58,19 @@ if not os.path.exists(SYSTEMCTL_PATH):
     SYSTEMCTL_PATH = "/usr/bin/systemctl"
 ASTERISK_PATH   = "/usr/sbin/asterisk"
 
+# ASL3 astdb.txt is written by asl3-update-astdb (from asl3-update-nodelist package)
 ASTDB_PATHS = [
     "/var/lib/asterisk/astdb.txt",
     "/var/log/asterisk/astdb.txt",
+    "/tmp/astdb.txt",
 ]
-ASL_STATS_URL = "https://stats.allstarlink.org/api/stats/{}"
+ASL_STATS_URL  = "https://stats.allstarlink.org/api/stats/{}"
+# AllStarLink node description database (callsign, location, description)
+# Format: node,callsign,description,location  (pipe-separated fields)
+ALLMONDB_URL   = "https://allmondb.allstarlink.org/allmondb.php"
+_allmondb_cache = {}
+_allmondb_loaded = False
+_allmondb_lock   = threading.Lock()
 
 app.secret_key = SECRET_KEY
 
@@ -416,28 +424,64 @@ class AMIClient:
 
     # ── app_rpt helpers ───────────────────────────────────────────────────────
 
-    def rpt_cmd(self, node: str, subcmd: str) -> list:
-        """Issue: rpt cmd <node> <subcmd>  (correct syntax for ASL3 app_rpt)."""
-        return self.command(f"rpt cmd {node} {subcmd}")
+    def rpt_cmd(self, node: str, subcmd: str) -> dict:
+        """
+        Issue an app_rpt command via AMI.
+
+        ASL3 / Asterisk 20 uses the AMI Action "Command" with the CLI command
+        "rpt cmd <node> <subcmd>".
+
+        The subcmd for ilink operations is:
+            ilink <function_number> [node_number]
+
+        ilink function numbers:
+            1  = disconnect specific node
+            2  = connect monitor-only
+            3  = connect transceive
+            6  = disconnect all
+            12 = permanent monitor
+            13 = permanent transceive
+
+        Returns dict with keys: output (list), success (bool), raw (str)
+        """
+        full_cmd = f"rpt cmd {node} {subcmd}"
+        log("INFO", f"[AMI] rpt_cmd: {full_cmd!r}")
+        output_lines = self.command(full_cmd)
+        log("DEBUG", f"[AMI] rpt_cmd output: {output_lines}")
+
+        # Determine success — app_rpt returns nothing on success (empty output
+        # is normal for ilink commands). An explicit error line indicates failure.
+        error_indicators = ["error", "invalid", "no such", "failed", "unknown command"]
+        raw_joined = " ".join(output_lines).lower()
+        is_error = any(e in raw_joined for e in error_indicators)
+
+        return {
+            "output":  output_lines,
+            "success": not is_error,
+            "raw":     raw_joined,
+            "command": full_cmd,
+        }
 
     def get_node_status(self, node: str) -> dict:
         status = {"keyed": False, "connected": [], "raw": [], "lstats": []}
 
+        # rpt show variables gives us RPT_RXKEYED and RPT_LINKS
         lines = self.command(f"rpt show variables {node}")
         status["raw"] = lines
         log("DEBUG", f"[AMI] rpt show variables {node} -> {lines}")
         for line in lines:
             if "RPT_RXKEYED" in line and "=1" in line:
                 status["keyed"] = True
-            for n in re.findall(r'\b(\d{4,7})\b', line):
+            for n in re.findall(r"(\d{4,7})", line):
                 if n != str(node) and n not in status["connected"]:
                     status["connected"].append(n)
 
+        # rpt lstats gives connected node details
         lstats = self.command(f"rpt lstats {node}")
         status["lstats"] = lstats
         log("DEBUG", f"[AMI] rpt lstats {node} -> {lstats}")
         for line in lstats:
-            for n in re.findall(r'\b(\d{4,7})\b', line):
+            for n in re.findall(r"(\d{4,7})", line):
                 if n != str(node) and n not in status["connected"]:
                     status["connected"].append(n)
 
@@ -594,14 +638,24 @@ def update_setting_in_content(content, section, key, value, enable=True):
 
 
 # ---------------------------------------------------------------------------
-# astdb / node lookup
 # ---------------------------------------------------------------------------
-_astdb_cache  = {}
-_astdb_loaded = False
-_astdb_lock   = threading.Lock()
+# Node lookup — AllStarLink Allmon DB (live API) + local astdb.txt fallback
+#
+# The authoritative source for callsign/description/location is the
+# AllStarLink Allmon DB API at allmondb.allstarlink.org.
+# The local astdb.txt (written by asl3-update-astdb) is used as a fallback
+# when the network is unavailable.
+#
+# allmondb.php format (pipe-separated):
+#   node|callsign|description|location
+# ---------------------------------------------------------------------------
+_astdb_cache   = {}   # from local astdb.txt
+_astdb_loaded  = False
+_astdb_lock    = threading.Lock()
 
 
 def load_astdb():
+    """Load local astdb.txt into cache. Called once at startup."""
     global _astdb_cache, _astdb_loaded
     with _astdb_lock:
         for path in ASTDB_PATHS:
@@ -610,12 +664,17 @@ def load_astdb():
                     count = 0
                     with open(path) as f:
                         for line in f:
-                            parts = [p.strip() for p in line.strip().split(",")]
+                            line = line.strip()
+                            if not line or line.startswith("#"):
+                                continue
+                            # Try pipe-separated first (allmondb format), then comma
+                            sep = "|" if "|" in line else ","
+                            parts = [p.strip() for p in line.split(sep)]
                             if len(parts) >= 2:
                                 node     = parts[0]
                                 callsign = parts[1] if len(parts) > 1 else ""
-                                desc     = parts[2]  if len(parts) > 2 else ""
-                                location = parts[3]  if len(parts) > 3 else ""
+                                desc     = parts[2] if len(parts) > 2 else ""
+                                location = parts[3] if len(parts) > 3 else ""
                                 _astdb_cache[node] = {
                                     "callsign": callsign,
                                     "desc":     desc,
@@ -627,14 +686,81 @@ def load_astdb():
                     return True
                 except Exception as e:
                     log("ERROR", f"[ASTDB] Failed to load {path}: {e}")
-    log("WARN", "[ASTDB] No astdb.txt found at any expected path")
+    log("WARN", "[ASTDB] No local astdb.txt found — will use live API for lookups")
     return False
 
 
-def lookup_node(node):
+def fetch_allmondb_node(node: str) -> dict:
+    """
+    Fetch a single node description from the AllStarLink Allmon DB API.
+    The allmondb.php endpoint returns the full database as pipe-separated text.
+    We cache individual results to avoid hammering the API.
+    """
+    global _allmondb_cache, _allmondb_loaded
+    node = str(node)
+
+    with _allmondb_lock:
+        if node in _allmondb_cache:
+            return _allmondb_cache[node]
+
+    # Try local cache first
+    if _astdb_loaded and node in _astdb_cache:
+        return _astdb_cache[node]
+
+    # Fetch from live API
+    try:
+        url = ALLMONDB_URL
+        req = urlreq.Request(url, headers={"User-Agent": "ASL3-EZ/1.0"})
+        log("INFO", f"[ALLMONDB] Fetching node database from {url}")
+        with urlreq.urlopen(req, timeout=10) as resp:
+            text = resp.read().decode("utf-8", errors="replace")
+
+        count = 0
+        with _allmondb_lock:
+            for line in text.splitlines():
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                # Format: node|callsign|description|location
+                sep   = "|" if "|" in line else ","
+                parts = [p.strip() for p in line.split(sep)]
+                if len(parts) >= 2:
+                    n = parts[0]
+                    _allmondb_cache[n] = {
+                        "callsign": parts[1] if len(parts) > 1 else "",
+                        "desc":     parts[2] if len(parts) > 2 else "",
+                        "location": parts[3] if len(parts) > 3 else "",
+                    }
+                    count += 1
+            _allmondb_loaded = True
+            log("INFO", f"[ALLMONDB] Loaded {count} nodes from live API")
+            return _allmondb_cache.get(node, {"callsign": "", "desc": "", "location": ""})
+
+    except Exception as e:
+        log("WARN", f"[ALLMONDB] API fetch failed: {e} — falling back to local cache")
+        return _astdb_cache.get(node, {"callsign": "", "desc": "", "location": ""})
+
+
+def lookup_node(node: str) -> dict:
+    """
+    Look up a node's callsign/description/location.
+    Tries in order: allmondb in-memory cache -> local astdb.txt -> live API fetch.
+    """
+    node = str(node)
+
+    # Check allmondb in-memory cache first (populated after first API call)
+    with _allmondb_lock:
+        if node in _allmondb_cache:
+            return _allmondb_cache[node]
+
+    # Check local astdb.txt cache
     if not _astdb_loaded:
         load_astdb()
-    return _astdb_cache.get(str(node), {"callsign": "", "desc": "", "location": ""})
+    if node in _astdb_cache:
+        return _astdb_cache[node]
+
+    # Neither cache has it — fetch from live API (this also populates the cache)
+    return fetch_allmondb_node(node)
 
 
 # ---------------------------------------------------------------------------
@@ -992,15 +1118,16 @@ def api_ami_connect():
         output = []
         if disc_first:
             log("INFO", f"[API] Disconnecting all first on node {local_node}")
-            out = ami.rpt_cmd(local_node, "ilink 6")
-            output.extend(out)
+            r = ami.rpt_cmd(local_node, "ilink 6")
+            output.extend(r["output"])
             time.sleep(0.6)
-        out = ami.rpt_cmd(local_node, f"ilink {mode} {remote_node}")
-        output.extend(out)
+        r = ami.rpt_cmd(local_node, f"ilink {mode} {remote_node}")
+        output.extend(r["output"])
         ami.close()
-        log("INFO", f"[API] Connect result: {output}")
-        return jsonify({"success": True, "output": output,
-                        "command": f"rpt cmd {local_node} ilink {mode} {remote_node}"})
+        log("INFO", f"[API] Connect result: success={r['success']} output={output}")
+        return jsonify({"success": r["success"], "output": output,
+                        "command": r["command"],
+                        "note": "Empty output is normal for ilink commands — success means no error was returned"})
     except Exception as e:
         log("ERROR", f"[API] /api/ami/connect error: {e}")
         return jsonify({"error": str(e)}), 500
@@ -1019,12 +1146,13 @@ def api_ami_disconnect():
     try:
         ami = ami_session()
         if remote_node:
-            out = ami.rpt_cmd(local_node, f"ilink 1 {remote_node}")
+            r = ami.rpt_cmd(local_node, f"ilink 1 {remote_node}")
         else:
-            out = ami.rpt_cmd(local_node, "ilink 6")
+            r = ami.rpt_cmd(local_node, "ilink 6")
         ami.close()
-        log("INFO", f"[API] Disconnect result: {out}")
-        return jsonify({"success": True, "output": out})
+        log("INFO", f"[API] Disconnect result: success={r['success']} output={r['output']}")
+        return jsonify({"success": r["success"], "output": r["output"],
+                        "command": r["command"]})
     except Exception as e:
         log("ERROR", f"[API] /api/ami/disconnect error: {e}")
         return jsonify({"error": str(e)}), 500
@@ -1044,10 +1172,10 @@ def api_ami_perm_connect():
     log("INFO", f"[API] /api/ami/perm_connect local={local_node} remote={remote_node} mode={mode}")
     try:
         ami = ami_session()
-        out = ami.rpt_cmd(local_node, f"ilink {mode} {remote_node}")
+        r = ami.rpt_cmd(local_node, f"ilink {mode} {remote_node}")
         ami.close()
-        return jsonify({"success": True, "output": out,
-                        "command": f"rpt cmd {local_node} ilink {mode} {remote_node}"})
+        return jsonify({"success": r["success"], "output": r["output"],
+                        "command": r["command"]})
     except Exception as e:
         log("ERROR", f"[API] /api/ami/perm_connect error: {e}")
         return jsonify({"error": str(e)}), 500
@@ -1081,7 +1209,41 @@ def api_lookup(node):
     if not node.isdigit():
         return jsonify({"error": "Invalid node"}), 400
     info = lookup_node(node)
-    return jsonify({"node": node, **info})
+    # Include diagnostic info about which source was used
+    source = "unknown"
+    with _allmondb_lock:
+        if node in _allmondb_cache:
+            source = "allmondb_api"
+    if source == "unknown" and node in _astdb_cache:
+        source = "local_astdb.txt"
+    if source == "unknown" and not info.get("callsign"):
+        source = "not_found"
+    log("INFO", f"[LOOKUP] node={node} source={source} callsign={info.get('callsign','')!r}")
+    return jsonify({"node": node, "source": source, **info})
+
+
+@app.route("/api/debug/nodedb")
+def api_debug_nodedb():
+    """Debug endpoint: show node DB status and sample entries."""
+    astdb_status = {}
+    for path in ASTDB_PATHS:
+        astdb_status[path] = os.path.exists(path)
+
+    sample = {}
+    with _allmondb_lock:
+        keys = list(_allmondb_cache.keys())[:5]
+        for k in keys:
+            sample[k] = _allmondb_cache[k]
+
+    return jsonify({
+        "allmondb_loaded":  _allmondb_loaded,
+        "allmondb_entries": len(_allmondb_cache),
+        "astdb_loaded":     _astdb_loaded,
+        "astdb_entries":    len(_astdb_cache),
+        "astdb_paths":      astdb_status,
+        "sample_entries":   sample,
+        "allmondb_url":     ALLMONDB_URL,
+    })
 
 
 # ── AMI connectivity test ─────────────────────────────────────────────────────
