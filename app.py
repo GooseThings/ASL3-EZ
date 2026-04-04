@@ -645,12 +645,32 @@ def write_conf_file(path, content):
       3. fsync + rename (atomic on Linux)
       4. Restore ownership to asterisk:asterisk and mode to 640
          so ASL3/Asterisk (which runs as the asterisk user) can read the file.
-         Without this step the renamed temp file is owned by root:root and
-         Asterisk cannot read it, causing a crash on reload/restart.
+
+    Per https://allstarlink.github.io/adv-topics/permissions/:
+      - Files that Asterisk reads must be readable by the asterisk user
+      - Owner: asterisk, Group: asterisk, Mode: 640 (rw-r-----)
+      - Parent directory must also be accessible by asterisk
 
     Raises PermissionError / OSError on failure.
     """
+    # Ensure backup directory exists and is accessible by asterisk
     os.makedirs(BACKUP_DIR, exist_ok=True)
+    try:
+        uid = pwd.getpwnam("asterisk").pw_uid
+        gid = grp.getgrnam("asterisk").gr_gid
+        _have_asterisk_ids = True
+    except KeyError:
+        uid = gid = -1
+        _have_asterisk_ids = False
+        log("WARN", "[CONF] 'asterisk' user/group not found — skipping chown (non-ASL3 system?)")
+
+    # Set backup directory ownership so asterisk can read backups
+    if _have_asterisk_ids:
+        try:
+            os.chown(BACKUP_DIR, uid, gid)
+            os.chmod(BACKUP_DIR, 0o750)
+        except Exception as e:
+            log("WARN", f"[CONF] Could not set backup dir permissions: {e}")
 
     # Backup existing file
     backup_path = None
@@ -659,6 +679,12 @@ def write_conf_file(path, content):
         backup_path = os.path.join(BACKUP_DIR, f"rpt.conf.{ts}.bak")
         shutil.copy2(path, backup_path)
         log("INFO", f"[CONF] Backup created: {backup_path}")
+        if _have_asterisk_ids:
+            try:
+                os.chown(backup_path, uid, gid)
+                os.chmod(backup_path, 0o640)
+            except Exception as e:
+                log("WARN", f"[CONF] Could not set backup file permissions: {e}")
 
     # Write atomically via temp file
     conf_dir = os.path.dirname(path)
@@ -672,24 +698,17 @@ def write_conf_file(path, content):
             os.rename(tmp_path, path)
             log("INFO", f"[CONF] Saved {len(content)} bytes to {path}")
 
-            # ── FIX: Restore ownership + permissions required by ASL3 ────────
-            # The temp file was created as root:root (service runs as root).
-            # After os.rename the file retains those credentials.
-            # Asterisk runs as the 'asterisk' user and MUST be able to read
-            # rpt.conf — if it can't, Asterisk crashes on the next reload.
-            # Correct ownership: asterisk:asterisk, mode: 640
-            try:
-                uid = pwd.getpwnam("asterisk").pw_uid
-                gid = grp.getgrnam("asterisk").gr_gid
-                os.chown(path, uid, gid)
-                os.chmod(path, 0o640)
-                log("INFO", f"[CONF] Restored {path} owner=asterisk:asterisk mode=640")
-            except KeyError:
-                log("WARN", "[CONF] 'asterisk' user/group not found — skipping chown "
-                            "(non-ASL3 system?)")
-            except PermissionError as e:
-                log("ERROR", f"[CONF] chown/chmod failed: {e} — file may have wrong permissions")
-            # ─────────────────────────────────────────────────────────────────
+            # Restore ownership and permissions required by ASL3.
+            # The temp file was created as root:root — after os.rename those
+            # credentials stick.  Asterisk runs as asterisk:asterisk and must
+            # be able to read rpt.conf or it crashes on reload/restart.
+            if _have_asterisk_ids:
+                try:
+                    os.chown(path, uid, gid)
+                    os.chmod(path, 0o640)
+                    log("INFO", f"[CONF] Restored {path} owner=asterisk:asterisk mode=640")
+                except PermissionError as e:
+                    log("ERROR", f"[CONF] chown/chmod failed: {e}")
 
         except Exception:
             try:
@@ -714,7 +733,88 @@ def get_node_numbers(content):
     return nodes
 
 
+def parse_stanza_settings(content, stanza_name):
+    """
+    Parse key=value pairs from a specific named stanza in rpt.conf.
+
+    ASL3 uses Asterisk config templates — a node stanza like [64393](node-main)
+    inherits all settings from [node-main](!) but can override them.
+    This function returns the *effective* settings for the requested stanza by:
+      1. Collecting settings from the template stanza it inherits from (if any)
+      2. Overlaying settings from the named stanza itself (overrides win)
+
+    This matches how Asterisk actually reads the file and fixes the bug where
+    the old flat parser would return the wrong value when the same key appeared
+    in multiple stanzas (e.g. duplex=3 in [node-main] but duplex=0 somewhere else).
+
+    Returns dict: { key: {"value": str, "commented": bool, "raw_line": str} }
+    """
+    lines = content.splitlines()
+
+    # ── Pass 1: collect all stanzas ──────────────────────────────────────────
+    # stanzas = { name: {"template": str|None, "lines": [...]} }
+    stanzas = {}
+    current = None
+    for line in lines:
+        s = line.strip()
+        hdr = re.match(r'^\[([^\]]+)\](?:\(([^)]+)\))?', s)
+        if hdr:
+            raw_name = hdr.group(1).strip()
+            raw_tmpl = (hdr.group(2) or "").strip()
+            # Template definition stanzas end with (!) — skip them as base stanzas
+            is_template_def = raw_tmpl == "!"
+            template_ref    = None if (not raw_tmpl or raw_tmpl == "!") else raw_tmpl
+            current = raw_name
+            stanzas[current] = {
+                "is_template": is_template_def,
+                "template":    template_ref,
+                "lines":       [],
+            }
+        elif current is not None:
+            stanzas[current]["lines"].append(line)
+
+    def parse_lines(lines_list):
+        """Parse key=value pairs from a list of raw lines."""
+        result = {}
+        for line in lines_list:
+            stripped  = line.strip()
+            commented = stripped.startswith(";")
+            if commented:
+                stripped = stripped[1:].strip()
+            m = re.match(r'^([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*([^;]*?)(?:\s*;.*)?$', stripped)
+            if m:
+                k = m.group(1).strip()
+                v = m.group(2).strip()
+                result[k] = {"value": v, "commented": commented, "raw_line": line}
+        return result
+
+    # ── Pass 2: resolve effective settings for the requested stanza ──────────
+    target = stanzas.get(stanza_name)
+    if target is None:
+        log("WARN", f"[CONF] Stanza [{stanza_name}] not found in rpt.conf")
+        return {}
+
+    # Start with template settings if this stanza inherits one
+    effective = {}
+    tmpl_name = target.get("template")
+    if tmpl_name and tmpl_name in stanzas:
+        effective = parse_lines(stanzas[tmpl_name]["lines"])
+        log("DEBUG", f"[CONF] [{stanza_name}] inherits from [{tmpl_name}]: {len(effective)} base settings")
+
+    # Overlay with the stanza's own settings (these override the template)
+    own = parse_lines(target["lines"])
+    effective.update(own)
+    log("DEBUG", f"[CONF] [{stanza_name}] effective settings: {len(effective)} total ({len(own)} own overrides)")
+
+    return effective
+
+
 def parse_node_settings(content):
+    """
+    Legacy flat parser — kept for the /api/conf general_settings field.
+    Parses the entire file as a flat dict (last value for any key wins).
+    Use parse_stanza_settings() for per-stanza accurate parsing.
+    """
     settings = {}
     for line in content.splitlines():
         stripped  = line.strip()
@@ -972,11 +1072,35 @@ def api_get_conf():
         log("ERROR", f"[API] /api/conf: cannot read {RPT_CONF_PATH}")
         return jsonify({"error": "Cannot read rpt.conf", "path": RPT_CONF_PATH,
                         "hint": "Ensure the service runs as root (User=root in service file)"}), 404
+    nodes = get_node_numbers(content)
     return jsonify({
         "content":          content,
-        "nodes":            get_node_numbers(content),
-        "general_settings": parse_node_settings(content),
+        "nodes":            nodes,
+        "general_settings": parse_stanza_settings(content, "general"),
     })
+
+
+@app.route("/api/conf/node/<node>")
+def api_get_node_conf(node):
+    """
+    Return the effective settings for a specific node stanza, correctly
+    resolving Asterisk template inheritance (e.g. [64393](node-main) inherits
+    from [node-main](!)).  This fixes the bug where the flat parser returned
+    the wrong value when the same key appeared in multiple stanzas.
+    """
+    content = read_conf_file(RPT_CONF_PATH)
+    if content is None:
+        return jsonify({"error": "Cannot read rpt.conf"}), 404
+    settings = parse_stanza_settings(content, node)
+    if not settings:
+        # Try common template names as fallback
+        for tmpl in ["node-main", "node-template", node]:
+            s = parse_stanza_settings(content, tmpl)
+            if s:
+                settings = s
+                log("INFO", f"[API] /api/conf/node/{node}: using template [{tmpl}] as fallback")
+                break
+    return jsonify({"node": node, "settings": settings})
 
 
 @app.route("/api/save", methods=["POST"])
