@@ -549,8 +549,17 @@ function esc(s) {
 /* ── API ────────────────────────────────────────────────────────────────── */
 async function api(url, opts) {
   try {
-    var r    = await fetch(url, opts);
-    var data = await r.json();
+    var r = await fetch(url, opts);
+    var text = await r.text();
+    var data;
+    try {
+      data = JSON.parse(text);
+    } catch(parseErr) {
+      // Server returned HTML (e.g. a Flask/Gunicorn error page) instead of JSON.
+      // Extract a useful message from it if possible, otherwise use a generic one.
+      var snippet = text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 200);
+      data = {error: 'Server returned non-JSON response. ' + snippet};
+    }
     return {ok: r.ok, status: r.status, data: data};
   } catch(e) {
     return {ok: false, status: 0, data: {error: String(e)}};
