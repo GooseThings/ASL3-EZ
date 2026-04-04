@@ -751,13 +751,11 @@ function discardChanges() {
 }
 
 /* ── General editor ─────────────────────────────────────────────────────── */
+// Settings from the [general] stanza per the official ASL3 rpt.conf docs
 var GENERAL_META = [
-  {key:'node_lookup_method', desc:'Node lookup: both | dns | file'},
-  {key:'dns_node_domain',    desc:'DNS domain for node lookups'},
-  {key:'lknoderegister',     desc:'Register with AllStarLink (yes/no)'},
-  {key:'registerserver',     desc:'Registration server'},
-  {key:'statpost_url',       desc:'Stats POST URL'},
-  {key:'statpost_program',   desc:'Stats POST program'},
+  {key:'node_lookup_method', desc:'Node lookup method: both (default) | dns | file'},
+  {key:'dns_node_domain',    desc:'DNS domain for node lookups (default: nodes.allstarlink.org)'},
+  {key:'max_dns_node_length',desc:'Max node number length for DNS queries (default 6)'},
 ];
 
 async function loadGeneralEditor() {
@@ -769,77 +767,131 @@ async function loadGeneralEditor() {
     el.innerHTML = '<div class="alert alert-danger">Failed to load rpt.conf. Check permissions.</div>';
     return;
   }
+  // /api/conf now returns general_settings parsed from the [general] stanza only
   var s    = conf.general_settings || {};
   var html = '<div class="card"><div class="card-body">';
   GENERAL_META.forEach(function(m) {
     var st = s[m.key] || {};
     html += makeToggleRow(m.key, st.value || '', st.commented !== false, m.desc);
   });
+  // Show any other keys present in [general] not in our known list
+  var knownGen = {node_lookup_method:1, dns_node_domain:1, max_dns_node_length:1};
+  Object.keys(s).forEach(function(k) {
+    if (!knownGen[k]) {
+      html += makeToggleRow(k, s[k].value || '', s[k].commented !== false, 'Custom [general] setting');
+    }
+  });
   html += '</div></div>';
   el.innerHTML = html;
-  log('General editor loaded.', 'DEBUG');
+  log('General editor loaded (' + Object.keys(s).length + ' settings).', 'DEBUG');
 }
 
 /* ── Node editor ────────────────────────────────────────────────────────── */
+// Settings sourced directly from https://allstarlink.github.io/config/rpt_conf/
+// Organised to match the official documentation sections.
 var NODE_SECS = [
-  {title:'Basic Node Settings', keys:[
-    {key:'rxchannel',      desc:'Receive channel (e.g. SimpleUSB/usb_1999)'},
-    {key:'duplex',         desc:'Duplex: 0=simplex 1=half 2=full 3=full+ 4=full-full'},
-    {key:'linktolink',     desc:'Allow linking to other links (yes/no)'},
-    {key:'callerid',       desc:'Caller ID string'},
-    {key:'context',        desc:'Asterisk dialplan context'},
-    {key:'accountcode',    desc:'Asterisk account code'},
+  {title:'Basic / Required', keys:[
+    {key:'rxchannel',      desc:'Radio interface: dahdi/pseudo (hub), SimpleUSB/XXXX, Radio/XXXX'},
+    {key:'duplex',         desc:'0=half no telem, 1=half with telem, 2=full duplex repeater, 3=full no repeat, 4=full patch only'},
+    {key:'context',        desc:'Asterisk dialplan context (default: radio)'},
+    {key:'callerid',       desc:'Autopatch caller ID — "Repeater" <0000000000>'},
+    {key:'accountcode',    desc:'Asterisk CDR account code (optional)'},
+    {key:'linktolink',     desc:'Full duplex in duplex=0 mode for multiport repeater controllers (yes/no)'},
   ]},
-  {title:'Station ID', keys:[
-    {key:'idrecording',    desc:'Voice ID recording filename'},
-    {key:'idtalkover',     desc:'ID talkover recording'},
-    {key:'idtime',         desc:'ID interval in ms (300000 = 5 min)'},
-    {key:'politeid',       desc:'Delay ID until channel clear (ms)'},
+  {title:'Station Identification', keys:[
+    {key:'idrecording',    desc:'Voice or CW ID — e.g. |iWB6NIL for CW, or sound filename (no extension)'},
+    {key:'idtalkover',     desc:'Alternate ID played over a transmission (shorter/CW version)'},
+    {key:'idtime',         desc:'ID interval in ms (default 300000 = 5 min)'},
+    {key:'politeid',       desc:'ms before ID cycle end to attempt tail ID (default 30000)'},
+    {key:'beaconing',      desc:'1 = beacon ID regardless of activity (required in some regions, illegal in US)'},
   ]},
   {title:'Timers', keys:[
-    {key:'hangtime',       desc:'Repeater hang time in ms'},
-    {key:'althangtime',    desc:'Alternate hang time in ms'},
-    {key:'totime',         desc:'Transmit timeout in ms'},
-    {key:'sleeptime',      desc:'Sleep mode delay in ms'},
-    {key:'duplex3',        desc:'Duplex 3 hang time (ms)'},
+    {key:'hangtime',       desc:'Squelch tail hang time in ms (default 5000)'},
+    {key:'althangtime',    desc:'Alternate hang time in ms, selected by COP 19/20'},
+    {key:'totime',         desc:'Transmit timeout in ms (default 180000 = 3 min)'},
+    {key:'time_out_reset_unkey_interval', desc:'ms receiver must be unkeyed to reset TX timeout (default 0 = disabled)'},
+    {key:'time_out_reset_kerchunk_interval', desc:'ms for kerchunk to reset TX timeout (default 250)'},
+    {key:'sleeptime',      desc:'Inactivity seconds before sleep mode (see sleep mode docs)'},
   ]},
   {title:'Telemetry', keys:[
-    {key:'telemdefault',   desc:'Telemetry mode: 0=off 1=on 2=verbose'},
-    {key:'telemdynamic',   desc:'Allow DTMF telemetry change (yes/no)'},
-    {key:'holdofftelem',   desc:'Hold off telemetry (yes/no)'},
-    {key:'telemduckdb',    desc:'Telemetry ducking dB (e.g. -15)'},
-    {key:'unlinkedct',     desc:'Courtesy tone when unlinked'},
-    {key:'remotect',       desc:'Courtesy tone when remote linked'},
-    {key:'linkunkeyct',    desc:'Link unkey courtesy tone'},
+    {key:'telemdefault',   desc:'0=off, 1=on (default), 2=timed after command'},
+    {key:'telemdynamic',   desc:'1=allow users to change telemetry via COP (default), 0=lock it'},
+    {key:'holdofftelem',   desc:'1=hold all telem until local/remote unkeys (default 0)'},
+    {key:'telemduckdb',    desc:'Reduce telemetry level in dB during voice e.g. -15'},
+    {key:'telemnomdb',     desc:'Fine-tune nominal telemetry level in dB'},
+    {key:'unlinkedct',     desc:'Courtesy tone when no nodes connected e.g. ct2'},
+    {key:'remotect',       desc:'Courtesy tone when remote base connected e.g. ct3'},
+    {key:'linkunkeyct',    desc:'Courtesy tone when a linked node unkeys e.g. ct8'},
+    {key:'nounkeyct',      desc:'yes = disable all courtesy tones (strongly discouraged)'},
+    {key:'nolocallinkct',  desc:'1 = use unlinkedct when another local node is connected'},
   ]},
-  {title:'DTMF / Functions', keys:[
-    {key:'funcchar',       desc:'DTMF function character (default *)'},
+  {title:'DTMF & Functions', keys:[
+    {key:'funcchar',       desc:'DTMF function start character (default *)'},
     {key:'endchar',        desc:'DTMF end character (default #)'},
-    {key:'functions',      desc:'Functions stanza name'},
-    {key:'link_functions', desc:'Link functions stanza name'},
-    {key:'phone_functions',desc:'Phone functions stanza name'},
+    {key:'functions',      desc:'Functions stanza name (default: functions)'},
+    {key:'link_functions', desc:'Link functions stanza name (default: functions)'},
+    {key:'phone_functions',desc:'Phone functions stanza name (default: functions)'},
+    {key:'dtmfkey',        desc:'1 = require DTMF key sequence to key up (default 0)'},
+    {key:'dtmfkeys',       desc:'dtmfkeys stanza name (used with dtmfkey=1)'},
+    {key:'propagate_dtmf', desc:'yes = regenerate DTMF to links (use with linktolink)'},
   ]},
   {title:'Node Connections', keys:[
-    {key:'extnodefile',    desc:'External node file path'},
-    {key:'nodenames',      desc:'Node names file path'},
-    {key:'startup_macro',  desc:'Macro to run at startup'},
-    {key:'connpgm',        desc:'Program to run on connect'},
-    {key:'discpgm',        desc:'Program to run on disconnect'},
+    {key:'extnodefile',    desc:'External node file path (default /var/lib/asterisk/rpt_extnodes)'},
+    {key:'nodes',          desc:'nodes stanza name override (default: nodes)'},
+    {key:'nodenames',      desc:'Custom node name sound directory path'},
+    {key:'startup_macro',  desc:'DTMF commands to run at startup e.g. *31000 *31001'},
+    {key:'connpgm',        desc:'Script to run on node connect (args: local_node remote_node)'},
+    {key:'discpgm',        desc:'Script to run on node disconnect (args: local_node remote_node)'},
+    {key:'lnkactenable',   desc:'1 = enable link activity timer (default 0)'},
+    {key:'lnkacttime',     desc:'Link activity timer in seconds'},
+    {key:'lnkactmacro',    desc:'Macro to execute when link activity timer expires'},
+    {key:'lnkacttimerwarn',desc:'Sound file to play when 30s remain on link timer'},
   ]},
   {title:'Audio', keys:[
-    {key:'linkmongain',    desc:'Monitor gain dB for linked audio'},
-    {key:'notchfilter',    desc:'Enable notch filter (yes/no)'},
-    {key:'notchfreq',      desc:'Notch filter frequency Hz'},
-    {key:'notchbw',        desc:'Notch filter bandwidth Hz'},
+    {key:'linkmongain',    desc:'Monitor audio level adjustment in dB (default 0)'},
+    {key:'erxgain',        desc:'EchoLink receive gain +/- dB'},
+    {key:'etxgain',        desc:'EchoLink transmit gain +/- dB'},
+    {key:'rxnotch',        desc:'Notch filter: freq,bandwidth e.g. 1065,40 (high CPU, not recommended on Pi)'},
+    {key:'outstreamcmd',   desc:'Command for Broadcastify/streaming audio output'},
+  ]},
+  {title:'Tail & Scheduler', keys:[
+    {key:'tailmessagelist',desc:'Comma-separated list of sound files to rotate as tail messages'},
+    {key:'tailmessagetime',desc:'ms between tail messages (max 200000000)'},
+    {key:'tailsquashedtime',desc:'ms to retry after a tail message is squashed'},
+    {key:'scheduler',      desc:'Schedule stanza name (default: schedule)'},
   ]},
   {title:'Parrot / Echo', keys:[
-    {key:'parrot',         desc:'Enable parrot/echo mode (yes/no)'},
-    {key:'parrottime',     desc:'Parrot delay time (ms)'},
+    {key:'parrot',         desc:'0=off/COP controlled (default), 1=always on'},
+    {key:'parrottime',     desc:'ms delay before playing back parrot audio (default 1000)'},
+  ]},
+  {title:'EchoLink', keys:[
+    {key:'eannmode',       desc:'0=no announce, 1=node# only (default), 2=callsign, 3=callsign+node#'},
+    {key:'echolinkdefault',desc:'0=off, 1=on, 2=timed, 3=follow local (default)'},
+    {key:'echolinkdynamic',desc:'1=allow users to change EchoLink telem via COP'},
+    {key:'elke',           desc:'Elke link timer value (FFF units) — sets node as Elke link'},
   ]},
   {title:'Archiving & Stats', keys:[
-    {key:'archivedir',        desc:'Directory for audio archives'},
-    {key:'statpost_url',      desc:'Stats POST URL'},
-    {key:'statpost_program',  desc:'Stats POST program'},
+    {key:'archivedir',     desc:'Directory for audio/activity recordings (e.g. /var/spool/asterisk/monitor)'},
+    {key:'archiveformat',  desc:'Audio format: wav49 (default), wav, gsm'},
+    {key:'archivedatefmt', desc:'Filename date format e.g. %Y%m%d%H%M%S%2q'},
+    {key:'archiveaudio',   desc:'yes=save audio recordings (default), no=activity log only'},
+    {key:'statpost_url',   desc:'Uncomment to report stats: http://stats.allstarlink.org/uhandler'},
+    {key:'statpost_program',desc:'Stats POST program (generally no longer required)'},
+  ]},
+  {title:'Stanza Name Overrides', keys:[
+    {key:'controlstates',  desc:'Control states stanza name (default: controlstates)'},
+    {key:'macro',          desc:'Macro stanza name (default: macro)'},
+    {key:'telemetry',      desc:'Telemetry stanza name (default: telemetry)'},
+    {key:'morse',          desc:'Morse parameters stanza name (default: morse)'},
+    {key:'tonemacro',      desc:'Tone macro stanza name'},
+    {key:'events',         desc:'Events stanza name (default: events)'},
+    {key:'wait-times',     desc:'Wait times stanza name (default: wait-times)'},
+    {key:'guilinkdefault', desc:'0=off, 1=on (default), 2=timed, 3=follow local — IAXRpt/VoIP telem'},
+    {key:'guilinkdynamic', desc:'1=allow users to change GUI telem via COP'},
+    {key:'phonelinkdefault',desc:'0=off, 1=on (default), 2=timed, 3=follow local — autopatch/phone telem'},
+    {key:'phonelinkdynamic',desc:'1=allow users to change phone telem via COP'},
+    {key:'tlbdefault',     desc:'TheLinkBox telem: 0=off, 1=on, 2=timed, 3=follow local'},
+    {key:'tlbdynamic',     desc:'1=allow users to change TLB telem via COP'},
   ]},
 ];
 
@@ -847,15 +899,25 @@ async function loadNodeEditor(node) {
   currentSection = node;
   var el = document.getElementById('node-content-' + node);
   if (!el) return;
-  el.innerHTML = '<div class="muted">Loading rpt.conf...</div>';
+  el.innerHTML = '<div class="muted">Loading settings for node ' + esc(node) + '...</div>';
 
-  var conf = await fetchConf();
-  if (!conf) {
-    el.innerHTML = '<div class="alert alert-danger">Failed to load rpt.conf. Service must run as root.</div>';
-    return;
+  // Use the new per-node endpoint that correctly resolves Asterisk template
+  // inheritance (e.g. [64393](node-main) inheriting from [node-main](!))
+  var r = await api('/api/conf/node/' + encodeURIComponent(node));
+  if (!r.ok) {
+    // Fallback to full conf parse if new endpoint fails
+    log('Per-node API failed, falling back to full conf parse', 'WARN');
+    r = await api('/api/conf');
+    if (!r.ok) {
+      el.innerHTML = '<div class="alert alert-danger">Failed to load rpt.conf. Service must run as root.</div>';
+      return;
+    }
+    r.data.settings = r.data.general_settings || {};
   }
-  var s    = conf.general_settings || {};
+
+  var s    = r.data.settings || {};
   var html = '';
+
   NODE_SECS.forEach(function(sec, i) {
     var open = i === 0 ? ' open' : '';
     html += '<div class="card" style="margin-bottom:12px">'
@@ -868,8 +930,27 @@ async function loadNodeEditor(node) {
     });
     html += '</div></div>';
   });
+
+  // Show any keys in the config that aren't in our known list
+  var knownKeys = {};
+  NODE_SECS.forEach(function(sec) {
+    sec.keys.forEach(function(m) { knownKeys[m.key] = true; });
+  });
+  var extraKeys = Object.keys(s).filter(function(k) { return !knownKeys[k]; });
+  if (extraKeys.length) {
+    html += '<div class="card" style="margin-bottom:12px">'
+          + '<div class="sec-toggle" onclick="toggleSec(this)">'
+          + '<h3>Other Settings (' + extraKeys.length + ')</h3><span class="arr">&#9658;</span></div>'
+          + '<div class="sec-body">';
+    extraKeys.forEach(function(k) {
+      var st = s[k];
+      html += makeToggleRow(k, st.value || '', st.commented !== false, 'Custom / advanced setting');
+    });
+    html += '</div></div>';
+  }
+
   el.innerHTML = html;
-  log('Node ' + node + ' editor loaded.', 'DEBUG');
+  log('Node ' + node + ' editor loaded (' + Object.keys(s).length + ' effective settings).', 'DEBUG');
 }
 
 function toggleSec(el) {
