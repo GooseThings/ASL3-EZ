@@ -1049,16 +1049,22 @@ def api_restart():
 
 @app.route("/api/reload", methods=["POST"])
 def api_reload():
+    """
+    Reload rpt.conf without restarting Asterisk.
+    'rpt reload' re-reads rpt.conf and applies changes live.
+    This is what you want after editing rpt.conf — much faster than
+    a full restart and does not drop active connections.
+    """
     log("INFO", "[API] /api/reload called")
     try:
         r = subprocess.run(
-            [ASTERISK_PATH, "-rx", "module reload app_rpt.so"],
+            [ASTERISK_PATH, "-rx", "rpt reload"],
             capture_output=True, text=True, timeout=15
         )
-        log("INFO", f"[API] asterisk -rx module reload -> rc={r.returncode} out={r.stdout!r}")
+        log("INFO", f"[API] asterisk -rx rpt reload -> rc={r.returncode} out={r.stdout!r}")
         return jsonify({"success": True,
-                        "output":  r.stdout.strip() or "Module reload sent.",
-                        "command": f"{ASTERISK_PATH} -rx 'module reload app_rpt.so'"})
+                        "output":  r.stdout.strip() or "rpt.conf reloaded.",
+                        "command": f"{ASTERISK_PATH} -rx 'rpt reload'"})
     except Exception as e:
         log("ERROR", f"[API] /api/reload exception: {e}")
         return jsonify({"error": str(e)}), 500
