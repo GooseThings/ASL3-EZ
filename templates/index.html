@@ -192,6 +192,18 @@ input:checked + .slider::before  { transform: translateX(16px); background: var(
 
 pre.codeblock { background: var(--bg3); padding: 12px; border-radius: 4px; font-size: 0.84rem; overflow-x: auto; font-family: var(--mono); white-space: pre; margin-bottom: 12px; }
 
+/* Node status live indicator */
+.status-live {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 0.8rem; color: var(--text2);
+}
+.status-live .dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--green);
+  animation: pulse 2s ease-in-out infinite;
+}
+.status-live .dot.stale { background: var(--warn); animation: none; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+
 @media (max-width: 768px) {
   .layout { flex-direction: column; }
   .sidebar { width: 100%; height: auto; position: relative; }
@@ -291,7 +303,7 @@ pre.codeblock { background: var(--bg3); padding: 12px; border-radius: 4px; font-
         <div class="form-row" style="margin-bottom:14px">
           <div class="form-group">
             <label class="form-label">Local Node</label>
-            <select id="nc-local">
+            <select id="nc-local" onchange="ncStatus()">
               {% for node in nodes %}
               <option value="{{ node }}">{{ node }}</option>
               {% endfor %}
@@ -319,10 +331,18 @@ pre.codeblock { background: var(--bg3); padding: 12px; border-radius: 4px; font-
     <div class="card">
       <div class="card-header">
         <h2>Node Status</h2>
-        <button class="btn btn-sm" onclick="ncStatus()">Refresh Status</button>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span class="status-live" id="nc-live-indicator" style="display:none">
+            <span class="dot" id="nc-live-dot"></span>
+            <span id="nc-live-age">live</span>
+          </span>
+          <button class="btn btn-sm" onclick="ncStatus()">Refresh Now</button>
+        </div>
       </div>
       <div class="card-body">
-        <div id="nc-status"><span class="muted">Click Refresh Status to poll AMI.</span></div>
+        <div id="nc-status">
+          <span class="muted"><span class="spinner"></span> Loading node status...</span>
+        </div>
       </div>
     </div>
 
@@ -508,6 +528,9 @@ var currentPage    = 'dashboard';
 var backupFile     = null;
 var favFormOpen    = false;
 
+/* ── Node status polling state ─────────────────────────────────────────── */
+var _ncPollTimer   = null;   // setInterval handle for live status polling
+
 /* ── Logging ────────────────────────────────────────────────────────────── */
 function nowTs() {
   return new Date().toLocaleTimeString('en-US', {hour12: false});
@@ -555,6 +578,9 @@ function showPage(id) {
   document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
   document.querySelectorAll('.nav-item').forEach(function(b) { b.classList.remove('active'); });
 
+  // Stop live polling whenever we leave node-control
+  stopNcPolling();
+
   var page = document.getElementById('page-' + id);
   if (page) page.classList.add('active');
 
@@ -564,12 +590,12 @@ function showPage(id) {
 
   currentPage = id;
 
-  if      (id === 'dashboard')   refreshDashboard();
-  else if (id === 'node-control') { loadFavorites(); ncStatus(); }
-  else if (id === 'raw-editor')  rawLoad();
-  else if (id === 'backups')     loadBackups();
-  else if (id === 'ami-diag')    loadSysInfo();
-  else if (id === 'general')     loadGeneralEditor();
+  if      (id === 'dashboard')    refreshDashboard();
+  else if (id === 'node-control') { loadFavorites(); startNcPolling(); }
+  else if (id === 'raw-editor')   rawLoad();
+  else if (id === 'backups')      loadBackups();
+  else if (id === 'ami-diag')     loadSysInfo();
+  else if (id === 'general')      loadGeneralEditor();
   else {
     var m = id.match(/^node-(\d+)$/);
     if (m) loadNodeEditor(m[1]);
@@ -938,7 +964,145 @@ async function restoreBackup() {
   }
 }
 
-/* ── Node Control ────────────────────────────────────────────────────────── */
+/* ── Node Control — live status polling ──────────────────────────────────── */
+
+function startNcPolling() {
+  stopNcPolling();           // clear any existing timer first
+  ncStatus();                // immediate first fetch
+  _ncPollTimer = setInterval(ncStatus, 3000);  // then every 3s
+  var ind = document.getElementById('nc-live-indicator');
+  if (ind) ind.style.display = 'inline-flex';
+  ncLog('Live status polling started (3s interval).', 'DEBUG');
+}
+
+function stopNcPolling() {
+  if (_ncPollTimer) {
+    clearInterval(_ncPollTimer);
+    _ncPollTimer = null;
+  }
+  var ind = document.getElementById('nc-live-indicator');
+  if (ind) ind.style.display = 'none';
+}
+
+async function ncStatus() {
+  var local = document.getElementById('nc-local');
+  if (!local) return;
+  var node = local.value.trim();
+  if (!node) return;
+
+  var r  = await api('/api/ami/status?node=' + encodeURIComponent(node));
+  var el = document.getElementById('nc-status');
+  if (!el) return;
+
+  if (!r.ok) {
+    el.innerHTML = '<div class="alert alert-danger">' + esc(r.data.error || 'Status failed') + '</div>';
+    // Update live indicator to stale/error state
+    var dot = document.getElementById('nc-live-dot');
+    var age = document.getElementById('nc-live-age');
+    if (dot) { dot.className = 'dot stale'; }
+    if (age) { age.textContent = 'error'; }
+    ncLog('Status error: ' + (r.data.error || r.status), 'ERROR');
+    return;
+  }
+
+  var d = r.data;
+
+  // Update the live indicator dot + age label
+  var dot = document.getElementById('nc-live-dot');
+  var ageLbl = document.getElementById('nc-live-age');
+  if (dot) {
+    dot.className = 'dot' + (d.stale ? ' stale' : '');
+  }
+  if (ageLbl) {
+    ageLbl.textContent = d.age != null ? d.age + 's ago' : 'live';
+  }
+
+  // Build status HTML
+  var keyed = d.keyed
+    ? '<span class="badge badge-ok">KEYED</span>'
+    : '<span class="badge badge-unk">NOT KEYED</span>';
+
+  var staleNote = d.stale
+    ? '<span style="color:var(--warn);font-size:0.8rem;margin-left:8px">(stale — AMI reconnecting)</span>'
+    : '';
+
+  var html = '<p style="margin-bottom:10px">'
+    + 'Node <strong>' + esc(String(node)) + '</strong> &mdash; '
+    + keyed + staleNote
+    + '</p>';
+
+  if (d.connected && d.connected.length) {
+    html += '<table class="tbl">'
+          + '<thead><tr>'
+          + '<th>Connected Node</th>'
+          + '<th>Callsign / Info</th>'
+          + '<th>Action</th>'
+          + '</tr></thead><tbody>';
+
+    d.connected.forEach(function(n) {
+      html += '<tr>'
+            + '<td class="mono" style="font-size:1rem;font-weight:600">' + esc(n) + '</td>'
+            + '<td class="muted" id="nc-lookup-' + esc(n) + '">...</td>'
+            + '<td>'
+            + '<button class="btn btn-sm btn-danger" onclick="ncDisconnectNode(\'' + esc(n) + '\')">'
+            + 'Disconnect</button>'
+            + '</td>'
+            + '</tr>';
+    });
+
+    html += '</tbody></table>';
+
+    // Async-fill callsign info for each connected node (non-blocking)
+    d.connected.forEach(function(n) {
+      api('/api/lookup/' + encodeURIComponent(n)).then(function(lr) {
+        var cell = document.getElementById('nc-lookup-' + n);
+        if (!cell) return;
+        if (lr.ok && lr.data.callsign) {
+          cell.textContent = lr.data.callsign
+            + (lr.data.desc     ? ' — ' + lr.data.desc     : '')
+            + (lr.data.location ? ' (' + lr.data.location + ')' : '');
+        } else {
+          cell.textContent = '(no info)';
+        }
+      });
+    });
+
+  } else {
+    html += '<div class="muted" style="padding:6px 0">No nodes currently connected.</div>';
+  }
+
+  // Raw lstats in a collapsible section for debugging
+  if (d.lstats && d.lstats.length) {
+    html += '<details style="margin-top:12px">'
+          + '<summary style="cursor:pointer;font-size:0.82rem;color:var(--text2);user-select:none">'
+          + 'Raw lstats (' + d.lstats.length + ' lines)</summary>'
+          + '<pre style="font-size:0.78rem;margin-top:6px;color:var(--text2);white-space:pre-wrap;word-break:break-all">'
+          + esc(d.lstats.join('\n'))
+          + '</pre></details>';
+  }
+
+  el.innerHTML = html;
+}
+
+/* ── Disconnect a specific node from the status table ───────────────────── */
+async function ncDisconnectNode(remoteNode) {
+  var local = document.getElementById('nc-local').value.trim();
+  ncLog('Disconnecting ' + remoteNode + ' from node ' + local + '...', 'AMI');
+  var r = await api('/api/ami/disconnect', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({local_node: local, remote_node: remoteNode})
+  });
+  if (r.ok) {
+    ncLog('Disconnected ' + remoteNode + '. ' + (r.data.output || []).join(' '), 'OK');
+    // Status will auto-update on the next poll tick, but also refresh immediately
+    setTimeout(ncStatus, 800);
+  } else {
+    ncLog('Disconnect failed: ' + (r.data.error || r.status), 'ERROR');
+  }
+}
+
+/* ── Connect / Disconnect (form buttons) ────────────────────────────────── */
 async function ncConnect(mode) {
   var local  = document.getElementById('nc-local').value.trim();
   var remote = document.getElementById('nc-remote').value.trim();
@@ -952,10 +1116,10 @@ async function ncConnect(mode) {
     body: JSON.stringify({local_node: local, remote_node: remote, mode: String(mode), disconnect_first: disc})
   });
   if (r.ok) {
-    var outStr = (r.data.output || []).join(' | ') || '(no output - this is normal for ilink commands)';
+    var outStr = (r.data.output || []).join(' | ') || '(no output - normal for ilink commands)';
     ncLog('Connect command sent. ' + outStr, 'OK');
     if (r.data.command) ncLog('Command: ' + r.data.command, 'DEBUG');
-    setTimeout(ncStatus, 2000);
+    setTimeout(ncStatus, 1500);
   } else {
     ncLog('Connect failed: ' + (r.data.error || r.status), 'ERROR');
     if (r.data.hint) ncLog('Hint: ' + r.data.hint, 'WARN');
@@ -972,43 +1136,16 @@ async function ncDisconnect(all) {
     body: JSON.stringify({local_node: local, remote_node: remote})
   });
   if (r.ok) {
-    var outStr = (r.data.output || []).join(' ') || '(no output - this is normal for ilink commands)';
+    var outStr = (r.data.output || []).join(' ') || '(no output - normal for ilink commands)';
     ncLog('Disconnect sent. ' + outStr, 'OK');
     if (r.data.command) ncLog('Command: ' + r.data.command, 'DEBUG');
-    setTimeout(ncStatus, 2000);
+    setTimeout(ncStatus, 1500);
   } else {
     ncLog('Disconnect failed: ' + (r.data.error || r.status), 'ERROR');
   }
 }
 
-async function ncStatus() {
-  var local = document.getElementById('nc-local').value.trim();
-  ncLog('Polling status for node ' + local + '...', 'DEBUG');
-  var r  = await api('/api/ami/status?node=' + encodeURIComponent(local));
-  var el = document.getElementById('nc-status');
-  if (!r.ok) {
-    el.innerHTML = '<div class="alert alert-danger">' + esc(r.data.error || 'Status failed') + '</div>';
-    ncLog('Status error: ' + (r.data.error || r.status), 'ERROR');
-    return;
-  }
-  var d     = r.data;
-  var keyed = d.keyed
-    ? '<span class="badge badge-ok">KEYED</span>'
-    : '<span class="badge badge-unk">NOT KEYED</span>';
-  var html  = '<p style="margin-bottom:10px">Node <strong>' + esc(String(local)) + '</strong> &mdash; ' + keyed + '</p>';
-  if (d.connected && d.connected.length) {
-    html += '<table class="tbl"><thead><tr><th>Connected Node</th></tr></thead><tbody>';
-    d.connected.forEach(function(n) { html += '<tr><td class="mono">' + esc(n) + '</td></tr>'; });
-    html += '</tbody></table>';
-    ncLog('Connected: [' + d.connected.join(', ') + ']', 'OK');
-  } else {
-    html += '<span class="muted">No nodes currently connected.</span>';
-    ncLog('No connections.', 'OK');
-  }
-  if (d.raw && d.raw.length) ncLog('rpt show variables: ' + d.raw.join(' | '), 'DEBUG');
-  el.innerHTML = html;
-}
-
+/* ── Node Lookup ─────────────────────────────────────────────────────────── */
 async function doLookup() {
   var node = document.getElementById('lookup-input').value.trim();
   if (!node) return;
@@ -1190,6 +1327,8 @@ async function loadSysInfo() {
     + '<tr><td>ASL Version</td><td class="mono">' + esc(d.asl_version || '') + '</td></tr>'
     + '<tr><td>AMI User</td><td class="mono">' + esc(d.ami_user || 'NOT CONFIGURED') + '</td></tr>'
     + '<tr><td>AMI Host</td><td class="mono">' + esc(d.ami_host || '') + '</td></tr>'
+    + '<tr><td>AMI Pool</td><td>' + (d.ami_connected ? '<span class="badge badge-ok">Connected</span>' : '<span class="badge badge-unk">Connecting...</span>') + '</td></tr>'
+    + '<tr><td>Poll Interval</td><td class="mono">' + esc(String(d.ami_poll_interval || 2)) + 's</td></tr>'
     + '<tr><td>rpt.conf path</td><td class="mono">' + esc(d.rpt_conf_path || '') + '</td></tr>'
     + '<tr><td>rpt.conf exists</td><td>' + (d.rpt_conf_exists ? 'Yes' : '<span style="color:var(--danger)">No</span>') + '</td></tr>'
     + '<tr><td>rpt.conf writable</td><td>'
@@ -1215,7 +1354,6 @@ window.addEventListener('DOMContentLoaded', function() {
   log('No node stanzas found in rpt.conf.', 'WARN');
   {% endif %}
   refreshDashboard();
-  // Check node DB status and trigger load
   checkNodeDB();
 });
 
