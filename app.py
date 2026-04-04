@@ -20,6 +20,10 @@ FIXES in this version:
   - Verbose logging throughout for dashboard debug display
   - AMI: persistent connection pool + background poller replaces per-request
     connect/login/logoff cycle; status reads from cache (microseconds vs ~200ms)
+  - AMI: use 'rpt show nodes' instead of 'rpt show variables' for reliable keyed
+    state detection in ASL3 (Rx=1 field); previous RPT_RXKEYED approach was unreliable
+  - AMI: CACHE_TTL raised to 30s and POLL_INTERVAL to 3s to eliminate false
+    stale warnings and match Allmon's update rate
 """
 
 import os
@@ -59,8 +63,9 @@ AMI_HOST        = os.environ.get("AMI_HOST",         "127.0.0.1")
 AMI_PORT        = int(os.environ.get("AMI_PORT",     5038))
 
 # Persistent AMI poller settings (tunable via service file env vars)
-POLL_INTERVAL   = float(os.environ.get("AMI_POLL_INTERVAL", "2.0"))   # seconds between polls
-CACHE_TTL       = float(os.environ.get("AMI_CACHE_TTL",     "5.0"))   # seconds before cache is stale
+# 3s poll matches Allmon's update rate; 30s TTL avoids false "stale" warnings
+POLL_INTERVAL   = float(os.environ.get("AMI_POLL_INTERVAL", "3.0"))   # seconds between polls
+CACHE_TTL       = float(os.environ.get("AMI_CACHE_TTL",     "30.0"))  # seconds before cache is stale
 
 # Full paths — do NOT rely on PATH env under gunicorn/systemd
 SYSTEMCTL_PATH  = "/bin/systemctl"
@@ -435,23 +440,41 @@ class AMIClient:
         }
 
     def get_node_status(self, node: str) -> dict:
+        """
+        Return keyed state and connected node list for `node`.
+
+        ASL3 keyed detection:
+          'rpt show nodes <node>' outputs a line like:
+            Node 64393, Conn=2, Rx=1, Tx=1, ...
+          Rx=1 means the node is currently receiving (keyed).
+          The old approach of parsing RPT_RXKEYED from 'rpt show variables'
+          is unreliable in ASL3 — the variable format changed and the field
+          is often absent or formatted differently.
+
+        Connected nodes come from 'rpt lstats <node>' which gives one line
+        per connected node containing the remote node number.
+        """
         status = {"keyed": False, "connected": [], "raw": [], "lstats": []}
 
-        lines = self.command(f"rpt show variables {node}")
+        # Primary: rpt show nodes — reliable Rx/Tx keyed state in ASL3
+        lines = self.command(f"rpt show nodes {node}")
         status["raw"] = lines
-        log("DEBUG", f"[AMI] rpt show variables {node} -> {lines}")
+        log("DEBUG", f"[AMI] rpt show nodes {node} -> {lines}")
         for line in lines:
-            if "RPT_RXKEYED" in line and "=1" in line:
+            # Match "Rx=1" anywhere on the line (case-insensitive for safety)
+            if re.search(r'\bRx=1\b', line, re.IGNORECASE):
                 status["keyed"] = True
-            for n in re.findall(r"(\d{4,7})", line):
+            # Pick up any node numbers on this line (connected nodes appear here too)
+            for n in re.findall(r'\b(\d{4,7})\b', line):
                 if n != str(node) and n not in status["connected"]:
                     status["connected"].append(n)
 
+        # Secondary: rpt lstats — definitive connected node list
         lstats = self.command(f"rpt lstats {node}")
         status["lstats"] = lstats
         log("DEBUG", f"[AMI] rpt lstats {node} -> {lstats}")
         for line in lstats:
-            for n in re.findall(r"(\d{4,7})", line):
+            for n in re.findall(r'\b(\d{4,7})\b', line):
                 if n != str(node) and n not in status["connected"]:
                     status["connected"].append(n)
 
@@ -1170,17 +1193,23 @@ def api_ami_status():
     """
     Returns cached node status. Sub-millisecond — reads from the background
     poller cache rather than opening a new AMI connection.
+    Always returns JSON — never an HTML error page.
     """
-    content = read_conf_file(RPT_CONF_PATH)
-    nodes   = get_node_numbers(content) if content else []
-    if not nodes:
-        return jsonify({"error": "No nodes found in rpt.conf"}), 404
-    node   = request.args.get("node", nodes[0])
-    result = get_cached_status(node)
-    if _ami_last_error and result.get("stale"):
-        result["error"] = _ami_last_error
-    log("DEBUG", f"[API] /api/ami/status node={node} age={result.get('age')}s stale={result.get('stale')}")
-    return jsonify(result)
+    try:
+        content = read_conf_file(RPT_CONF_PATH)
+        nodes   = get_node_numbers(content) if content else []
+        if not nodes:
+            return jsonify({"error": "No nodes found in rpt.conf",
+                            "hint": "Check rpt.conf path and permissions"}), 404
+        node   = request.args.get("node", nodes[0])
+        result = get_cached_status(node)
+        if _ami_last_error and result.get("stale"):
+            result["error"] = _ami_last_error
+        log("DEBUG", f"[API] /api/ami/status node={node} age={result.get('age')}s stale={result.get('stale')}")
+        return jsonify(result)
+    except Exception as e:
+        log("ERROR", f"[API] /api/ami/status exception: {e}")
+        return jsonify({"error": str(e), "keyed": False, "connected": [], "stale": True}), 500
 
 
 @app.route("/api/ami/connect", methods=["POST"])
