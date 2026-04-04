@@ -10,12 +10,16 @@ FIXES in this version:
   - AMI: response reader handles multi-packet event floods after login
   - rpt.conf save: writes via temp file + atomic rename so partial writes can't corrupt
   - rpt.conf save: explicit flush+fsync before rename
+  - rpt.conf save: ownership restored to asterisk:asterisk (mode 640) after atomic rename
+    so ASL3 can read the file (Asterisk runs as asterisk user, not root)
   - Asterisk restart: uses full path /bin/systemctl to avoid PATH issues under gunicorn
   - Asterisk reload: uses /usr/sbin/asterisk full path
   - Node control: corrected ilink command syntax for ASL3 / app_rpt
   - Removed duplicate service name (was referencing both asl3-rpt-editor and ASL3-EZ)
   - No emojis anywhere in output or logs
   - Verbose logging throughout for dashboard debug display
+  - AMI: persistent connection pool + background poller replaces per-request
+    connect/login/logoff cycle; status reads from cache (microseconds vs ~200ms)
 """
 
 import os
@@ -29,6 +33,8 @@ import sqlite3
 import threading
 import tempfile
 import sys
+import pwd
+import grp
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify
 
@@ -51,6 +57,10 @@ HOST            = os.environ.get("HOST",             "0.0.0.0")
 DB_PATH         = os.environ.get("DB_PATH",          "/etc/asterisk/asl3ez.db")
 AMI_HOST        = os.environ.get("AMI_HOST",         "127.0.0.1")
 AMI_PORT        = int(os.environ.get("AMI_PORT",     5038))
+
+# Persistent AMI poller settings (tunable via service file env vars)
+POLL_INTERVAL   = float(os.environ.get("AMI_POLL_INTERVAL", "2.0"))   # seconds between polls
+CACHE_TTL       = float(os.environ.get("AMI_CACHE_TTL",     "5.0"))   # seconds before cache is stale
 
 # Full paths — do NOT rely on PATH env under gunicorn/systemd
 SYSTEMCTL_PATH  = "/bin/systemctl"
@@ -174,20 +184,17 @@ def parse_manager_conf():
 
     # Walk stanzas — take the FIRST non-[general] stanza that has a secret
     # and is not explicitly disabled. Do NOT require a write= line.
-    current_header = None
-    current_secret = None
+    current_header  = None
+    current_secret  = None
     current_enabled = True
 
     for raw_line in raw.splitlines():
         line = raw_line.strip()
-        # Skip blank lines and full-line comments
         if not line or line.startswith(";"):
             continue
 
-        # New stanza header
         hdr = re.match(r'^\[([^\]]+)\]', line)
         if hdr:
-            # Commit previous stanza if it had a secret
             if current_header and current_header.lower() != "general" and current_secret and current_enabled:
                 log("INFO", f"[AMI-CREDS] Using manager.conf user: '{current_header}'")
                 result["user"]   = current_header
@@ -199,9 +206,8 @@ def parse_manager_conf():
             log("DEBUG", f"[AMI-CREDS] Entering stanza [{current_header}]")
             continue
 
-        # Key = value (strip inline comments)
         if "=" in line:
-            kv = line.split(";", 1)[0]   # strip inline comment
+            kv  = line.split(";", 1)[0]
             key = kv.split("=", 1)[0].strip().lower()
             val = kv.split("=", 1)[1].strip()
 
@@ -216,7 +222,6 @@ def parse_manager_conf():
             elif key == "deny":
                 log("WARN", f"[AMI-CREDS] [{current_header}] deny={val} (check this doesn't block localhost)")
 
-    # Commit last stanza
     if current_header and current_header.lower() != "general" and current_secret and current_enabled:
         log("INFO", f"[AMI-CREDS] Using manager.conf user: '{current_header}'")
         result["user"]   = current_header
@@ -257,18 +262,12 @@ class AMIClient:
     # ── low-level I/O ────────────────────────────────────────────────────────
 
     def _send(self, text: str):
-        """Send raw UTF-8 text."""
         self._sock.sendall(text.encode("utf-8"))
 
     def _recv_until(self, sentinel: str, timeout: float = None) -> str:
-        """
-        Read bytes from the socket accumulating into a string until
-        `sentinel` appears in the accumulated data, or timeout elapses.
-        Returns the full accumulated string (may contain more than sentinel).
-        """
         deadline = time.time() + (timeout or self.timeout)
         buf = ""
-        self._sock.settimeout(0.5)   # short poll interval
+        self._sock.settimeout(0.5)
         while time.time() < deadline:
             try:
                 chunk = self._sock.recv(4096)
@@ -286,13 +285,11 @@ class AMIClient:
         return buf
 
     def _send_action(self, params: dict):
-        """Send an AMI action packet (key: value pairs terminated by blank line)."""
         msg = "".join(f"{k}: {v}\r\n" for k, v in params.items()) + "\r\n"
         log("DEBUG", f"[AMI] >> {list(params.items())[:3]}")
         self._send(msg)
 
     def _parse_packet(self, raw: str) -> dict:
-        """Parse an AMI key:value block into a dict."""
         result = {}
         for line in raw.splitlines():
             if ":" in line:
@@ -320,9 +317,6 @@ class AMIClient:
         except OSError as e:
             raise Exception(f"AMI connect failed: {e}")
 
-        # ── Step 1: Read the banner line ──────────────────────────────────────
-        # Asterisk 20 sends exactly ONE line: "Asterisk Call Manager/X.Y.Z\r\n"
-        # Read until we see \r\n (NOT \r\n\r\n — there is only one CRLF).
         banner = self._recv_until("\r\n", timeout=5)
         banner = banner.strip()
         log("INFO", f"[AMI] Banner: {banner!r}")
@@ -334,7 +328,6 @@ class AMIClient:
         if "Asterisk Call Manager" not in banner:
             log("WARN", f"[AMI] Unexpected banner (continuing anyway): {banner!r}")
 
-        # ── Step 2: Send Login ────────────────────────────────────────────────
         login_action = (
             f"Action: Login\r\n"
             f"Username: {self.user}\r\n"
@@ -345,21 +338,15 @@ class AMIClient:
         log("DEBUG", f"[AMI] Sending Login for user '{self.user}'")
         self._send(login_action)
 
-        # ── Step 3: Read login response ───────────────────────────────────────
-        # Read until we see \r\n\r\n (packet terminator)
         resp_raw = self._recv_until("\r\n\r\n", timeout=self.timeout)
         log("DEBUG", f"[AMI] Login raw response: {resp_raw!r}")
 
-        # The response may be preceded by a stray event or extra \r\n;
-        # find the last complete packet in the buffer.
-        # Split on double-CRLF and examine each chunk.
         chunks = [c.strip() for c in resp_raw.split("\r\n\r\n") if c.strip()]
         login_response = {}
         for chunk in chunks:
             pkt = self._parse_packet(chunk)
             if "Response" in pkt:
                 login_response = pkt
-                # Don't break — take the LAST Response: packet in case of flooding
 
         log("DEBUG", f"[AMI] Login response parsed: {login_response}")
 
@@ -395,10 +382,6 @@ class AMIClient:
     # ── AMI Command ───────────────────────────────────────────────────────────
 
     def command(self, cmd: str) -> list:
-        """
-        Send AMI Command action. Collect Output: lines until --END COMMAND--.
-        Returns list of output strings.
-        """
         log("INFO", f"[AMI] CMD: {cmd!r}")
         action = (
             f"Action: Command\r\n"
@@ -407,7 +390,6 @@ class AMIClient:
         )
         self._send(action)
 
-        # Read until --END COMMAND-- sentinel
         raw = self._recv_until("--END COMMAND--", timeout=self.timeout)
         log("DEBUG", f"[AMI] CMD raw ({len(raw)} bytes): {raw[:300]!r}")
 
@@ -428,12 +410,6 @@ class AMIClient:
         """
         Issue an app_rpt command via AMI.
 
-        ASL3 / Asterisk 20 uses the AMI Action "Command" with the CLI command
-        "rpt cmd <node> <subcmd>".
-
-        The subcmd for ilink operations is:
-            ilink <function_number> [node_number]
-
         ilink function numbers:
             1  = disconnect specific node
             2  = connect monitor-only
@@ -441,16 +417,12 @@ class AMIClient:
             6  = disconnect all
             12 = permanent monitor
             13 = permanent transceive
-
-        Returns dict with keys: output (list), success (bool), raw (str)
         """
         full_cmd = f"rpt cmd {node} {subcmd}"
         log("INFO", f"[AMI] rpt_cmd: {full_cmd!r}")
         output_lines = self.command(full_cmd)
         log("DEBUG", f"[AMI] rpt_cmd output: {output_lines}")
 
-        # Determine success — app_rpt returns nothing on success (empty output
-        # is normal for ilink commands). An explicit error line indicates failure.
         error_indicators = ["error", "invalid", "no such", "failed", "unknown command"]
         raw_joined = " ".join(output_lines).lower()
         is_error = any(e in raw_joined for e in error_indicators)
@@ -465,41 +437,161 @@ class AMIClient:
     def get_node_status(self, node: str) -> dict:
         status = {"keyed": False, "connected": [], "raw": [], "lstats": []}
 
-        # rpt show variables gives us RPT_RXKEYED and RPT_LINKS
         lines = self.command(f"rpt show variables {node}")
         status["raw"] = lines
         log("DEBUG", f"[AMI] rpt show variables {node} -> {lines}")
         for line in lines:
             if "RPT_RXKEYED" in line and "=1" in line:
                 status["keyed"] = True
-            for n in re.findall(r"(\d{4,7})", line):
+            for n in re.findall(r"(\d{4,7})", line):
                 if n != str(node) and n not in status["connected"]:
                     status["connected"].append(n)
 
-        # rpt lstats gives connected node details
         lstats = self.command(f"rpt lstats {node}")
         status["lstats"] = lstats
         log("DEBUG", f"[AMI] rpt lstats {node} -> {lstats}")
         for line in lstats:
-            for n in re.findall(r"(\d{4,7})", line):
+            for n in re.findall(r"(\d{4,7})", line):
                 if n != str(node) and n not in status["connected"]:
                     status["connected"].append(n)
 
         return status
 
 
-def ami_session() -> AMIClient:
-    cfg = parse_manager_conf()
-    if not cfg.get("user") or not cfg.get("secret"):
-        raise Exception(
-            "AMI credentials not configured.\n"
-            "Set AMI_USER and AMI_SECRET in /etc/systemd/system/ASL3-EZ.service\n"
-            "then run: systemctl daemon-reload && systemctl restart ASL3-EZ\n"
-            "See the AMI Diagnostics page for a step-by-step setup guide."
-        )
-    client = AMIClient(cfg["host"], cfg["port"], cfg["user"], cfg["secret"])
+# ---------------------------------------------------------------------------
+# Persistent AMI connection pool + background poller
+#
+# Instead of opening a new TCP socket on every HTTP request, we keep one
+# long-lived AMI session and have a background thread poll it on a fixed
+# interval. API endpoints read from the cache (sub-millisecond) rather than
+# waiting on a fresh TCP round-trip each time.
+#
+# The old path per status request:
+#   TCP connect (~10-50ms) + banner + login + command + logoff = ~100-300ms
+#
+# With pool:
+#   /api/ami/status = dict lookup = <1ms
+#   Background thread does all AMI work decoupled from HTTP requests
+# ---------------------------------------------------------------------------
+
+_ami_pool_lock   = threading.Lock()
+_ami_client      = None      # the live AMIClient instance (or None)
+_ami_cache       = {}        # {node: status_dict}
+_ami_cache_ts    = {}        # {node: float unix timestamp}
+_ami_last_error  = None      # last connection error string
+_ami_connected   = False
+
+
+def _ami_ensure_connected() -> AMIClient:
+    """
+    Return the live AMIClient, (re)connecting if necessary.
+    Must be called with _ami_pool_lock held.
+    """
+    global _ami_client, _ami_connected, _ami_last_error
+    if _ami_client is not None:
+        return _ami_client
+    creds = parse_manager_conf()
+    if not creds.get("user") or not creds.get("secret"):
+        raise Exception("AMI credentials not configured")
+    client = AMIClient(creds["host"], creds["port"], creds["user"], creds["secret"])
     client.connect()
+    _ami_client    = client
+    _ami_connected = True
+    _ami_last_error = None
+    log("INFO", "[AMI-POOL] Persistent connection established")
     return client
+
+
+def _ami_invalidate():
+    """
+    Drop the current connection so the next call reconnects.
+    Must be called with _ami_pool_lock held.
+    """
+    global _ami_client, _ami_connected
+    try:
+        if _ami_client:
+            _ami_client.close()
+    except Exception:
+        pass
+    _ami_client    = None
+    _ami_connected = False
+    log("WARN", "[AMI-POOL] Connection invalidated — will reconnect on next poll")
+
+
+def _poll_loop():
+    """
+    Background daemon thread. Polls node status over the persistent AMI
+    connection and writes results into _ami_cache. On any socket error the
+    connection is dropped and re-established on the next iteration.
+    """
+    global _ami_last_error
+    log("INFO", f"[AMI-POLL] Background poller started (interval={POLL_INTERVAL}s)")
+    while True:
+        try:
+            content = read_conf_file(RPT_CONF_PATH)
+            nodes   = get_node_numbers(content) if content else []
+            if not nodes:
+                time.sleep(POLL_INTERVAL)
+                continue
+
+            with _ami_pool_lock:
+                try:
+                    ami = _ami_ensure_connected()
+                    for node in nodes:
+                        status = ami.get_node_status(node)
+                        _ami_cache[node]    = status
+                        _ami_cache_ts[node] = time.time()
+                except Exception as e:
+                    _ami_last_error = str(e)
+                    log("ERROR", f"[AMI-POLL] Error during poll: {e}")
+                    _ami_invalidate()
+
+        except Exception as outer:
+            log("ERROR", f"[AMI-POLL] Unexpected outer error: {outer}")
+
+        time.sleep(POLL_INTERVAL)
+
+
+def start_poller():
+    t = threading.Thread(target=_poll_loop, name="ami-poller", daemon=True)
+    t.start()
+    log("INFO", "[AMI-POLL] Poller thread launched")
+
+
+def get_cached_status(node: str) -> dict:
+    """
+    Return the most recent cached status for a node.
+    If the cache is stale or missing, stale=True is included in the result
+    so the frontend can show a loading indicator rather than wrong data.
+    """
+    node   = str(node)
+    status = _ami_cache.get(node)
+    ts     = _ami_cache_ts.get(node, 0)
+    age    = time.time() - ts
+    if status is None:
+        return {"node": node, "stale": True, "age": None, "error": "No data yet"}
+    return {**status, "node": node, "stale": age > CACHE_TTL, "age": round(age, 2)}
+
+
+def ami_send_command(subcmd_fn) -> dict:
+    """
+    Execute a one-off command (connect/disconnect/etc.) over the persistent
+    connection. subcmd_fn receives an AMIClient and returns a result dict.
+    Falls back to a fresh connection if the persistent one is broken.
+    """
+    with _ami_pool_lock:
+        try:
+            ami = _ami_ensure_connected()
+            return subcmd_fn(ami)
+        except Exception as e:
+            log("WARN", f"[AMI-POOL] Command failed on persistent conn: {e} — retrying fresh")
+            _ami_invalidate()
+            try:
+                ami = _ami_ensure_connected()
+                return subcmd_fn(ami)
+            except Exception as e2:
+                _ami_invalidate()
+                raise e2
 
 
 # ---------------------------------------------------------------------------
@@ -523,6 +615,18 @@ def read_conf_file(path):
 
 
 def write_conf_file(path, content):
+    """
+    Atomically write content to path:
+      1. Create timestamped backup of existing file
+      2. Write to a temp file in the same directory
+      3. fsync + rename (atomic on Linux)
+      4. Restore ownership to asterisk:asterisk and mode to 640
+         so ASL3/Asterisk (which runs as the asterisk user) can read the file.
+         Without this step the renamed temp file is owned by root:root and
+         Asterisk cannot read it, causing a crash on reload/restart.
+
+    Raises PermissionError / OSError on failure.
+    """
     os.makedirs(BACKUP_DIR, exist_ok=True)
 
     # Backup existing file
@@ -545,19 +649,21 @@ def write_conf_file(path, content):
             os.rename(tmp_path, path)
             log("INFO", f"[CONF] Saved {len(content)} bytes to {path}")
 
-            # ── FIX: Restore ownership and permissions required by ASL3 ──────
-            # Asterisk runs as asterisk:asterisk and must be able to read
-            # rpt.conf. The temp file was created as root:root, so we
-            # explicitly reset ownership and mode after the rename.
+            # ── FIX: Restore ownership + permissions required by ASL3 ────────
+            # The temp file was created as root:root (service runs as root).
+            # After os.rename the file retains those credentials.
+            # Asterisk runs as the 'asterisk' user and MUST be able to read
+            # rpt.conf — if it can't, Asterisk crashes on the next reload.
+            # Correct ownership: asterisk:asterisk, mode: 640
             try:
-                import pwd, grp
                 uid = pwd.getpwnam("asterisk").pw_uid
                 gid = grp.getgrnam("asterisk").gr_gid
                 os.chown(path, uid, gid)
                 os.chmod(path, 0o640)
-                log("INFO", f"[CONF] Set {path} owner=asterisk:asterisk mode=640")
+                log("INFO", f"[CONF] Restored {path} owner=asterisk:asterisk mode=640")
             except KeyError:
-                log("WARN", "[CONF] 'asterisk' user/group not found — skipping chown (non-ASL3 system?)")
+                log("WARN", "[CONF] 'asterisk' user/group not found — skipping chown "
+                            "(non-ASL3 system?)")
             except PermissionError as e:
                 log("ERROR", f"[CONF] chown/chmod failed: {e} — file may have wrong permissions")
             # ─────────────────────────────────────────────────────────────────
@@ -574,6 +680,7 @@ def write_conf_file(path, content):
         raise
 
     return backup_path
+
 
 def get_node_numbers(content):
     nodes = []
@@ -623,7 +730,6 @@ def update_setting_in_content(content, section, key, value, enable=True):
         result.append(line)
 
     if not found:
-        # Insert at end of target section
         new_lines  = []
         in_target  = False
         inserted   = False
@@ -646,24 +752,14 @@ def update_setting_in_content(content, section, key, value, enable=True):
 
 
 # ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
 # Node lookup — AllStarLink Allmon DB (live API) + local astdb.txt fallback
-#
-# The authoritative source for callsign/description/location is the
-# AllStarLink Allmon DB API at allmondb.allstarlink.org.
-# The local astdb.txt (written by asl3-update-astdb) is used as a fallback
-# when the network is unavailable.
-#
-# allmondb.php format (pipe-separated):
-#   node|callsign|description|location
 # ---------------------------------------------------------------------------
-_astdb_cache   = {}   # from local astdb.txt
+_astdb_cache   = {}
 _astdb_loaded  = False
 _astdb_lock    = threading.Lock()
 
 
 def load_astdb():
-    """Load local astdb.txt into cache. Called once at startup."""
     global _astdb_cache, _astdb_loaded
     with _astdb_lock:
         for path in ASTDB_PATHS:
@@ -675,7 +771,6 @@ def load_astdb():
                             line = line.strip()
                             if not line or line.startswith("#"):
                                 continue
-                            # Try pipe-separated first (allmondb format), then comma
                             sep = "|" if "|" in line else ","
                             parts = [p.strip() for p in line.split(sep)]
                             if len(parts) >= 2:
@@ -699,11 +794,6 @@ def load_astdb():
 
 
 def fetch_allmondb_node(node: str) -> dict:
-    """
-    Fetch a single node description from the AllStarLink Allmon DB API.
-    The allmondb.php endpoint returns the full database as pipe-separated text.
-    We cache individual results to avoid hammering the API.
-    """
     global _allmondb_cache, _allmondb_loaded
     node = str(node)
 
@@ -711,11 +801,9 @@ def fetch_allmondb_node(node: str) -> dict:
         if node in _allmondb_cache:
             return _allmondb_cache[node]
 
-    # Try local cache first
     if _astdb_loaded and node in _astdb_cache:
         return _astdb_cache[node]
 
-    # Fetch from live API
     try:
         url = ALLMONDB_URL
         req = urlreq.Request(url, headers={"User-Agent": "ASL3-EZ/1.0"})
@@ -729,7 +817,6 @@ def fetch_allmondb_node(node: str) -> dict:
                 line = line.strip()
                 if not line or line.startswith("#"):
                     continue
-                # Format: node|callsign|description|location
                 sep   = "|" if "|" in line else ","
                 parts = [p.strip() for p in line.split(sep)]
                 if len(parts) >= 2:
@@ -750,24 +837,17 @@ def fetch_allmondb_node(node: str) -> dict:
 
 
 def lookup_node(node: str) -> dict:
-    """
-    Look up a node's callsign/description/location.
-    Tries in order: allmondb in-memory cache -> local astdb.txt -> live API fetch.
-    """
     node = str(node)
 
-    # Check allmondb in-memory cache first (populated after first API call)
     with _allmondb_lock:
         if node in _allmondb_cache:
             return _allmondb_cache[node]
 
-    # Check local astdb.txt cache
     if not _astdb_loaded:
         load_astdb()
     if node in _astdb_cache:
         return _astdb_cache[node]
 
-    # Neither cache has it — fetch from live API (this also populates the cache)
     return fetch_allmondb_node(node)
 
 
@@ -828,7 +908,6 @@ def get_asl_version():
 
 
 def get_asterisk_status():
-    """Return dict with running/not and basic version info."""
     try:
         r = subprocess.run([SYSTEMCTL_PATH, "is-active", "asterisk"],
                            capture_output=True, text=True, timeout=5)
@@ -920,7 +999,6 @@ def api_save():
 
 @app.route("/api/restart", methods=["POST"])
 def api_restart():
-    """Full Asterisk restart via systemctl."""
     log("INFO", "[API] /api/restart called")
     try:
         r = subprocess.run(
@@ -948,7 +1026,6 @@ def api_restart():
 
 @app.route("/api/reload", methods=["POST"])
 def api_reload():
-    """Soft app_rpt module reload."""
     log("INFO", "[API] /api/reload called")
     try:
         r = subprocess.run(
@@ -1050,7 +1127,7 @@ def api_fav_label():
         return jsonify({"error": str(e)}), 500
 
 
-# ── AllStarLink stats proxy (avoids CORS from browser) ───────────────────────
+# ── AllStarLink stats proxy ───────────────────────────────────────────────────
 
 @app.route("/api/nodestats/<node>")
 def api_node_stats(node):
@@ -1090,21 +1167,20 @@ def api_nodestats_batch():
 
 @app.route("/api/ami/status")
 def api_ami_status():
+    """
+    Returns cached node status. Sub-millisecond — reads from the background
+    poller cache rather than opening a new AMI connection.
+    """
     content = read_conf_file(RPT_CONF_PATH)
     nodes   = get_node_numbers(content) if content else []
     if not nodes:
         return jsonify({"error": "No nodes found in rpt.conf"}), 404
-    node = request.args.get("node", nodes[0])
-    log("INFO", f"[API] /api/ami/status node={node}")
-    try:
-        ami    = ami_session()
-        status = ami.get_node_status(node)
-        ami.close()
-        return jsonify({"node": node, **status})
-    except Exception as e:
-        log("ERROR", f"[API] /api/ami/status error: {e}")
-        return jsonify({"error": str(e), "node": node,
-                        "hint": "Verify AMI_USER and AMI_SECRET in the service file"}), 500
+    node   = request.args.get("node", nodes[0])
+    result = get_cached_status(node)
+    if _ami_last_error and result.get("stale"):
+        result["error"] = _ami_last_error
+    log("DEBUG", f"[API] /api/ami/status node={node} age={result.get('age')}s stale={result.get('stale')}")
+    return jsonify(result)
 
 
 @app.route("/api/ami/connect", methods=["POST"])
@@ -1112,7 +1188,7 @@ def api_ami_connect():
     data        = request.json or {}
     local_node  = str(data.get("local_node",  "")).strip()
     remote_node = str(data.get("remote_node", "")).strip()
-    mode        = str(data.get("mode", "3"))      # 3=transceive, 2=monitor
+    mode        = str(data.get("mode", "3"))
     disc_first  = data.get("disconnect_first", False)
 
     if not local_node or not remote_node:
@@ -1121,21 +1197,25 @@ def api_ami_connect():
         return jsonify({"error": "Node numbers must be numeric"}), 400
 
     log("INFO", f"[API] /api/ami/connect local={local_node} remote={remote_node} mode={mode} disc_first={disc_first}")
-    try:
-        ami    = ami_session()
+
+    def _do(ami):
         output = []
         if disc_first:
             log("INFO", f"[API] Disconnecting all first on node {local_node}")
             r = ami.rpt_cmd(local_node, "ilink 6")
             output.extend(r["output"])
-            time.sleep(0.6)
+            time.sleep(0.3)
         r = ami.rpt_cmd(local_node, f"ilink {mode} {remote_node}")
         output.extend(r["output"])
-        ami.close()
-        log("INFO", f"[API] Connect result: success={r['success']} output={output}")
-        return jsonify({"success": r["success"], "output": output,
-                        "command": r["command"],
-                        "note": "Empty output is normal for ilink commands — success means no error was returned"})
+        return {
+            "success": r["success"],
+            "output":  output,
+            "command": r["command"],
+            "note":    "Empty output is normal for ilink commands — success means no error was returned",
+        }
+
+    try:
+        return jsonify(ami_send_command(_do))
     except Exception as e:
         log("ERROR", f"[API] /api/ami/connect error: {e}")
         return jsonify({"error": str(e)}), 500
@@ -1151,16 +1231,16 @@ def api_ami_disconnect():
         return jsonify({"error": "local_node required"}), 400
 
     log("INFO", f"[API] /api/ami/disconnect local={local_node} remote={remote_node or '(all)'}")
-    try:
-        ami = ami_session()
+
+    def _do(ami):
         if remote_node:
             r = ami.rpt_cmd(local_node, f"ilink 1 {remote_node}")
         else:
             r = ami.rpt_cmd(local_node, "ilink 6")
-        ami.close()
-        log("INFO", f"[API] Disconnect result: success={r['success']} output={r['output']}")
-        return jsonify({"success": r["success"], "output": r["output"],
-                        "command": r["command"]})
+        return {"success": r["success"], "output": r["output"], "command": r["command"]}
+
+    try:
+        return jsonify(ami_send_command(_do))
     except Exception as e:
         log("ERROR", f"[API] /api/ami/disconnect error: {e}")
         return jsonify({"error": str(e)}), 500
@@ -1168,22 +1248,22 @@ def api_ami_disconnect():
 
 @app.route("/api/ami/perm_connect", methods=["POST"])
 def api_ami_perm_connect():
-    """Permanent connection (survives Asterisk reload)."""
     data        = request.json or {}
     local_node  = str(data.get("local_node",  "")).strip()
     remote_node = str(data.get("remote_node", "")).strip()
-    mode        = str(data.get("mode", "13"))  # 13=perm transceive, 12=perm monitor
+    mode        = str(data.get("mode", "13"))
 
     if not local_node or not remote_node:
         return jsonify({"error": "local_node and remote_node required"}), 400
 
     log("INFO", f"[API] /api/ami/perm_connect local={local_node} remote={remote_node} mode={mode}")
-    try:
-        ami = ami_session()
+
+    def _do(ami):
         r = ami.rpt_cmd(local_node, f"ilink {mode} {remote_node}")
-        ami.close()
-        return jsonify({"success": r["success"], "output": r["output"],
-                        "command": r["command"]})
+        return {"success": r["success"], "output": r["output"], "command": r["command"]}
+
+    try:
+        return jsonify(ami_send_command(_do))
     except Exception as e:
         log("ERROR", f"[API] /api/ami/perm_connect error: {e}")
         return jsonify({"error": str(e)}), 500
@@ -1197,17 +1277,19 @@ def api_sysinfo():
     ami_user    = creds.get("user") or "NOT CONFIGURED"
     ast_status  = get_asterisk_status()
     return jsonify({
-        "cpu_temp":        get_cpu_temp(),
-        "disk":            get_disk_usage(),
-        "uptime":          get_uptime(),
-        "asl_version":     get_asl_version(),
-        "asterisk_active": ast_status["active"],
-        "asterisk_version": ast_status["version"],
-        "ami_user":        ami_user,
-        "ami_host":        f"{AMI_HOST}:{AMI_PORT}",
-        "running_as":      "root" if os.getuid() == 0 else f"uid={os.getuid()} (NOT ROOT - some features will fail)",
-        "rpt_conf_path":   RPT_CONF_PATH,
-        "rpt_conf_exists": os.path.exists(RPT_CONF_PATH),
+        "cpu_temp":          get_cpu_temp(),
+        "disk":              get_disk_usage(),
+        "uptime":            get_uptime(),
+        "asl_version":       get_asl_version(),
+        "asterisk_active":   ast_status["active"],
+        "asterisk_version":  ast_status["version"],
+        "ami_user":          ami_user,
+        "ami_host":          f"{AMI_HOST}:{AMI_PORT}",
+        "ami_connected":     _ami_connected,
+        "ami_poll_interval": POLL_INTERVAL,
+        "running_as":        "root" if os.getuid() == 0 else f"uid={os.getuid()} (NOT ROOT - some features will fail)",
+        "rpt_conf_path":     RPT_CONF_PATH,
+        "rpt_conf_exists":   os.path.exists(RPT_CONF_PATH),
         "rpt_conf_writable": os.access(RPT_CONF_PATH, os.W_OK),
     })
 
@@ -1217,7 +1299,6 @@ def api_lookup(node):
     if not node.isdigit():
         return jsonify({"error": "Invalid node"}), 400
     info = lookup_node(node)
-    # Include diagnostic info about which source was used
     source = "unknown"
     with _allmondb_lock:
         if node in _allmondb_cache:
@@ -1232,7 +1313,6 @@ def api_lookup(node):
 
 @app.route("/api/debug/nodedb")
 def api_debug_nodedb():
-    """Debug endpoint: show node DB status and sample entries."""
     astdb_status = {}
     for path in ASTDB_PATHS:
         astdb_status[path] = os.path.exists(path)
@@ -1258,15 +1338,14 @@ def api_debug_nodedb():
 
 @app.route("/api/ami/test")
 def api_ami_test():
-    """Quick AMI connectivity and auth test — useful for dashboard diagnostics."""
     log("INFO", "[API] /api/ami/test")
     creds = parse_manager_conf()
     result = {
-        "ami_host":   f"{creds.get('host')}:{creds.get('port')}",
-        "ami_user":   creds.get("user") or "NOT CONFIGURED",
+        "ami_host":    f"{creds.get('host')}:{creds.get('port')}",
+        "ami_user":    creds.get("user") or "NOT CONFIGURED",
         "creds_found": bool(creds.get("user") and creds.get("secret")),
-        "connected":  False,
-        "error":      None,
+        "connected":   False,
+        "error":       None,
     }
     if not result["creds_found"]:
         result["error"] = (
@@ -1275,23 +1354,32 @@ def api_ami_test():
         )
         return jsonify(result), 500
 
-    # Reload the manager module first so Asterisk picks up any recent
-    # edits to manager.conf before we attempt to authenticate.
     try:
         subprocess.run([ASTERISK_PATH, "-rx", "module reload manager"],
                        capture_output=True, text=True, timeout=8)
-        import time as _time; _time.sleep(0.5)
+        time.sleep(0.5)
         log("INFO", "[AMI-TEST] Reloaded manager module before test")
     except Exception as reload_err:
         log("WARN", f"[AMI-TEST] Could not reload manager module: {reload_err}")
 
     try:
-        ami = ami_session()
-        out = ami.command("core show version")
-        ami.close()
+        # Test against the pool connection if already up, else fresh
+        with _ami_pool_lock:
+            try:
+                ami = _ami_ensure_connected()
+                out = ami.command("core show version")
+            except Exception:
+                _ami_invalidate()
+                raise
         result["connected"]     = True
         result["asterisk_info"] = out[0] if out else "connected"
-        result["creds_source"]  = "env vars" if os.environ.get("AMI_SECRET","").strip().lower() not in {"yourpassword","your_secret_here","changeme","amp111",""} else "manager.conf"
+        result["pool_active"]   = _ami_connected
+        result["creds_source"]  = (
+            "env vars"
+            if os.environ.get("AMI_SECRET", "").strip().lower()
+               not in {"yourpassword", "your_secret_here", "changeme", "amp111", ""}
+            else "manager.conf"
+        )
     except Exception as e:
         result["error"] = str(e)
         result["hint"]  = (
@@ -1303,24 +1391,10 @@ def api_ami_test():
     return jsonify(result)
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-if __name__ == "__main__":
-    log("INFO", "Starting in direct-run mode (not via gunicorn)")
-    load_astdb()
-    app.run(host=HOST, port=PORT, debug=False)
-
-
-# ── Raw AMI debug — dumps exact bytes for troubleshooting ────────────────────
+# ── Raw AMI debug ─────────────────────────────────────────────────────────────
 
 @app.route("/api/ami/raw_test")
 def api_ami_raw_test():
-    """
-    Low-level AMI socket test that logs every byte exchanged.
-    Returns a full transcript visible in the browser.
-    Use this when normal AMI test fails to see exactly what Asterisk returns.
-    """
     log("INFO", "[API] /api/ami/raw_test")
     creds = parse_manager_conf()
     transcript = []
@@ -1331,12 +1405,12 @@ def api_ami_raw_test():
 
     if not creds.get("user") or not creds.get("secret"):
         return jsonify({
-            "error": "Credentials not configured",
+            "error":      "Credentials not configured",
             "transcript": transcript,
-            "fix": "Set AMI_USER and AMI_SECRET in /etc/systemd/system/ASL3-EZ.service"
+            "fix":        "Set AMI_USER and AMI_SECRET in /etc/systemd/system/ASL3-EZ.service"
         }), 500
 
-    host, port = creds["host"], creds["port"]
+    host, port   = creds["host"], creds["port"]
     user, secret = creds["user"], creds["secret"]
 
     note(f"Connecting to {host}:{port}")
@@ -1348,8 +1422,7 @@ def api_ami_raw_test():
     except Exception as e:
         return jsonify({"error": str(e), "transcript": transcript}), 500
 
-    # Read banner (single \r\n terminated line)
-    buf = b""
+    buf      = b""
     deadline = time.time() + 4
     while time.time() < deadline:
         s.settimeout(0.5)
@@ -1365,7 +1438,6 @@ def api_ami_raw_test():
     banner = buf.decode("utf-8", errors="replace").strip()
     note(f"Banner: {banner!r}")
 
-    # Send Login
     login = (
         f"Action: Login\r\n"
         f"Username: {user}\r\n"
@@ -1380,7 +1452,6 @@ def api_ami_raw_test():
         s.close()
         return jsonify({"error": f"Send failed: {e}", "transcript": transcript}), 500
 
-    # Read response (wait for \r\n\r\n)
     resp_buf = b""
     deadline = time.time() + 6
     s.settimeout(0.5)
@@ -1413,7 +1484,7 @@ def api_ami_raw_test():
         note("Auth OK — testing 'core show version'")
         try:
             s.sendall(b"Action: Command\r\nCommand: core show version\r\n\r\n")
-            cmd_buf = b""
+            cmd_buf  = b""
             deadline = time.time() + 5
             s.settimeout(0.5)
             while time.time() < deadline:
@@ -1448,3 +1519,15 @@ def api_ami_raw_test():
         "cmd_output":   cmd_output,
         "transcript":   transcript,
     })
+
+
+# ---------------------------------------------------------------------------
+# Startup — load node DB and start background AMI poller
+# These run regardless of whether we're under gunicorn or direct python.
+# ---------------------------------------------------------------------------
+load_astdb()
+start_poller()
+
+if __name__ == "__main__":
+    log("INFO", "Starting in direct-run mode (not via gunicorn)")
+    app.run(host=HOST, port=PORT, debug=False)
