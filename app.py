@@ -523,15 +523,6 @@ def read_conf_file(path):
 
 
 def write_conf_file(path, content):
-    """
-    Atomically write content to path:
-      1. Create timestamped backup of existing file
-      2. Write to a temp file in the same directory
-      3. fsync + rename (atomic on Linux)
-
-    This prevents partial writes from corrupting rpt.conf.
-    Raises PermissionError / OSError on failure.
-    """
     os.makedirs(BACKUP_DIR, exist_ok=True)
 
     # Backup existing file
@@ -553,6 +544,24 @@ def write_conf_file(path, content):
                 os.fsync(f.fileno())
             os.rename(tmp_path, path)
             log("INFO", f"[CONF] Saved {len(content)} bytes to {path}")
+
+            # ── FIX: Restore ownership and permissions required by ASL3 ──────
+            # Asterisk runs as asterisk:asterisk and must be able to read
+            # rpt.conf. The temp file was created as root:root, so we
+            # explicitly reset ownership and mode after the rename.
+            try:
+                import pwd, grp
+                uid = pwd.getpwnam("asterisk").pw_uid
+                gid = grp.getgrnam("asterisk").gr_gid
+                os.chown(path, uid, gid)
+                os.chmod(path, 0o640)
+                log("INFO", f"[CONF] Set {path} owner=asterisk:asterisk mode=640")
+            except KeyError:
+                log("WARN", "[CONF] 'asterisk' user/group not found — skipping chown (non-ASL3 system?)")
+            except PermissionError as e:
+                log("ERROR", f"[CONF] chown/chmod failed: {e} — file may have wrong permissions")
+            # ─────────────────────────────────────────────────────────────────
+
         except Exception:
             try:
                 os.unlink(tmp_path)
@@ -565,7 +574,6 @@ def write_conf_file(path, content):
         raise
 
     return backup_path
-
 
 def get_node_numbers(content):
     nodes = []
