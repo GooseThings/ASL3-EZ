@@ -265,7 +265,7 @@ pre.codeblock { background: var(--bg3); padding: 12px; border-radius: 4px; font-
       <div class="card-body">
         <div class="btn-row">
           <button class="btn btn-danger" onclick="doRestart()">Restart Asterisk</button>
-          <button class="btn" onclick="doReload()">Reload app_rpt.so</button>
+          <button class="btn" onclick="doReload()">Reload rpt.conf</button>
           <button class="btn btn-primary" onclick="showPage('node-control')">Node Control</button>
           <button class="btn" onclick="showPage('ami-diag')">AMI Diagnostics</button>
         </div>
@@ -661,7 +661,7 @@ async function doRestart() {
 }
 
 async function doReload() {
-  log('Reloading app_rpt.so...', 'INFO');
+  log('Reloading rpt.conf (rpt reload)...', 'INFO');
   var r = await api('/api/reload', {method: 'POST'});
   if (r.ok) log('Reload: ' + (r.data.output || 'sent'), 'OK');
   else      log('Reload failed: ' + (r.data.error || r.status), 'ERROR');
