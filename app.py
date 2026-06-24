@@ -715,11 +715,19 @@ def write_conf_file(path, content):
             # The temp file was created as root:root — after os.rename those
             # credentials stick.  Asterisk runs as asterisk:asterisk and must
             # be able to read rpt.conf or it crashes on reload/restart.
+            #
+            # Mode is 644 (world-readable), not 640, because other local
+            # tools commonly installed alongside ASL3 (AllScan, Supermon,
+            # etc.) read rpt.conf directly as their own web server user
+            # (e.g. www-data), which typically isn't in the asterisk group.
+            # rpt.conf doesn't hold secrets itself (those live in
+            # manager.conf, which stays 640), so the broader read access
+            # here is a reasonable tradeoff for that compatibility.
             if _have_asterisk_ids:
                 try:
                     os.chown(path, uid, gid)
-                    os.chmod(path, 0o640)
-                    log("INFO", f"[CONF] Restored {path} owner=asterisk:asterisk mode=640")
+                    os.chmod(path, 0o644)
+                    log("INFO", f"[CONF] Restored {path} owner=asterisk:asterisk mode=644")
                 except PermissionError as e:
                     log("ERROR", f"[CONF] chown/chmod failed: {e}")
 
