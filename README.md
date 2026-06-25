@@ -10,12 +10,11 @@ A browser-based web interface for managing your AllStarLink 3 nodes:
 - Restart Asterisk, or just reload `rpt.conf` live, from the Dashboard
 - Settings page to rotate the app's Flask `SECRET_KEY` without hand-editing the service file
 
-> **Note:** ASL3-EZ has no login/authentication yet — anyone who can reach the configured port has full control (rpt.conf edits, Asterisk restart, node connect/disconnect). Authentication is planned for a future release; until then, only run this on a trusted network and don't expose it to the internet.
-
 ---
 
 ## Recent Changes
 
+- **Added: login/authentication.** The first time you open the app you are prompted to create a username and password. All pages and API endpoints require a valid session after that. Passwords are stored as salted hashes (werkzeug pbkdf2:sha256) in the local SQLite database — never in plain text. The Settings page has a Change Password form. The Flask `SECRET_KEY` (which signs session cookies) can still be rotated from Settings; rotating it invalidates all active sessions.
 - **Compacted UI and improved mobile support.** Tighter spacing and a smaller base font make better use of screen space on all devices. On mobile, the sidebar collapses to a sticky top bar with a hamburger button — the nav is hidden by default and auto-closes after selecting a page, so the content is immediately visible. Toggle rows (on settings pages) wrap on narrow screens so the key name is always readable. Buttons get a larger minimum touch target on mobile.
 - **Added: quick-reference guides on macro and schedule pages.** Each macro stanza page now has a collapsible "Quick Guide" card covering allowed DTMF characters, common app_rpt commands, and example entries. Each schedule stanza page has a matching guide with the cron field reference, range/value rules, and examples. Both guides start collapsed so they stay out of the way once you know the format.
 - **Fixed: commented-out stanza headers not acting as section boundaries.** A disabled header like `;[daq-cham-1]` was not being recognized as a stanza boundary, so example content under it (all comments, but valid `key = value` syntax) was attributed to the preceding real stanza. Confirmed live: `rpt.conf`'s disabled `[daq-cham-1]` / `[meter-faces]` / `[alarms]` example blocks were bleeding phantom keys into the `[macro]` stanza.

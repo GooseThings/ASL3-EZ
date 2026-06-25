@@ -41,7 +41,9 @@ import pwd
 import grp
 import secrets
 from datetime import datetime
-from flask import Flask, render_template, request, jsonify
+from functools import wraps
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+from werkzeug.security import generate_password_hash, check_password_hash
 
 try:
     import urllib.request as urlreq
@@ -111,6 +113,8 @@ _allmondb_loaded = False
 _allmondb_lock   = threading.Lock()
 
 app.secret_key = SECRET_KEY
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
 # ---------------------------------------------------------------------------
 # Logging  (verbose, timestamp-prefixed, written to stdout for journald)
@@ -147,8 +151,106 @@ def get_db():
         label TEXT    DEFAULT '',
         added TEXT    DEFAULT (datetime('now'))
     )""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS settings (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+    )""")
     conn.commit()
     return conn
+
+
+# ---------------------------------------------------------------------------
+# App settings (DB-backed key/value store)
+# ---------------------------------------------------------------------------
+def get_setting(key, default=None):
+    try:
+        row = get_db().execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+        return row["value"] if row else default
+    except Exception:
+        return default
+
+
+def set_setting(key, value):
+    db = get_db()
+    db.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?,?)", (key, value))
+    db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Authentication
+# ---------------------------------------------------------------------------
+def is_auth_configured():
+    return bool(get_setting("auth_password_hash"))
+
+
+@app.before_request
+def check_auth():
+    # These endpoints are always public
+    if request.endpoint in ('login', 'logout', 'static', None):
+        return None
+    # Everything else requires a logged-in session
+    if not is_auth_configured():
+        # No account yet — send browsers to setup, return 503 for API calls
+        if request.path.startswith('/api/'):
+            return jsonify({"error": "Setup required", "setup_url": "/login"}), 503
+        return redirect(url_for('login'))
+    if not session.get('logged_in'):
+        if request.path.startswith('/api/'):
+            return jsonify({"error": "Authentication required"}), 401
+        return redirect(url_for('login'))
+    return None
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    setup_mode = not is_auth_configured()
+
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+
+        if setup_mode:
+            confirm = request.form.get("confirm_password", "")
+            if not username:
+                return render_template("login.html", setup_mode=True,
+                                       error="Username is required.")
+            if len(password) < 8:
+                return render_template("login.html", setup_mode=True,
+                                       error="Password must be at least 8 characters.")
+            if password != confirm:
+                return render_template("login.html", setup_mode=True,
+                                       error="Passwords do not match.")
+            set_setting("auth_user", username)
+            set_setting("auth_password_hash", generate_password_hash(password))
+            session["logged_in"] = True
+            session["username"]  = username
+            log("INFO", f"[AUTH] Initial account created for '{username}'")
+            return redirect(url_for('index'))
+
+        # Normal login
+        stored_user = get_setting("auth_user", "")
+        stored_hash = get_setting("auth_password_hash", "")
+        if username == stored_user and stored_hash and check_password_hash(stored_hash, password):
+            session["logged_in"] = True
+            session["username"]  = username
+            log("INFO", f"[AUTH] Login: '{username}'")
+            return redirect(url_for('index'))
+        log("WARN", f"[AUTH] Failed login attempt for '{username}'")
+        return render_template("login.html", setup_mode=False,
+                               error="Invalid username or password.")
+
+    # GET
+    if not setup_mode and session.get('logged_in'):
+        return redirect(url_for('index'))
+    return render_template("login.html", setup_mode=setup_mode, error=None)
+
+
+@app.route("/logout")
+def logout():
+    username = session.get("username", "unknown")
+    session.clear()
+    log("INFO", f"[AUTH] Logout: '{username}'")
+    return redirect(url_for('login'))
 
 
 # ---------------------------------------------------------------------------
@@ -2045,16 +2147,17 @@ def api_sysinfo():
         "rpt_conf_exists":   os.path.exists(RPT_CONF_PATH),
         "rpt_conf_writable": os.access(RPT_CONF_PATH, os.W_OK),
         "secret_key_is_default": SECRET_KEY in DEFAULT_SECRET_KEYS,
+        "auth_configured":       is_auth_configured(),
+        "auth_user":             get_setting("auth_user", "") if is_auth_configured() else "",
     })
 
 
 # ── App settings (SECRET_KEY) ─────────────────────────────────────────────────
 #
-# SECRET_KEY ships with a well-known default ("asl3-ez-change-me-in-production")
-# so the app works out of the box. It's not currently used to protect anything
-# sensitive (no sessions/auth yet), but changing it is still good hygiene and
-# will matter once auth is added. These routes let the user change it from the
-# UI instead of hand-editing the systemd unit file.
+# SECRET_KEY signs Flask session cookies, which is how authentication state is
+# maintained after login. A weak or well-known key lets an attacker forge a
+# valid session cookie without knowing the password. These routes let the user
+# rotate it from the UI instead of hand-editing the systemd unit file.
 
 @app.route("/api/settings/secret_key")
 def api_get_secret_key():
@@ -2128,6 +2231,21 @@ def api_set_secret_key():
     except Exception as e:
         log("ERROR", f"[SETTINGS] secret_key update failed: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/auth/change-password", methods=["POST"])
+def api_change_password():
+    data        = request.json or {}
+    current_pw  = data.get("current_password", "")
+    new_pw      = data.get("new_password", "")
+    stored_hash = get_setting("auth_password_hash", "")
+    if not stored_hash or not check_password_hash(stored_hash, current_pw):
+        return jsonify({"error": "Current password is incorrect."}), 400
+    if len(new_pw) < 8:
+        return jsonify({"error": "New password must be at least 8 characters."}), 400
+    set_setting("auth_password_hash", generate_password_hash(new_pw))
+    log("INFO", f"[AUTH] Password changed for '{get_setting('auth_user', '')}'")
+    return jsonify({"success": True, "message": "Password updated."})
 
 
 @app.route("/api/lookup/<node>")

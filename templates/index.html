@@ -80,6 +80,13 @@ body {
   margin-left: 5px; color: var(--text2);
 }
 
+.sidebar-footer {
+  padding: 10px 14px; border-top: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  font-size: 0.8rem;
+}
+.sidebar-user { color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .main { flex: 1; padding: 20px 24px; max-width: 1100px; overflow-x: hidden; }
 
 .page        { display: none; }
@@ -301,6 +308,10 @@ pre.codeblock { background: var(--bg3); padding: 12px; border-radius: 4px; font-
     <button class="nav-item" onclick="showPage('ami-diag')">AMI Diagnostics</button>
     <button class="nav-item" onclick="showPage('settings')">Settings</button>
   </nav>
+  <div class="sidebar-footer">
+    <span class="sidebar-user">{{ session.get('username', '') }}</span>
+    <a href="/logout" class="btn btn-sm">Logout</a>
+  </div>
 </aside>
 
 <!-- Main content -->
@@ -685,6 +696,26 @@ sudo asterisk -rx "module reload manager"</pre>
   <section class="page" id="page-settings">
     <div class="page-title">Settings</div>
     <div class="page-sub">App-level configuration for ASL3-EZ itself.</div>
+
+    <div class="card">
+      <div class="card-header"><h2>Change Password</h2></div>
+      <div class="card-body">
+        <div class="form-group">
+          <label class="form-label">Current Password</label>
+          <input type="password" id="cur-pw" autocomplete="current-password" style="max-width:320px">
+        </div>
+        <div class="form-group">
+          <label class="form-label">New Password <span class="muted" style="font-weight:400">(min 8 characters)</span></label>
+          <input type="password" id="new-pw" autocomplete="new-password" style="max-width:320px">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Confirm New Password</label>
+          <input type="password" id="new-pw2" autocomplete="new-password" style="max-width:320px">
+        </div>
+        <button class="btn btn-primary" onclick="changePassword()">Update Password</button>
+        <div id="pw-result" style="margin-top:12px"></div>
+      </div>
+    </div>
 
     <div class="card">
       <div class="card-header"><h2>Flask Secret Key</h2></div>
@@ -1995,6 +2026,35 @@ async function loadSysInfo() {
 }
 
 /* ── Settings ───────────────────────────────────────────────────────────── */
+async function changePassword() {
+  var cur  = document.getElementById('cur-pw').value;
+  var np   = document.getElementById('new-pw').value;
+  var np2  = document.getElementById('new-pw2').value;
+  var out  = document.getElementById('pw-result');
+  if (!cur || !np || !np2) {
+    out.innerHTML = '<div class="alert alert-warn">Fill in all three fields.</div>';
+    return;
+  }
+  if (np !== np2) {
+    out.innerHTML = '<div class="alert alert-warn">New passwords do not match.</div>';
+    return;
+  }
+  out.innerHTML = '<span class="muted">Updating...</span>';
+  var r = await api('/api/auth/change-password', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({current_password: cur, new_password: np})
+  });
+  if (r.ok) {
+    out.innerHTML = '<div class="alert alert-success">' + esc(r.data.message || 'Password updated.') + '</div>';
+    document.getElementById('cur-pw').value = '';
+    document.getElementById('new-pw').value  = '';
+    document.getElementById('new-pw2').value = '';
+  } else {
+    out.innerHTML = '<div class="alert alert-danger">' + esc(r.data.error || 'Failed.') + '</div>';
+  }
+}
+
 async function loadSecretKeyStatus() {
   var el = document.getElementById('secret-key-status');
   el.innerHTML = '<span class="muted">Loading...</span>';
