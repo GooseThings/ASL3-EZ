@@ -186,6 +186,18 @@ def get_db():
         last_activity   TEXT,
         created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
     )""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS id_configs (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        name            TEXT    NOT NULL,
+        node            TEXT    NOT NULL,
+        enabled         INTEGER NOT NULL DEFAULT 1,
+        sound_path      TEXT    NOT NULL DEFAULT 'asl3ez/my-id',
+        interval_sec    INTEGER NOT NULL DEFAULT 600,
+        idle_delay_sec  INTEGER NOT NULL DEFAULT 120,
+        initial_id      INTEGER NOT NULL DEFAULT 1,
+        last_id_time    TEXT,
+        created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
+    )""")
     conn.commit()
     return conn
 
@@ -3251,6 +3263,274 @@ def api_conn_diagnose():
 
 
 # ---------------------------------------------------------------------------
+# Node ID Monitor — FCC-compliant repeater identification
+# ---------------------------------------------------------------------------
+
+_id_runtime      = {}             # {config_id: {"state", "last_id_ts", "idle_start_ts"}}
+_id_runtime_lock = threading.Lock()
+
+
+def _play_id_sound(row):
+    node = row["node"]
+    path = row["sound_path"].strip()
+    cmd  = f"rpt localplay {node} {path}"
+    log("INFO", f"[ID] Playing ID for '{row['name']}' on {node}: {cmd!r}")
+    def _play(ami, _cmd=cmd):
+        return {"output": ami.command(_cmd)}
+    ami_send_command(_play)
+
+
+def _run_id_monitors():
+    now     = time.time()
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    db   = get_db()
+    rows = db.execute("SELECT * FROM id_configs WHERE enabled=1").fetchall()
+
+    for row in rows:
+        cid = row["id"]
+        with _id_runtime_lock:
+            if cid not in _id_runtime:
+                _id_runtime[cid] = {"state": "idle", "last_id_ts": 0.0, "idle_start_ts": 0.0}
+            rt = dict(_id_runtime[cid])
+
+        active  = _node_active(row["node"])
+        new_rt  = dict(rt)
+        played  = False
+
+        if active:
+            new_rt["idle_start_ts"] = 0.0
+            if rt["state"] == "idle":
+                new_rt["state"] = "active"
+                if row["initial_id"]:
+                    try:
+                        _play_id_sound(row)
+                        new_rt["last_id_ts"] = now
+                        played = True
+                    except Exception as e:
+                        log("ERROR", f"[ID] Initial ID failed for '{row['name']}': {e}")
+            else:
+                new_rt["state"] = "active"
+                if rt["last_id_ts"] > 0 and (now - rt["last_id_ts"]) >= row["interval_sec"]:
+                    try:
+                        _play_id_sound(row)
+                        new_rt["last_id_ts"] = now
+                        played = True
+                    except Exception as e:
+                        log("ERROR", f"[ID] Interval ID failed for '{row['name']}': {e}")
+        else:
+            if rt["state"] == "active":
+                new_rt["state"]         = "pending_idle"
+                new_rt["idle_start_ts"] = now
+            elif rt["state"] == "pending_idle":
+                if (now - rt["idle_start_ts"]) >= row["idle_delay_sec"]:
+                    try:
+                        _play_id_sound(row)
+                        new_rt["last_id_ts"]    = now
+                        new_rt["state"]         = "idle"
+                        new_rt["idle_start_ts"] = 0.0
+                        played = True
+                    except Exception as e:
+                        log("ERROR", f"[ID] Final ID failed for '{row['name']}': {e}")
+
+        with _id_runtime_lock:
+            _id_runtime[cid] = new_rt
+
+        if played:
+            db.execute("UPDATE id_configs SET last_id_time=? WHERE id=?", (now_str, cid))
+            db.commit()
+
+
+def _id_monitor_loop():
+    log("INFO", "[ID] Monitor started (2s interval)")
+    while True:
+        time.sleep(2)
+        try:
+            _run_id_monitors()
+        except Exception as e:
+            log("ERROR", f"[ID] Monitor error: {e}")
+
+
+def start_id_monitor():
+    t = threading.Thread(target=_id_monitor_loop, name="id-monitor", daemon=True)
+    t.start()
+
+
+# ---------------------------------------------------------------------------
+# Node ID API routes
+# ---------------------------------------------------------------------------
+
+@app.route("/api/id")
+def api_id_list():
+    db   = get_db()
+    rows = db.execute("SELECT * FROM id_configs ORDER BY name COLLATE NOCASE").fetchall()
+    now  = time.time()
+    out  = []
+    for row in rows:
+        d = dict(row)
+        with _id_runtime_lock:
+            rt = dict(_id_runtime.get(row["id"], {"state": "idle", "last_id_ts": 0.0, "idle_start_ts": 0.0}))
+        d["runtime_state"]  = rt["state"]
+        d["last_id_ts"]     = rt["last_id_ts"]
+        d["idle_start_ts"]  = rt["idle_start_ts"]
+        if rt["state"] == "active" and rt["last_id_ts"] > 0:
+            d["next_id_sec"] = max(0, row["interval_sec"] - int(now - rt["last_id_ts"]))
+        else:
+            d["next_id_sec"] = None
+        if rt["state"] == "pending_idle" and rt["idle_start_ts"] > 0:
+            d["final_id_sec"] = max(0, row["idle_delay_sec"] - int(now - rt["idle_start_ts"]))
+        else:
+            d["final_id_sec"] = None
+        out.append(d)
+    return jsonify(out)
+
+
+@app.route("/api/id", methods=["POST"])
+def api_id_create():
+    data = request.json or {}
+    name           = str(data.get("name",           "")).strip()
+    node           = str(data.get("node",           "")).strip()
+    sound_path     = str(data.get("sound_path",     "")).strip()
+    interval_sec   = int(data.get("interval_sec",   600))
+    idle_delay_sec = int(data.get("idle_delay_sec", 120))
+    initial_id     = 1 if data.get("initial_id", True) else 0
+
+    if not name:
+        return jsonify({"error": "Name is required"}), 400
+    if not re.match(r'^\d{4,7}$', node):
+        return jsonify({"error": "Invalid node number"}), 400
+    if not sound_path:
+        return jsonify({"error": "Sound path is required"}), 400
+
+    db = get_db()
+    db.execute(
+        "INSERT INTO id_configs (name, node, sound_path, interval_sec, idle_delay_sec, initial_id) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (name, node, sound_path, interval_sec, idle_delay_sec, initial_id)
+    )
+    db.commit()
+    row = db.execute("SELECT * FROM id_configs WHERE rowid=last_insert_rowid()").fetchone()
+    log("INFO", f"[ID] Created '{name}' (node={node}, sound={sound_path})")
+    return jsonify(dict(row)), 201
+
+
+@app.route("/api/id/<int:iid>", methods=["PATCH"])
+def api_id_update(iid):
+    db  = get_db()
+    row = db.execute("SELECT * FROM id_configs WHERE id=?", (iid,)).fetchone()
+    if not row:
+        return jsonify({"error": "Not found"}), 404
+
+    data = request.json or {}
+    name           = str(data.get("name",           row["name"])).strip()
+    node           = str(data.get("node",           row["node"])).strip()
+    sound_path     = str(data.get("sound_path",     row["sound_path"])).strip()
+    interval_sec   = int(data.get("interval_sec",   row["interval_sec"]))
+    idle_delay_sec = int(data.get("idle_delay_sec", row["idle_delay_sec"]))
+    initial_id     = 1 if data.get("initial_id", bool(row["initial_id"])) else 0
+
+    if not re.match(r'^\d{4,7}$', node):
+        return jsonify({"error": "Invalid node number"}), 400
+    if not sound_path:
+        return jsonify({"error": "Sound path is required"}), 400
+
+    db.execute(
+        "UPDATE id_configs SET name=?, node=?, sound_path=?, interval_sec=?, "
+        "idle_delay_sec=?, initial_id=? WHERE id=?",
+        (name, node, sound_path, interval_sec, idle_delay_sec, initial_id, iid)
+    )
+    db.commit()
+    updated = db.execute("SELECT * FROM id_configs WHERE id=?", (iid,)).fetchone()
+    return jsonify(dict(updated))
+
+
+@app.route("/api/id/<int:iid>", methods=["DELETE"])
+def api_id_delete(iid):
+    db  = get_db()
+    row = db.execute("SELECT * FROM id_configs WHERE id=?", (iid,)).fetchone()
+    if not row:
+        return jsonify({"error": "Not found"}), 404
+    db.execute("DELETE FROM id_configs WHERE id=?", (iid,))
+    db.commit()
+    with _id_runtime_lock:
+        _id_runtime.pop(iid, None)
+    log("INFO", f"[ID] Deleted '{row['name']}'")
+    return jsonify({"ok": True})
+
+
+@app.route("/api/id/<int:iid>/toggle", methods=["POST"])
+def api_id_toggle(iid):
+    db  = get_db()
+    row = db.execute("SELECT * FROM id_configs WHERE id=?", (iid,)).fetchone()
+    if not row:
+        return jsonify({"error": "Not found"}), 404
+    new_val = 0 if row["enabled"] else 1
+    db.execute("UPDATE id_configs SET enabled=? WHERE id=?", (new_val, iid))
+    db.commit()
+    # Reset runtime state when disabling
+    if not new_val:
+        with _id_runtime_lock:
+            _id_runtime.pop(iid, None)
+    return jsonify({"id": iid, "enabled": new_val})
+
+
+@app.route("/api/id/<int:iid>/play", methods=["POST"])
+def api_id_play(iid):
+    db  = get_db()
+    row = db.execute("SELECT * FROM id_configs WHERE id=?", (iid,)).fetchone()
+    if not row:
+        return jsonify({"error": "Not found"}), 404
+    try:
+        _play_id_sound(row)
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        db.execute("UPDATE id_configs SET last_id_time=? WHERE id=?", (now_str, iid))
+        db.commit()
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/id/upload", methods=["POST"])
+def api_id_upload():
+    """Upload and convert a sound file; returns the Asterisk-relative path for use in sound_path."""
+    if "file" not in request.files:
+        return jsonify({"error": "No file"}), 400
+    f   = request.files["file"]
+    ext = os.path.splitext(f.filename)[1].lower()
+    if ext not in ALLOWED_UPLOAD_EXTS:
+        return jsonify({"error": f"Unsupported type: {ext}"}), 400
+
+    name      = request.form.get("name", os.path.splitext(f.filename)[0]).strip() or "id-sound"
+    base_slug = _ann_slug(name)
+    slug      = _ann_unique_slug(base_slug)
+    dest      = _ann_sound_path(slug)
+
+    os.makedirs(SOUNDS_DIR, exist_ok=True)
+    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+        tmp_path = tmp.name
+        f.save(tmp_path)
+
+    try:
+        _convert_to_ulaw(tmp_path, dest)
+    except Exception as e:
+        return jsonify({"error": f"Conversion failed: {e}"}), 500
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+
+    try:
+        shutil.chown(dest, user="asterisk", group="asterisk")
+        os.chmod(dest, 0o640)
+    except Exception:
+        pass
+
+    log("INFO", f"[ID] Uploaded ID sound '{name}' → {dest}")
+    return jsonify({"path": f"asl3ez/{slug}", "slug": slug})
+
+
+# ---------------------------------------------------------------------------
 # Startup — load node DB and start background AMI poller
 # These run regardless of whether we're under gunicorn or direct python.
 # ---------------------------------------------------------------------------
@@ -3259,6 +3539,7 @@ start_poller()
 start_favstats_poller()
 start_announcer()
 start_connector_scheduler()
+start_id_monitor()
 
 if __name__ == "__main__":
     log("INFO", "Starting in direct-run mode (not via gunicorn)")
