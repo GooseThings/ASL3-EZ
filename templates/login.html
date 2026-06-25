@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ASL3-EZ | {% if setup_mode %}Create Account{% else %}Sign In{% endif %}</title>
+<script>(function(){var t=localStorage.getItem('asl3ez-theme');if(t)document.documentElement.setAttribute('data-theme',t);})();</script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -19,6 +20,31 @@
   --text2:  #8b949e;
   --text3:  #c9d1d9;
   --radius: 6px;
+}
+html[data-theme="midnight"] {
+  --bg: #000000; --bg2: #0c0c0c; --border: #252525;
+  --accent: #4d9cf5; --green: #3aad4e; --danger: #e04444;
+  --text: #dde1e7; --text2: #636363; --text3: #b8bcc4;
+}
+html[data-theme="light"] {
+  --bg: #f6f8fa; --bg2: #ffffff; --border: #d0d7de;
+  --accent: #0969da; --green: #1a7f37; --danger: #cf222e;
+  --text: #1f2328; --text2: #656d76; --text3: #24292f;
+}
+html[data-theme="terminal"] {
+  --bg: #001200; --bg2: #001a00; --border: #1a4d1a;
+  --accent: #00e040; --green: #00c030; --danger: #ff3333;
+  --text: #00e040; --text2: #007a1a; --text3: #00c030;
+}
+html[data-theme="amber"] {
+  --bg: #0d0800; --bg2: #160e00; --border: #4a3200;
+  --accent: #ff9200; --green: #a0c040; --danger: #ff4040;
+  --text: #ffb000; --text2: #7a5200; --text3: #e08800;
+}
+html[data-theme="nord"] {
+  --bg: #2e3440; --bg2: #3b4252; --border: #4c566a;
+  --accent: #88c0d0; --green: #a3be8c; --danger: #bf616a;
+  --text: #eceff4; --text2: #9099a8; --text3: #d8dee9;
 }
 
 html { font-size: 15px; }
