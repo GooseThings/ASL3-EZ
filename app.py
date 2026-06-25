@@ -846,12 +846,27 @@ def parse_stanza_settings(content, stanza_name):
         log("WARN", f"[CONF] Stanza [{stanza_name}] not found in rpt.conf")
         return {}
 
-    # Start with template settings if this stanza inherits one
+    # Start with template settings if this stanza inherits one.
+    # Asterisk templates support multiple comma-separated parents, e.g.
+    # [643930](node-main,allscan-uci) — applied left to right, so a later
+    # template's keys override an earlier one's. A single un-split lookup
+    # here ("node-main,allscan-uci" as one literal name) never matches any
+    # real stanza, so multi-template stanzas silently inherited nothing at
+    # all — this is what was hiding [node-main]'s settings for nodes using
+    # more than one template. Templates that don't actually exist in the
+    # file (e.g. allscan-uci, referenced but never defined) are skipped —
+    # Asterisk does the same: nothing to inherit from a missing template.
     effective = {}
-    tmpl_name = target.get("template")
-    if tmpl_name and tmpl_name in stanzas:
-        effective = parse_lines(stanzas[tmpl_name]["lines"])
-        log("DEBUG", f"[CONF] [{stanza_name}] inherits from [{tmpl_name}]: {len(effective)} base settings")
+    tmpl_field = target.get("template") or ""
+    for tmpl_name in (t.strip() for t in tmpl_field.split(",")):
+        if not tmpl_name:
+            continue
+        if tmpl_name not in stanzas:
+            log("WARN", f"[CONF] [{stanza_name}] references template [{tmpl_name}] which doesn't exist in rpt.conf — skipping")
+            continue
+        tmpl_settings = parse_lines(stanzas[tmpl_name]["lines"])
+        effective.update(tmpl_settings)
+        log("DEBUG", f"[CONF] [{stanza_name}] inherits from [{tmpl_name}]: {len(tmpl_settings)} settings")
 
     # Overlay with the stanza's own settings (these override the template)
     own = parse_lines(target["lines"])
