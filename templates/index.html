@@ -23,12 +23,12 @@
   --mono:    'Courier New', Courier, monospace;
 }
 
-html { font-size: 16px; }
+html { font-size: 15px; }
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
   font-size: 1rem;
-  line-height: 1.6;
+  line-height: 1.5;
   background: var(--bg);
   color: var(--text);
   min-height: 100vh;
@@ -37,7 +37,7 @@ body {
 .layout { display: flex; min-height: 100vh; }
 
 .sidebar {
-  width: 230px; min-width: 230px;
+  width: 210px; min-width: 210px;
   background: var(--bg2);
   border-right: 1px solid var(--border);
   display: flex; flex-direction: column;
@@ -45,19 +45,29 @@ body {
   overflow-y: auto;
 }
 
-.sidebar-header { padding: 18px 16px 12px; border-bottom: 1px solid var(--border); }
-.sidebar-header h1 { font-size: 1.2rem; font-weight: 700; color: var(--accent); }
-.sidebar-header p  { font-size: 0.8rem; color: var(--text2); margin-top: 2px; }
+.sidebar-header {
+  padding: 12px 14px 10px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+.sidebar-header h1 { font-size: 1.1rem; font-weight: 700; color: var(--accent); }
+.sidebar-header p  { font-size: 0.75rem; color: var(--text2); margin-top: 1px; }
 
-.sidebar-nav { padding: 10px 0; flex: 1; }
+.hamburger {
+  display: none; background: none; border: none; color: var(--text2);
+  font-size: 1.3rem; cursor: pointer; padding: 2px 6px; line-height: 1;
+  flex-shrink: 0;
+}
+.hamburger:hover { color: var(--text); }
+
+.sidebar-nav { padding: 6px 0; flex: 1; }
 
 .nav-section {
-  padding: 8px 16px 3px; font-size: 0.72rem; font-weight: 600;
+  padding: 6px 14px 2px; font-size: 0.68rem; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.8px; color: var(--text2); margin-top: 4px;
 }
 
 .nav-item {
-  display: block; padding: 8px 16px; font-size: 0.95rem; color: var(--text3);
+  display: block; padding: 6px 14px; font-size: 0.9rem; color: var(--text3);
   cursor: pointer; border: none; border-left: 3px solid transparent;
   background: none; width: 100%; text-align: left; transition: background 0.12s, color 0.12s;
 }
@@ -65,38 +75,39 @@ body {
 .nav-item.active { background: rgba(88,166,255,0.1); color: var(--accent); border-left-color: var(--accent); font-weight: 600; }
 
 .node-badge {
-  display: inline-block; font-size: 0.7rem; background: var(--bg3);
-  border: 1px solid var(--border); border-radius: 10px; padding: 1px 7px;
-  margin-left: 6px; color: var(--text2);
+  display: inline-block; font-size: 0.68rem; background: var(--bg3);
+  border: 1px solid var(--border); border-radius: 10px; padding: 1px 6px;
+  margin-left: 5px; color: var(--text2);
 }
 
-.main { flex: 1; padding: 28px 32px; max-width: 1100px; overflow-x: hidden; }
+.main { flex: 1; padding: 20px 24px; max-width: 1100px; overflow-x: hidden; }
 
 .page        { display: none; }
 .page.active { display: block; }
 
-.card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 20px; }
+.card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 14px; }
 .card-header {
-  padding: 14px 18px; border-bottom: 1px solid var(--border);
-  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
 }
-.card-header h2 { font-size: 1.05rem; font-weight: 600; }
-.card-body { padding: 18px; }
+.card-header h2 { font-size: 0.97rem; font-weight: 600; }
+.card-body { padding: 14px; }
 
-.stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(185px, 1fr)); gap: 14px; }
-.stat-box  { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
-.stat-label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text2); margin-bottom: 4px; }
-.stat-value { font-size: 1.1rem; font-weight: 600; color: var(--text); }
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 10px; }
+.stat-box  { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; }
+.stat-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text2); margin-bottom: 3px; }
+.stat-value { font-size: 1rem; font-weight: 600; color: var(--text); }
 .stat-value.ok    { color: var(--green);  }
 .stat-value.warn  { color: var(--warn);   }
 .stat-value.error { color: var(--danger); }
 
 .btn {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 8px 16px; font-size: 0.9rem; font-weight: 500;
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 13px; font-size: 0.88rem; font-weight: 500;
   border: 1px solid var(--border); border-radius: var(--radius);
   cursor: pointer; background: var(--bg3); color: var(--text);
   transition: all 0.12s; text-decoration: none; white-space: nowrap;
+  min-height: 34px;
 }
 .btn:hover             { background: var(--bg); color: var(--accent); border-color: var(--accent); }
 .btn.btn-primary       { background: var(--accent); color: #000; border-color: var(--accent); }
@@ -104,30 +115,32 @@ body {
 .btn.btn-success       { background: var(--green); color: #000; border-color: var(--green); }
 .btn.btn-danger        { background: var(--danger); color: #fff; border-color: var(--danger); }
 .btn.btn-warn          { background: var(--warn); color: #000; border-color: var(--warn); }
-.btn.btn-sm            { padding: 5px 10px; font-size: 0.82rem; }
+.btn.btn-sm            { padding: 4px 9px; font-size: 0.8rem; min-height: 28px; }
 .btn:disabled          { opacity: 0.45; cursor: not-allowed; }
-.btn-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 
-.form-group { margin-bottom: 16px; }
-.form-label { display: block; font-size: 0.88rem; font-weight: 500; color: var(--text3); margin-bottom: 5px; }
-.form-row   { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.form-group { margin-bottom: 12px; }
+.form-label { display: block; font-size: 0.85rem; font-weight: 500; color: var(--text3); margin-bottom: 4px; }
+.form-row   { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
 input[type=text], input[type=number], input[type=password], select, textarea {
   width: 100%; background: var(--bg); border: 1px solid var(--border);
-  border-radius: var(--radius); color: var(--text); padding: 8px 12px;
-  font-size: 0.95rem; font-family: inherit; transition: border-color 0.12s;
+  border-radius: var(--radius); color: var(--text); padding: 6px 10px;
+  font-size: 0.9rem; font-family: inherit; transition: border-color 0.12s;
+  min-height: 34px;
 }
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
 textarea { resize: vertical; font-family: var(--mono); font-size: 0.88rem; }
 
 .toggle-row {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 9px 0; border-bottom: 1px solid var(--border); gap: 10px;
+  padding: 7px 0; border-bottom: 1px solid var(--border); gap: 8px;
 }
 .toggle-row:last-child { border-bottom: none; }
 .toggle-info  { flex: 1; min-width: 0; }
-.toggle-key   { font-size: 0.9rem; font-family: var(--mono); color: var(--accent); }
-.toggle-desc  { font-size: 0.78rem; color: var(--text2); margin-top: 1px; }
+.toggle-key   { font-size: 0.85rem; font-family: var(--mono); color: var(--accent); }
+.toggle-desc  { font-size: 0.74rem; color: var(--text2); margin-top: 1px; }
+.val-input    { width: 200px; font-family: var(--mono); font-size: 0.82rem; }
 .switch { position: relative; display: inline-block; width: 38px; height: 22px; flex-shrink: 0; }
 .switch input { opacity: 0; width: 0; height: 0; }
 .slider { position: absolute; inset: 0; background: var(--bg3); border: 1px solid var(--border); border-radius: 22px; cursor: pointer; transition: .2s; }
@@ -137,8 +150,8 @@ input:checked + .slider::before  { transform: translateX(16px); background: var(
 
 .log-panel {
   background: #080c12; border: 1px solid var(--border); border-radius: var(--radius);
-  font-family: var(--mono); font-size: 0.84rem; line-height: 1.5;
-  padding: 12px; height: 260px; overflow-y: auto; color: #90a0b0;
+  font-family: var(--mono); font-size: 0.8rem; line-height: 1.45;
+  padding: 10px; height: 220px; overflow-y: auto; color: #90a0b0;
 }
 .log-panel div { margin-bottom: 1px; word-break: break-all; }
 .lt    { color: #4a5568; }
@@ -149,23 +162,23 @@ input:checked + .slider::before  { transform: translateX(16px); background: var(
 .lDBG  { color: #5a6478; }
 .lAMI  { color: #c9a227; }
 
-.alert { padding: 11px 16px; border-radius: var(--radius); border: 1px solid; margin-bottom: 14px; font-size: 0.92rem; }
+.alert { padding: 9px 13px; border-radius: var(--radius); border: 1px solid; margin-bottom: 12px; font-size: 0.88rem; }
 .alert-info    { background: rgba(88,166,255,0.08);  border-color: rgba(88,166,255,0.3);  color: var(--accent); }
 .alert-success { background: rgba(63,185,80,0.08);   border-color: rgba(63,185,80,0.3);   color: var(--green); }
 .alert-warn    { background: rgba(210,153,34,0.08);  border-color: rgba(210,153,34,0.3);  color: var(--warn); }
 .alert-danger  { background: rgba(248,81,73,0.08);   border-color: rgba(248,81,73,0.3);   color: var(--danger); }
 
-.sec-toggle { display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: 12px 18px; border-bottom: 1px solid var(--border); user-select: none; }
+.sec-toggle { display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: 8px 14px; border-bottom: 1px solid var(--border); user-select: none; }
 .sec-toggle:hover { background: rgba(255,255,255,0.02); }
-.sec-toggle h3 { font-size: 0.95rem; font-weight: 600; }
-.sec-toggle .arr { color: var(--text2); transition: transform 0.2s; font-size: 0.8rem; }
+.sec-toggle h3 { font-size: 0.9rem; font-weight: 600; }
+.sec-toggle .arr { color: var(--text2); transition: transform 0.2s; font-size: 0.78rem; }
 .sec-toggle.open .arr { transform: rotate(90deg); }
-.sec-body { padding: 14px 18px; display: none; }
+.sec-body { padding: 10px 14px; display: none; }
 .sec-body.open { display: block; }
 
-.tbl { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
-.tbl th { text-align: left; padding: 8px 12px; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text2); border-bottom: 1px solid var(--border); }
-.tbl td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.tbl { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.tbl th { text-align: left; padding: 6px 10px; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text2); border-bottom: 1px solid var(--border); }
+.tbl td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
 .tbl tr:last-child td { border-bottom: none; }
 .tbl tr:hover td { background: rgba(255,255,255,0.02); }
 
@@ -174,10 +187,10 @@ input:checked + .slider::before  { transform: translateX(16px); background: var(
 .badge-err { background: rgba(248,81,73,0.1);   color: var(--danger); border: 1px solid rgba(248,81,73,0.2);  }
 .badge-unk { background: rgba(139,148,158,0.1); color: var(--text2);  border: 1px solid var(--border); }
 
-.muted      { color: var(--text2); font-size: 0.9rem; }
+.muted      { color: var(--text2); font-size: 0.88rem; }
 .mono       { font-family: var(--mono); }
-.page-title { font-size: 1.4rem; font-weight: 700; margin-bottom: 4px; }
-.page-sub   { font-size: 0.9rem; color: var(--text2); margin-bottom: 22px; }
+.page-title { font-size: 1.2rem; font-weight: 700; margin-bottom: 3px; }
+.page-sub   { font-size: 0.85rem; color: var(--text2); margin-bottom: 14px; }
 .spinner    { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -217,9 +230,20 @@ pre.codeblock { background: var(--bg3); padding: 12px; border-radius: 4px; font-
 
 @media (max-width: 768px) {
   .layout { flex-direction: column; }
-  .sidebar { width: 100%; height: auto; position: relative; }
-  .main { padding: 16px; }
+  .sidebar { width: 100%; height: auto; position: sticky; top: 0; z-index: 20; overflow-y: visible; }
+  .hamburger { display: inline-flex; }
+  .sidebar-nav { display: none; border-top: 1px solid var(--border); max-height: 60vh; overflow-y: auto; }
+  .sidebar-nav.open { display: block; }
+  .main { padding: 12px; }
   .form-row { grid-template-columns: 1fr; }
+  .stat-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+  .toggle-row { flex-wrap: wrap; }
+  .toggle-row > div:last-child { width: 100%; justify-content: flex-start; margin-top: 4px; }
+  .val-input { flex: 1; width: auto; min-width: 0; }
+  .btn { min-height: 40px; }
+  .btn.btn-sm { min-height: 36px; }
+  .page-title { font-size: 1.1rem; }
+  pre.codeblock { font-size: 0.75rem; }
 }
 </style>
 </head>
@@ -229,10 +253,13 @@ pre.codeblock { background: var(--bg3); padding: 12px; border-radius: 4px; font-
 <!-- Sidebar -->
 <aside class="sidebar">
   <div class="sidebar-header">
-    <h1>ASL3-EZ</h1>
-    <p>AllStarLink 3 Manager</p>
+    <div>
+      <h1>ASL3-EZ</h1>
+      <p>AllStarLink 3 Manager</p>
+    </div>
+    <button class="hamburger" id="nav-toggle" onclick="toggleNav()" aria-label="Toggle navigation">&#9776;</button>
   </div>
-  <nav class="sidebar-nav">
+  <nav class="sidebar-nav" id="sidebar-nav">
     <div class="nav-section">Main</div>
     <button class="nav-item active" onclick="showPage('dashboard')">Dashboard</button>
     <button class="nav-item" onclick="showPage('node-control')">Node Control</button>
@@ -250,6 +277,20 @@ pre.codeblock { background: var(--bg3); padding: 12px; border-radius: 4px; font-
     {% for tmpl in templates %}
     <button class="nav-item" onclick="showPage('template-{{ tmpl }}')">
       {{ tmpl }}<span class="node-badge">global</span>
+    </button>
+    {% endfor %}
+    {% endif %}
+
+    {% if macros or schedules %}
+    <div class="nav-section">Macros &amp; Scheduling</div>
+    {% for m in macros %}
+    <button class="nav-item" onclick="showPage('macro-{{ m }}')">
+      {{ m }}<span class="node-badge">macro</span>
+    </button>
+    {% endfor %}
+    {% for s in schedules %}
+    <button class="nav-item" onclick="showPage('schedule-{{ s }}')">
+      {{ s }}<span class="node-badge">schedule</span>
     </button>
     {% endfor %}
     {% endif %}
@@ -444,6 +485,96 @@ pre.codeblock { background: var(--bg3); padding: 12px; border-radius: 4px; font-
     </div>
     <div class="alert alert-warn" id="template-used-by-{{ tmpl }}" style="margin-bottom:16px">Loading...</div>
     <div id="template-content-{{ tmpl }}"><div class="muted">Loading...</div></div>
+  </section>
+  {% endfor %}
+
+  <!-- Macro pages -->
+  {% for m in macros %}
+  <section class="page" id="page-macro-{{ m }}">
+    <div class="page-title">Macro: {{ m }}</div>
+    <div class="page-sub">
+      DTMF macros in stanza <span class="mono">[{{ m }}]</span> &mdash; each slot is a DTMF
+      command sequence triggered by number (e.g. via *3&lt;slot&gt; or a scheduled entry).
+    </div>
+    <div class="alert alert-warn" id="macro-used-by-{{ m }}">Loading...</div>
+
+    <div class="card">
+      <div class="sec-toggle" onclick="toggleSec(this)">
+        <h3>Quick Guide &mdash; DTMF Macros</h3>
+        <span class="arr">&#9658;</span>
+      </div>
+      <div class="sec-body">
+        <p style="margin-bottom:10px">Each entry maps a numeric slot to a DTMF command sequence. The slot number is how the macro is referenced &mdash; by a user dialing <span class="mono">*3&lt;slot&gt;</span> on the radio, by a schedule entry, or by another macro.</p>
+        <p style="margin-bottom:10px"><strong>Allowed characters in a command sequence:</strong></p>
+        <table class="tbl" style="margin-bottom:12px">
+          <thead><tr><th>Character(s)</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">0&ndash;9 * # A&ndash;D</td><td>DTMF digits sent to app_rpt</td></tr>
+            <tr><td class="mono">p</td><td>~500 ms pause (lowercase or uppercase P)</td></tr>
+            <tr><td>(space)</td><td>Separates multiple commands in one slot</td></tr>
+          </tbody>
+        </table>
+        <p style="margin-bottom:10px"><strong>Common app_rpt commands you can put in a macro:</strong></p>
+        <table class="tbl" style="margin-bottom:12px">
+          <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">*3&lt;node&gt;</td><td>Connect to a node (transceive)</td></tr>
+            <tr><td class="mono">*1&lt;node&gt;</td><td>Disconnect a specific node</td></tr>
+            <tr><td class="mono">*70</td><td>Disconnect all linked nodes</td></tr>
+            <tr><td class="mono">*80</td><td>System status announcement</td></tr>
+            <tr><td class="mono">*99</td><td>Restart app_rpt (reload rpt.conf)</td></tr>
+          </tbody>
+        </table>
+        <p style="margin-bottom:6px"><strong>Example entries:</strong></p>
+        <pre class="codeblock">1 = *327096       ; slot 1: connect to node 27096
+2 = *170 p *327096 ; slot 2: disconnect all, pause, connect 27096
+3 = *70            ; slot 3: disconnect all nodes</pre>
+        <p class="muted" style="margin-top:8px">The node stanza must have <span class="mono">macro = {{ m }}</span> (or the default stanza named <span class="mono">macro</span>) for these entries to be active.</p>
+      </div>
+    </div>
+
+    <div id="macro-content-{{ m }}"><div class="muted">Loading...</div></div>
+  </section>
+  {% endfor %}
+
+  <!-- Schedule pages -->
+  {% for s in schedules %}
+  <section class="page" id="page-schedule-{{ s }}">
+    <div class="page-title">Schedule: {{ s }}</div>
+    <div class="page-sub">
+      Scheduled macro triggers in stanza <span class="mono">[{{ s }}]</span> &mdash; cron-style
+      <span class="mono">minute hour day-of-month month day-of-week</span>, only plain numbers
+      or <span class="mono">*</span> per field.
+    </div>
+    <div class="alert alert-warn" id="schedule-used-by-{{ s }}">Loading...</div>
+
+    <div class="card">
+      <div class="sec-toggle" onclick="toggleSec(this)">
+        <h3>Quick Guide &mdash; Scheduled Macros</h3>
+        <span class="arr">&#9658;</span>
+      </div>
+      <div class="sec-body">
+        <p style="margin-bottom:10px">Each entry runs a macro slot at a given time. The key is the macro slot number (from the node's macro stanza), and the value is a five-field cron-style time expression.</p>
+        <p style="margin-bottom:10px"><strong>Time field order:</strong> <span class="mono">minute &nbsp; hour &nbsp; day-of-month &nbsp; month &nbsp; day-of-week</span></p>
+        <table class="tbl" style="margin-bottom:12px">
+          <thead><tr><th>Field</th><th>Range</th><th>Example</th></tr></thead>
+          <tbody>
+            <tr><td>minute</td><td>0&ndash;59</td><td><span class="mono">30</span> = at :30</td></tr>
+            <tr><td>hour</td><td>0&ndash;23</td><td><span class="mono">06</span> = 6 AM</td></tr>
+            <tr><td>day of month</td><td>1&ndash;31</td><td><span class="mono">*</span> = every day</td></tr>
+            <tr><td>month</td><td>1&ndash;12</td><td><span class="mono">*</span> = every month</td></tr>
+            <tr><td>day of week</td><td>0&ndash;6 (Sun=0)</td><td><span class="mono">1</span> = Monday</td></tr>
+          </tbody>
+        </table>
+        <p style="margin-bottom:6px"><strong>Example entries:</strong></p>
+        <pre class="codeblock">1 = 00 06 * * *   ; run macro slot 1 every day at 06:00
+2 = 30 18 * * 5   ; run macro slot 2 every Friday at 18:30
+3 = 00 12 1 * *   ; run macro slot 3 on the 1st of each month at noon</pre>
+        <p class="muted" style="margin-top:8px">Only plain numbers and <span class="mono">*</span> are supported per field &mdash; ranges (<span class="mono">1-5</span>), lists (<span class="mono">1,3,5</span>), and steps (<span class="mono">*/2</span>) are not supported by app_rpt and will be rejected on save. The node stanza must have <span class="mono">scheduler = {{ s }}</span> (or the default stanza named <span class="mono">schedule</span>) for entries here to fire.</p>
+      </div>
+    </div>
+
+    <div id="schedule-content-{{ s }}"><div class="muted">Loading...</div></div>
   </section>
   {% endfor %}
 
@@ -662,9 +793,16 @@ async function api(url, opts) {
 }
 
 /* ── Navigation ─────────────────────────────────────────────────────────── */
+function toggleNav() {
+  document.getElementById('sidebar-nav').classList.toggle('open');
+}
+
 function showPage(id) {
   document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
   document.querySelectorAll('.nav-item').forEach(function(b) { b.classList.remove('active'); });
+  // Auto-close nav on mobile after selecting a page
+  var nav = document.getElementById('sidebar-nav');
+  if (nav) nav.classList.remove('open');
 
   // Stop live polling whenever we leave node-control
   stopNcPolling();
@@ -687,10 +825,14 @@ function showPage(id) {
   else if (id === 'settings')     loadSecretKeyStatus();
   else if (id === 'general')      loadGeneralEditor();
   else {
-    var m = id.match(/^node-(\d+)$/);
-    var t = id.match(/^template-(.+)$/);
+    var m  = id.match(/^node-(\d+)$/);
+    var t  = id.match(/^template-(.+)$/);
+    var mc = id.match(/^macro-(.+)$/);
+    var sc = id.match(/^schedule-(.+)$/);
     if (m) loadNodeEditor(m[1]);
     else if (t) loadTemplateEditor(t[1]);
+    else if (mc) loadMacroEditor(mc[1]);
+    else if (sc) loadScheduleEditor(sc[1]);
   }
 }
 
@@ -789,7 +931,7 @@ async function fetchConf() {
 //   (none)   -> free-text <input type=text> (paths, stanza names, etc.)
 function buildValueInput(key, value, meta) {
   meta = meta || {};
-  var common = 'style="width:240px;font-family:var(--mono);font-size:0.85rem" '
+  var common = 'class="val-input" '
              + 'onchange="markChange(\'' + esc(key) + '\',this)"';
 
   if (meta.type === 'enum' && meta.options) {
@@ -933,11 +1075,15 @@ async function saveChanges() {
 function discardChanges() {
   pendingChanges = {};
   hideUnsaved();
-  if (currentPage === 'general') loadGeneralEditor();
-  else {
-    var m = currentPage.match(/^node-(\d+)$/);
-    if (m) loadNodeEditor(m[1]);
-  }
+  if (currentPage === 'general') { loadGeneralEditor(); return; }
+  var m  = currentPage.match(/^node-(\d+)$/);
+  var t  = currentPage.match(/^template-(.+)$/);
+  var mc = currentPage.match(/^macro-(.+)$/);
+  var sc = currentPage.match(/^schedule-(.+)$/);
+  if (m) loadNodeEditor(m[1]);
+  else if (t) loadTemplateEditor(t[1]);
+  else if (mc) loadMacroEditor(mc[1]);
+  else if (sc) loadScheduleEditor(sc[1]);
 }
 
 /* ── General editor ─────────────────────────────────────────────────────── */
@@ -1229,6 +1375,116 @@ async function loadTemplateEditor(name) {
     ? 'Used by node' + (usedBy.length > 1 ? 's' : '') + ': ' + usedBy.join(', ')
       + '. Saving a change here affects all of them.'
     : 'No nodes currently reference this template.';
+}
+
+// Macro/schedule entries are arbitrary-length numbered lists (slot number
+// -> DTMF command, or slot number -> cron schedule), unlike the fixed
+// NODE_SECS vocabulary — so this renders existing entries with the same
+// makeToggleRow() used elsewhere (value + enable switch, going through the
+// same pendingChanges/saveChanges flow), plus a small form to add new
+// slots, which don't exist as rows yet so there's nothing for the toggle
+// row's own logic to attach to until one is created here.
+var _listEditorKeys = {};  // {stanzaName: [existing slot numbers as strings]}
+
+async function loadListEditor(kind, name, contentElId, usedByElId, apiPrefix) {
+  currentSection = name;
+  var el = document.getElementById(contentElId);
+  if (!el) return;
+  el.innerHTML = '<div class="muted">Loading ' + esc(kind) + ' ' + esc(name) + '...</div>';
+
+  var r = await api(apiPrefix + encodeURIComponent(name));
+  var usedByEl = document.getElementById(usedByElId);
+  if (!r.ok) {
+    el.innerHTML = '<div class="alert alert-danger">' + esc(r.data.error || 'Failed to load.') + '</div>';
+    if (usedByEl) usedByEl.textContent = '';
+    return;
+  }
+
+  var usedBy = r.data.used_by || [];
+  if (usedByEl) {
+    usedByEl.textContent = usedBy.length
+      ? 'Used by node' + (usedBy.length > 1 ? 's' : '') + ': ' + usedBy.join(', ') + '.'
+      : 'No nodes currently reference this stanza.';
+  }
+
+  var entries = r.data.entries || {};
+  var keys    = Object.keys(entries).sort(function(a, b) { return Number(a) - Number(b); });
+  _listEditorKeys[name] = keys.slice();
+
+  var rowsHtml = '';
+  keys.forEach(function(k) {
+    var st   = entries[k];
+    var desc = kind === 'macro'
+      ? 'DTMF macro slot ' + k
+      : 'Runs macro slot ' + k + ' on this schedule';
+    rowsHtml += makeToggleRow(k, st.value || '', st.commented !== false, desc);
+  });
+
+  var addLabel    = kind === 'macro' ? 'Macro #' : 'Macro # to run';
+  var valueLabel  = kind === 'macro' ? 'DTMF Command' : 'Schedule (m h dom mon dow)';
+  var valuePlaceholder = kind === 'macro' ? '*81234' : '00 06 * * *';
+
+  el.innerHTML =
+      '<div class="card" style="margin-bottom:12px"><div class="card-body" id="list-rows-' + esc(kind) + '-' + esc(name) + '">'
+    + (rowsHtml || '<p class="muted">No entries yet. Add one below.</p>')
+    + '</div></div>'
+    + '<div class="card"><div class="card-header"><h2>Add Entry</h2></div><div class="card-body">'
+    + '<div class="form-row" style="margin-bottom:12px">'
+    + '<div class="form-group"><label class="form-label">' + esc(addLabel) + '</label>'
+    + '<input type="text" id="new-' + esc(kind) + '-key-' + esc(name) + '" placeholder="e.g. 5"></div>'
+    + '<div class="form-group"><label class="form-label">' + esc(valueLabel) + '</label>'
+    + '<input type="text" id="new-' + esc(kind) + '-val-' + esc(name) + '" placeholder="' + esc(valuePlaceholder) + '"></div>'
+    + '</div>'
+    + '<button class="btn btn-success btn-sm" onclick="addListEntry(\'' + esc(kind) + '\',\'' + esc(name) + '\')">Add Entry</button>'
+    + '<div class="muted" id="list-add-msg-' + esc(kind) + '-' + esc(name) + '" style="margin-top:8px"></div>'
+    + '</div></div>';
+
+  log(kind + ' ' + name + ' editor loaded (' + keys.length + ' entries).', 'DEBUG');
+}
+
+async function loadMacroEditor(name) {
+  await loadListEditor('macro', name, 'macro-content-' + name, 'macro-used-by-' + name, '/api/conf/macro/');
+}
+
+async function loadScheduleEditor(name) {
+  await loadListEditor('schedule', name, 'schedule-content-' + name, 'schedule-used-by-' + name, '/api/conf/schedule/');
+}
+
+function addListEntry(kind, name) {
+  var keyEl = document.getElementById('new-' + kind + '-key-' + name);
+  var valEl = document.getElementById('new-' + kind + '-val-' + name);
+  var msgEl = document.getElementById('list-add-msg-' + kind + '-' + name);
+  var key   = keyEl.value.trim();
+  var val   = valEl.value.trim();
+
+  if (!key || !/^\d+$/.test(key)) {
+    if (msgEl) msgEl.textContent = 'Enter a numeric slot number.';
+    return;
+  }
+  var existing = _listEditorKeys[name] || [];
+  if (existing.indexOf(key) !== -1) {
+    if (msgEl) msgEl.textContent = 'Slot ' + key + ' already exists below — edit it there instead.';
+    return;
+  }
+
+  currentSection = name;
+  var container = document.getElementById('list-rows-' + kind + '-' + name);
+  if (container) {
+    var emptyMsg = container.querySelector('p.muted');
+    if (emptyMsg) emptyMsg.remove();
+    var desc = kind === 'macro' ? 'DTMF macro slot ' + key : 'Runs macro slot ' + key + ' on this schedule';
+    var wrapper = document.createElement('div');
+    wrapper.innerHTML = makeToggleRow(key, val, false, desc);
+    container.appendChild(wrapper.firstChild);
+  }
+
+  if (!pendingChanges[name]) pendingChanges[name] = {};
+  pendingChanges[name][key] = {value: val, enabled: true};
+  _listEditorKeys[name] = existing.concat([key]);
+  showUnsaved('New entry pending: ' + key + ' = ' + val);
+  keyEl.value = '';
+  valEl.value = '';
+  if (msgEl) msgEl.textContent = '';
 }
 
 function toggleSec(el) {
