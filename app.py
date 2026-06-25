@@ -65,6 +65,7 @@ DB_PATH         = os.environ.get("DB_PATH",          "/etc/asterisk/asl3ez.db")
 AMI_HOST        = os.environ.get("AMI_HOST",         "127.0.0.1")
 AMI_PORT        = int(os.environ.get("AMI_PORT",     5038))
 SERVICE_NAME    = os.environ.get("SERVICE_NAME",     "ASL3-EZ")
+SOUNDS_DIR      = os.environ.get("SOUNDS_DIR",       "/var/lib/asterisk/sounds/asl3ez")
 SERVICE_FILE_PATH = os.environ.get("SERVICE_FILE_PATH",
                                     f"/etc/systemd/system/{SERVICE_NAME}.service")
 
@@ -154,6 +155,20 @@ def get_db():
     conn.execute("""CREATE TABLE IF NOT EXISTS settings (
         key   TEXT PRIMARY KEY,
         value TEXT NOT NULL
+    )""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS announcements (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        name          TEXT    NOT NULL,
+        slug          TEXT    NOT NULL UNIQUE,
+        node          TEXT    NOT NULL,
+        enabled       INTEGER NOT NULL DEFAULT 1,
+        interval_min  INTEGER NOT NULL DEFAULT 60,
+        window_start  TEXT    NOT NULL DEFAULT '07:30',
+        window_end    TEXT    NOT NULL DEFAULT '19:30',
+        play_cmd      TEXT    NOT NULL DEFAULT 'localplay',
+        last_played   TEXT,
+        source_type   TEXT    NOT NULL DEFAULT 'upload',
+        created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
     )""")
     conn.commit()
     return conn
@@ -2476,12 +2491,304 @@ def api_ami_raw_test():
 
 
 # ---------------------------------------------------------------------------
+# Announcements — audio file upload, ULAW conversion, scheduler
+# ---------------------------------------------------------------------------
+
+def _ann_slug(name: str) -> str:
+    """Turn a user-supplied name into a filesystem/Asterisk-safe slug."""
+    slug = re.sub(r'[^a-zA-Z0-9_-]', '_', name.strip().lower())
+    slug = re.sub(r'_+', '_', slug).strip('_') or "announcement"
+    return slug[:48]
+
+
+def _ann_unique_slug(base: str, exclude_id: int = None) -> str:
+    """Append a counter suffix until the slug is unique in the DB."""
+    db = get_db()
+    slug = base
+    i = 1
+    while True:
+        q = "SELECT id FROM announcements WHERE slug=?"
+        row = db.execute(q, (slug,)).fetchone()
+        if row is None or (exclude_id and row["id"] == exclude_id):
+            return slug
+        slug = f"{base}_{i}"
+        i += 1
+
+
+def _convert_to_ulaw(src: str, dest: str) -> None:
+    """Convert src (mp3/wav/etc.) to 8 kHz mono ULAW and write to dest."""
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    result = subprocess.run(
+        ["ffmpeg", "-y", "-i", src, "-ar", "8000", "-ac", "1", "-f", "mulaw", dest],
+        capture_output=True, text=True, timeout=60,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"ffmpeg failed: {result.stderr[-500:]}")
+
+
+def _ann_sound_path(slug: str) -> str:
+    return os.path.join(SOUNDS_DIR, f"{slug}.ulaw")
+
+
+def _run_due_announcements():
+    now = datetime.now()
+    now_min = now.hour * 60 + now.minute
+    now_str = now.strftime("%Y-%m-%d %H:%M:%S")
+
+    db = get_db()
+    rows = db.execute("SELECT * FROM announcements WHERE enabled=1").fetchall()
+
+    for row in rows:
+        try:
+            ws_h, ws_m = map(int, row["window_start"].split(":"))
+            we_h, we_m = map(int, row["window_end"].split(":"))
+        except Exception:
+            continue
+
+        start_min = ws_h * 60 + ws_m
+        end_min   = we_h * 60 + we_m
+        if not (start_min <= now_min <= end_min):
+            continue
+
+        if row["last_played"]:
+            try:
+                last = datetime.strptime(row["last_played"], "%Y-%m-%d %H:%M:%S")
+                elapsed_min = (now - last).total_seconds() / 60.0
+                if elapsed_min < row["interval_min"]:
+                    continue
+            except Exception:
+                pass
+
+        node = row["node"]
+        cached = _ami_cache.get(node, {})
+        if cached.get("keyed", False):
+            log("INFO", f"[ANNOUNCE] Node {node} busy — deferring '{row['name']}'")
+            continue
+
+        sound_arg = f"asl3ez/{row['slug']}"
+        cmd = f"rpt {row['play_cmd']} {node} {sound_arg}"
+        log("INFO", f"[ANNOUNCE] Firing '{row['name']}' on {node}: {cmd!r}")
+        try:
+            def _play(ami, _cmd=cmd):
+                out = ami.command(_cmd)
+                return {"output": out}
+            ami_send_command(_play)
+            db.execute("UPDATE announcements SET last_played=? WHERE id=?",
+                       (now_str, row["id"]))
+            db.commit()
+        except Exception as e:
+            log("ERROR", f"[ANNOUNCE] Playback failed for '{row['name']}': {e}")
+
+
+def _announce_loop():
+    log("INFO", "[ANNOUNCE] Scheduler started (30s interval)")
+    while True:
+        time.sleep(30)
+        try:
+            _run_due_announcements()
+        except Exception as e:
+            log("ERROR", f"[ANNOUNCE] Scheduler error: {e}")
+
+
+def start_announcer():
+    t = threading.Thread(target=_announce_loop, name="announcer", daemon=True)
+    t.start()
+
+
+# ---------------------------------------------------------------------------
+# Announcement API routes
+# ---------------------------------------------------------------------------
+
+ALLOWED_UPLOAD_EXTS = {".mp3", ".wav", ".ogg", ".flac", ".m4a"}
+
+
+@app.route("/api/announcements")
+def api_ann_list():
+    db = get_db()
+    rows = db.execute(
+        "SELECT * FROM announcements ORDER BY name COLLATE NOCASE"
+    ).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/announcements", methods=["POST"])
+def api_ann_create():
+    if "file" not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    f    = request.files["file"]
+    name = request.form.get("name", "").strip()
+    node = request.form.get("node", "").strip()
+
+    if not name:
+        return jsonify({"error": "Name is required"}), 400
+    if not re.match(r'^\d{4,7}$', node):
+        return jsonify({"error": "Invalid node number"}), 400
+
+    ext = os.path.splitext(f.filename)[1].lower()
+    if ext not in ALLOWED_UPLOAD_EXTS:
+        return jsonify({"error": f"Unsupported file type: {ext}"}), 400
+
+    try:
+        interval_min = int(request.form.get("interval_min", 60))
+        if interval_min < 1:
+            raise ValueError
+    except (ValueError, TypeError):
+        return jsonify({"error": "interval_min must be a positive integer"}), 400
+
+    window_start = request.form.get("window_start", "07:30").strip()
+    window_end   = request.form.get("window_end",   "19:30").strip()
+    play_cmd     = request.form.get("play_cmd",     "localplay").strip()
+    if play_cmd not in ("localplay", "playback"):
+        play_cmd = "localplay"
+
+    if not re.match(r'^\d{2}:\d{2}$', window_start) or not re.match(r'^\d{2}:\d{2}$', window_end):
+        return jsonify({"error": "window_start and window_end must be HH:MM"}), 400
+
+    os.makedirs(SOUNDS_DIR, exist_ok=True)
+
+    base_slug = _ann_slug(name)
+    slug      = _ann_unique_slug(base_slug)
+    dest      = _ann_sound_path(slug)
+
+    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+        tmp_path = tmp.name
+        f.save(tmp_path)
+
+    try:
+        _convert_to_ulaw(tmp_path, dest)
+    except Exception as e:
+        os.unlink(tmp_path)
+        return jsonify({"error": f"Audio conversion failed: {e}"}), 500
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+
+    try:
+        shutil.chown(dest, user="asterisk", group="asterisk")
+        os.chmod(dest, 0o640)
+    except Exception:
+        pass
+
+    db = get_db()
+    db.execute(
+        """INSERT INTO announcements
+           (name, slug, node, enabled, interval_min, window_start, window_end, play_cmd)
+           VALUES (?, ?, ?, 1, ?, ?, ?, ?)""",
+        (name, slug, node, interval_min, window_start, window_end, play_cmd),
+    )
+    db.commit()
+    row = db.execute("SELECT * FROM announcements WHERE slug=?", (slug,)).fetchone()
+    log("INFO", f"[ANNOUNCE] Created announcement '{name}' (slug={slug}, node={node})")
+    return jsonify(dict(row)), 201
+
+
+@app.route("/api/announcements/<int:ann_id>", methods=["PATCH"])
+def api_ann_update(ann_id):
+    db   = get_db()
+    row  = db.execute("SELECT * FROM announcements WHERE id=?", (ann_id,)).fetchone()
+    if not row:
+        return jsonify({"error": "Not found"}), 404
+
+    data = request.json or {}
+
+    name         = str(data.get("name",         row["name"])).strip()
+    node         = str(data.get("node",         row["node"])).strip()
+    interval_min = int(data.get("interval_min", row["interval_min"]))
+    window_start = str(data.get("window_start", row["window_start"])).strip()
+    window_end   = str(data.get("window_end",   row["window_end"])).strip()
+    play_cmd     = str(data.get("play_cmd",     row["play_cmd"])).strip()
+
+    if not re.match(r'^\d{4,7}$', node):
+        return jsonify({"error": "Invalid node number"}), 400
+    if interval_min < 1:
+        return jsonify({"error": "interval_min must be >= 1"}), 400
+    if not re.match(r'^\d{2}:\d{2}$', window_start) or not re.match(r'^\d{2}:\d{2}$', window_end):
+        return jsonify({"error": "window times must be HH:MM"}), 400
+    if play_cmd not in ("localplay", "playback"):
+        play_cmd = "localplay"
+
+    db.execute(
+        """UPDATE announcements
+           SET name=?, node=?, interval_min=?, window_start=?, window_end=?, play_cmd=?
+           WHERE id=?""",
+        (name, node, interval_min, window_start, window_end, play_cmd, ann_id),
+    )
+    db.commit()
+    updated = db.execute("SELECT * FROM announcements WHERE id=?", (ann_id,)).fetchone()
+    return jsonify(dict(updated))
+
+
+@app.route("/api/announcements/<int:ann_id>", methods=["DELETE"])
+def api_ann_delete(ann_id):
+    db  = get_db()
+    row = db.execute("SELECT * FROM announcements WHERE id=?", (ann_id,)).fetchone()
+    if not row:
+        return jsonify({"error": "Not found"}), 404
+
+    sound = _ann_sound_path(row["slug"])
+    try:
+        if os.path.exists(sound):
+            os.unlink(sound)
+    except Exception as e:
+        log("WARN", f"[ANNOUNCE] Could not delete sound file {sound}: {e}")
+
+    db.execute("DELETE FROM announcements WHERE id=?", (ann_id,))
+    db.commit()
+    log("INFO", f"[ANNOUNCE] Deleted announcement id={ann_id} '{row['name']}'")
+    return jsonify({"ok": True})
+
+
+@app.route("/api/announcements/<int:ann_id>/toggle", methods=["POST"])
+def api_ann_toggle(ann_id):
+    db  = get_db()
+    row = db.execute("SELECT * FROM announcements WHERE id=?", (ann_id,)).fetchone()
+    if not row:
+        return jsonify({"error": "Not found"}), 404
+    new_val = 0 if row["enabled"] else 1
+    db.execute("UPDATE announcements SET enabled=? WHERE id=?", (new_val, ann_id))
+    db.commit()
+    return jsonify({"id": ann_id, "enabled": new_val})
+
+
+@app.route("/api/announcements/<int:ann_id>/play", methods=["POST"])
+def api_ann_play(ann_id):
+    db  = get_db()
+    row = db.execute("SELECT * FROM announcements WHERE id=?", (ann_id,)).fetchone()
+    if not row:
+        return jsonify({"error": "Not found"}), 404
+
+    sound = _ann_sound_path(row["slug"])
+    if not os.path.exists(sound):
+        return jsonify({"error": "Sound file not found on disk"}), 404
+
+    sound_arg = f"asl3ez/{row['slug']}"
+    cmd       = f"rpt {row['play_cmd']} {row['node']} {sound_arg}"
+    log("INFO", f"[ANNOUNCE] Test play '{row['name']}': {cmd!r}")
+
+    try:
+        def _play(ami, _cmd=cmd):
+            out = ami.command(_cmd)
+            return {"output": out}
+        result = ami_send_command(_play)
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        db.execute("UPDATE announcements SET last_played=? WHERE id=?", (now_str, ann_id))
+        db.commit()
+        return jsonify({"ok": True, "output": result.get("output", [])})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
 # Startup — load node DB and start background AMI poller
 # These run regardless of whether we're under gunicorn or direct python.
 # ---------------------------------------------------------------------------
 load_astdb()
 start_poller()
 start_favstats_poller()
+start_announcer()
 
 if __name__ == "__main__":
     log("INFO", "Starting in direct-run mode (not via gunicorn)")
