@@ -192,6 +192,28 @@ input:checked + .slider::before  { transform: translateX(16px); background: var(
 
 pre.codeblock { background: var(--bg3); padding: 12px; border-radius: 4px; font-size: 0.84rem; overflow-x: auto; font-family: var(--mono); white-space: pre; margin-bottom: 12px; }
 
+.help-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; margin-left: 6px; vertical-align: middle;
+  border-radius: 50%; border: 1px solid var(--text2); background: none;
+  color: var(--text2); font-size: 0.72rem; font-weight: 700; line-height: 1;
+  cursor: pointer; padding: 0; transition: all 0.12s;
+}
+.help-icon:hover { border-color: var(--accent); color: var(--accent); }
+
+.modal-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+  z-index: 100; align-items: center; justify-content: center; padding: 20px;
+}
+.modal-overlay.show { display: flex; }
+.modal-box {
+  background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius);
+  max-width: 480px; width: 100%; max-height: 80vh; overflow-y: auto;
+}
+.modal-box .card-header h2 { font-size: 1rem; }
+.modal-box .card-body { font-size: 0.92rem; line-height: 1.6; }
+.modal-box .card-body p { margin-bottom: 10px; }
+.modal-box .card-body p:last-child { margin-bottom: 0; }
 
 @media (max-width: 768px) {
   .layout { flex-direction: column; }
@@ -385,7 +407,9 @@ pre.codeblock { background: var(--bg3); padding: 12px; border-radius: 4px; font-
   <!-- General Settings -->
   <section class="page" id="page-general">
     <div class="page-title">General Settings</div>
-    <div class="page-sub">Edit the <span class="mono">[general]</span> stanza of rpt.conf.</div>
+    <div class="page-sub">Edit the <span class="mono">[general]</span> stanza of rpt.conf.
+      <button class="help-icon" onclick="showToggleHelp()" title="What does the switch next to each setting do?">?</button>
+    </div>
     <div id="general-content"><div class="muted">Loading...</div></div>
   </section>
 
@@ -393,7 +417,9 @@ pre.codeblock { background: var(--bg3); padding: 12px; border-radius: 4px; font-
   {% for node in nodes %}
   <section class="page" id="page-node-{{ node }}">
     <div class="page-title">Node {{ node }}</div>
-    <div class="page-sub">Settings for stanza <span class="mono">[{{ node }}]</span></div>
+    <div class="page-sub">Settings for stanza <span class="mono">[{{ node }}]</span>
+      <button class="help-icon" onclick="showToggleHelp()" title="What does the switch next to each setting do?">?</button>
+    </div>
     <div id="node-content-{{ node }}"><div class="muted">Loading...</div></div>
   </section>
   {% endfor %}
@@ -533,6 +559,17 @@ sudo asterisk -rx "module reload manager"</pre>
   </section>
 
 </main>
+</div>
+
+<!-- Generic help modal — populated by showHelpModal() -->
+<div class="modal-overlay" id="help-modal-overlay" onclick="if(event.target===this) closeHelpModal()">
+  <div class="modal-box">
+    <div class="card-header">
+      <h2 id="help-modal-title">Help</h2>
+      <button class="btn btn-sm" onclick="closeHelpModal()">Close</button>
+    </div>
+    <div class="card-body" id="help-modal-body"></div>
+  </div>
 </div>
 
 <script>
@@ -799,6 +836,35 @@ function showUnsaved(msg) {
 
 function hideUnsaved() {
   document.getElementById('unsaved-bar').classList.remove('show');
+}
+
+/* ── Generic help modal ─────────────────────────────────────────────────── */
+function showHelpModal(title, bodyHtml) {
+  document.getElementById('help-modal-title').textContent = title;
+  document.getElementById('help-modal-body').innerHTML = bodyHtml;
+  document.getElementById('help-modal-overlay').classList.add('show');
+}
+
+function closeHelpModal() {
+  document.getElementById('help-modal-overlay').classList.remove('show');
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeHelpModal();
+});
+
+function showToggleHelp() {
+  showHelpModal('Enable / Disable Switch', ''
+    + '<p>Each setting has two independent controls: the field holds <strong>what value</strong> '
+    + 'would apply, and the switch on the right decides <strong>whether that value is actually in effect</strong>.</p>'
+    + '<p><strong>Switch ON</strong> &mdash; the setting is written as a live line in rpt.conf '
+    + '(<span class="mono">key = value</span>) and Asterisk applies it.</p>'
+    + '<p><strong>Switch OFF</strong> &mdash; the setting is written as a comment '
+    + '(<span class="mono">;key = value</span>). Asterisk ignores it, so the node falls back to its '
+    + 'default or to whatever a template stanza provides &mdash; but your value stays saved in the '
+    + 'file, disabled, ready to switch back on later.</p>'
+    + '<p>This lets you try a value without committing to it, or temporarily disable a setting '
+    + 'without losing the value you had configured.</p>');
 }
 
 async function saveChanges() {
