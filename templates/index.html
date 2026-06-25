@@ -1218,6 +1218,7 @@ async function ncStatus() {
 
   var d         = r.data;
   var connected = d.connected || [];
+  var links     = d.links || {};
 
   // ── First call: build skeleton HTML with stable element IDs ──────────
   // Subsequent calls only update text/class of existing elements — no
@@ -1263,7 +1264,7 @@ async function ncStatus() {
     // Connected set changed — rebuild table (only happens on connect/disconnect)
     section.setAttribute('data-connected', newKey);
     var html = '<table class="tbl">'
-             + '<thead><tr><th>Node</th><th>Info</th><th>Action</th></tr></thead>'
+             + '<thead><tr><th>Node</th><th>Keyed</th><th>Info</th><th>Action</th></tr></thead>'
              + '<tbody id="nc-connected-tbody"></tbody>'
              + '</table>';
     section.innerHTML = html;
@@ -1272,6 +1273,7 @@ async function ncStatus() {
       var tr = document.createElement('tr');
       tr.setAttribute('data-node', n);
       tr.innerHTML = '<td class="mono" style="font-weight:600">' + esc(n) + '</td>'
+                   + '<td id="nc-keyed-' + esc(n) + '"><span class="badge badge-unk">NOT KEYED</span></td>'
                    + '<td class="muted" id="nc-info-' + esc(n) + '">...</td>'
                    + '<td><button class="btn btn-sm btn-danger" '
                    + 'onclick="ncDisconnectNode(\'' + esc(n) + '\')">Disconnect</button></td>';
@@ -1291,7 +1293,18 @@ async function ncStatus() {
       });
     });
   }
-  // If connected set unchanged, DOM is untouched — zero flicker
+
+  // Update per-link keyed badges in-place on every poll, regardless of
+  // whether the connected set changed, so keyup/unkey is reflected live
+  // rather than only when a node connects or disconnects.
+  connected.forEach(function(n) {
+    var cell = document.getElementById('nc-keyed-' + n);
+    if (!cell) return;
+    var isKeyed = !!(links[n] && links[n].keyed);
+    cell.innerHTML = isKeyed
+      ? '<span class="badge badge-ok">KEYED</span>'
+      : '<span class="badge badge-unk">NOT KEYED</span>';
+  });
 }
 
 /* ── Disconnect a specific node from the status table ───────────────────── */

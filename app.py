@@ -459,28 +459,45 @@ class AMIClient:
 
     def get_node_status(self, node: str) -> dict:
         """
-        Return keyed state and connected node list for `node`.
+        Return keyed state, connected node list, and per-link keyed state
+        for `node`.
 
-        Keyed detection uses 'rpt show variables <node>' and the
-        RPT_RXKEYED=0/1 variable. The previous implementation called
-        'rpt show nodes <node>' for this, but that CLI command does not
-        exist in this app_rpt build (confirmed via `core show help rpt`
-        and a live "No such command" response) — it always errored, so
-        `keyed` was never actually set. RPT_RXKEYED is confirmed present
-        and correct via 'rpt show variables' on this build.
+        `keyed` reflects RPT_RXKEYED — the LOCAL radio receiver only. It
+        does NOT go true when a linked node is talking and being repeated
+        (that shows up as RPT_TXKEYED instead). Per-link keyed state comes
+        from RPT_ALINKS, which app_rpt only populates for nodes currently
+        linked to this one — 'rpt show variables <node>' returns "Unknown
+        node number" for any node that isn't either local or currently
+        connected, so this can't be queried for arbitrary remote nodes,
+        only ones already in the connected list.
+
+        RPT_ALINKS format (confirmed live): "<count>,<node><mode><K|U>,..."
+        e.g. "2,2324RU,666380TK" — node 2324 in mode R(monitor), Unkeyed;
+        node 666380 in mode T(transceive), Keyed.
 
         Connected nodes come from 'rpt lstats <node>' which gives one line
         per connected node containing the remote node number.
         """
-        status = {"keyed": False, "connected": [], "raw": [], "lstats": []}
+        status = {"keyed": False, "connected": [], "links": {}, "raw": [], "lstats": []}
 
-        # Primary: rpt show variables — RPT_RXKEYED gives keyed state
+        # Primary: rpt show variables — RPT_RXKEYED for local keyed state,
+        # RPT_ALINKS for per-link keyed state of already-connected nodes.
         lines = self.command(f"rpt show variables {node}")
         status["raw"] = lines
         log("DEBUG", f"[AMI] rpt show variables {node} -> {lines}")
         for line in lines:
             if re.search(r'\bRPT_RXKEYED\s*=\s*1\b', line, re.IGNORECASE):
                 status["keyed"] = True
+            m = re.search(r'\bRPT_ALINKS\s*=\s*\d+,(.+)$', line)
+            if m:
+                for entry in m.group(1).split(","):
+                    em = re.match(r'^(\d{4,7})([A-Za-z]*)$', entry.strip())
+                    if em:
+                        link_node, flags = em.group(1), em.group(2)
+                        status["links"][link_node] = {
+                            "keyed": "K" in flags,
+                            "mode":  flags[:-1] if flags.endswith(("K", "U")) else flags,
+                        }
 
         # Secondary: rpt lstats — definitive connected node list
         lstats = self.command(f"rpt lstats {node}")
