@@ -802,7 +802,11 @@ sudo asterisk -rx "module reload manager"</pre>
           </div>
           <div>
             <label class="toggle-label" style="display:block;margin-bottom:3px">Audio File <span class="muted">(mp3, wav, ogg, flac, m4a)</span></label>
-            <input type="file" id="ann-file" accept=".mp3,.wav,.ogg,.flac,.m4a" style="width:100%;color:var(--text)">
+            <input type="file" id="ann-file" accept=".mp3,.wav,.ogg,.flac,.m4a" style="display:none" onchange="document.getElementById('ann-file-label').textContent=this.files[0]?this.files[0].name:'No file chosen'">
+            <div style="display:flex;align-items:center;gap:8px">
+              <button class="btn btn-sm" type="button" onclick="document.getElementById('ann-file').click()">Choose File</button>
+              <span id="ann-file-label" class="muted" style="font-size:0.88rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">No file chosen</span>
+            </div>
           </div>
           <div>
             <label class="toggle-label" style="display:block;margin-bottom:3px">Playback</label>
