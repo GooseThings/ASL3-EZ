@@ -80,6 +80,16 @@ DEFAULT_SECRET_KEYS = {"", "asl3-ez-change-me", "asl3-ez-change-me-in-production
 POLL_INTERVAL   = float(os.environ.get("AMI_POLL_INTERVAL", "1.0"))   # seconds between polls
 CACHE_TTL       = float(os.environ.get("AMI_CACHE_TTL",     "10.0"))  # seconds before cache is stale
 
+# Favorites keyed/connected-count polling hits the public AllStarLink stats
+# API (external, shared infrastructure), unlike the AMI poller above which
+# talks to the local Asterisk instance — so this interval is deliberately
+# much longer. Clamped to a 5s floor regardless of env override so a typo
+# can't turn this into a hammer against stats.allstarlink.org. Confirmed
+# live that this API rate-limits (HTTP 429) and will outright refuse
+# connections from an IP that exceeds it for a while afterward — the
+# poller also backs off exponentially on failures (see _favstats_poll_loop).
+FAVORITES_POLL_INTERVAL = max(5.0, float(os.environ.get("FAVORITES_POLL_INTERVAL", "30.0")))
+
 # Full paths — do NOT rely on PATH env under gunicorn/systemd
 SYSTEMCTL_PATH  = "/bin/systemctl"
 if not os.path.exists(SYSTEMCTL_PATH):
@@ -629,6 +639,117 @@ def get_cached_status(node: str) -> dict:
     if status is None:
         return {"node": node, "stale": True, "age": None, "error": "No data yet"}
     return {**status, "node": node, "stale": age > CACHE_TTL, "age": round(age, 2)}
+
+
+# ---------------------------------------------------------------------------
+# Favorites keyed/connected-count polling — public AllStarLink stats API
+#
+# Favorites are arbitrary node numbers, not necessarily linked to this
+# node, so their keyed/connected state can't come from local AMI (app_rpt
+# only knows about nodes it's currently connected to). This polls
+# stats.allstarlink.org instead, on its own background thread, caching
+# results so any number of browser tabs/users share one set of outbound
+# requests rather than each polling the external API independently.
+# ---------------------------------------------------------------------------
+_favstats_cache    = {}   # {node: {"keyed": bool, "connected_count": int, "error": str|None}}
+_favstats_cache_ts = {}   # {node: float unix timestamp}
+_favstats_lock     = threading.Lock()
+
+
+def _fetch_node_stats(node: str) -> dict:
+    """
+    urlopen(timeout=...) does not reliably bound DNS resolution time — a
+    stalled resolver can block past that timeout indefinitely (confirmed
+    live: the favstats poller thread sat blocked for 50+ minutes despite a
+    240s backoff sleep already having elapsed, with no exception raised).
+    socket.setdefaulttimeout() does cover the resolution phase too, so it's
+    set around just this call as a hard backstop. AMIClient's sockets are
+    unaffected — they always call settimeout() explicitly immediately after
+    creation, overriding whatever the default was at that instant.
+    """
+    old_timeout = socket.getdefaulttimeout()
+    socket.setdefaulttimeout(8)
+    try:
+        url = ASL_STATS_URL.format(node)
+        req = urlreq.Request(url, headers={"User-Agent": "ASL3-EZ/1.0"})
+        with urlreq.urlopen(req, timeout=6) as resp:
+            data = json.loads(resp.read().decode())
+    finally:
+        socket.setdefaulttimeout(old_timeout)
+    stats  = (data.get("stats") or {}).get("data") or {}
+    linked = stats.get("linkedNodes") or []
+    return {"keyed": bool(stats.get("keyed", False)), "connected_count": len(linked), "error": None}
+
+
+_favstats_backoff_level = 0  # consecutive bad cycles; resets to 0 on any clean success
+_FAVSTATS_MAX_SLEEP     = 600.0  # cap backoff at 10 minutes between cycles
+
+
+def _favstats_poll_loop():
+    global _favstats_backoff_level
+    log("INFO", f"[FAVSTATS-POLL] Background poller started (interval={FAVORITES_POLL_INTERVAL}s)")
+    while True:
+        any_success = False
+        any_429     = False
+        try:
+            db    = get_db()
+            nodes = [r["node"] for r in db.execute("SELECT node FROM favorites").fetchall()]
+            for node in nodes:
+                try:
+                    result = _fetch_node_stats(node)
+                    any_success = True
+                except Exception as e:
+                    err_str = str(e)
+                    if "429" in err_str:
+                        any_429 = True
+                    log("WARN", f"[FAVSTATS-POLL] {node}: {e}")
+                    result = {"keyed": False, "connected_count": 0, "error": err_str}
+                with _favstats_lock:
+                    _favstats_cache[node]    = result
+                    _favstats_cache_ts[node] = time.time()
+                # Pacing gap between nodes within a cycle, on top of the
+                # interval between whole cycles. Confirmed live that a tight
+                # burst (originally 0.3s apart) across just 6 nodes was
+                # enough to trigger 429s and then outright connection
+                # refusal, even though the aggregate rate (a handful of
+                # requests per 30s+) was low — an isolated single request
+                # succeeded immediately after a burst got blocked. The
+                # burst itself looks like abuse, not the average rate.
+                time.sleep(2.0)
+        except Exception as outer:
+            log("ERROR", f"[FAVSTATS-POLL] Unexpected outer error: {outer}")
+
+        # Confirmed live that this API both rate-limits (429) and will then
+        # refuse connections outright from an offending IP for a while.
+        # Back off exponentially whenever a cycle hits a 429 or fails
+        # entirely, instead of continuing to hammer it on the fixed
+        # interval — and reset to normal the moment a cycle succeeds.
+        if any_429 or (nodes and not any_success):
+            _favstats_backoff_level = min(_favstats_backoff_level + 1, 6)
+        else:
+            _favstats_backoff_level = 0
+
+        sleep_time = min(FAVORITES_POLL_INTERVAL * (2 ** _favstats_backoff_level), _FAVSTATS_MAX_SLEEP)
+        if _favstats_backoff_level:
+            log("WARN", f"[FAVSTATS-POLL] backing off — next poll in {sleep_time:.0f}s (level {_favstats_backoff_level})")
+        time.sleep(sleep_time)
+
+
+def start_favstats_poller():
+    t = threading.Thread(target=_favstats_poll_loop, name="favstats-poller", daemon=True)
+    t.start()
+    log("INFO", "[FAVSTATS-POLL] Poller thread launched")
+
+
+def get_cached_favstats(node: str) -> dict:
+    node   = str(node)
+    with _favstats_lock:
+        entry = _favstats_cache.get(node)
+        ts    = _favstats_cache_ts.get(node, 0)
+    age = time.time() - ts
+    if entry is None:
+        return {"node": node, "keyed": False, "connected_count": 0, "stale": True, "age": None}
+    return {**entry, "node": node, "stale": age > FAVORITES_POLL_INTERVAL * 3, "age": round(age, 2)}
 
 
 def ami_send_command(subcmd_fn) -> dict:
@@ -1514,6 +1635,27 @@ def api_favorites():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/favorites/status")
+def api_favorites_status():
+    """
+    Cached keyed/connected-count status for every current favorite, sourced
+    from the public AllStarLink stats API by the background favstats
+    poller. Always reads from cache — never makes an outbound request
+    itself — so this endpoint is cheap regardless of how often the
+    frontend polls it.
+    """
+    try:
+        db    = get_db()
+        nodes = [r["node"] for r in db.execute("SELECT node FROM favorites").fetchall()]
+        return jsonify({
+            "favorites":     {n: get_cached_favstats(n) for n in nodes},
+            "poll_interval": FAVORITES_POLL_INTERVAL,
+        })
+    except Exception as e:
+        log("ERROR", f"[API] /api/favorites/status: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/favorites/add", methods=["POST"])
 def api_fav_add():
     data  = request.json or {}
@@ -2066,6 +2208,7 @@ def api_ami_raw_test():
 # ---------------------------------------------------------------------------
 load_astdb()
 start_poller()
+start_favstats_poller()
 
 if __name__ == "__main__":
     log("INFO", "Starting in direct-run mode (not via gunicorn)")

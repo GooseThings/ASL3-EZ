@@ -397,9 +397,9 @@ pre.codeblock { background: var(--bg3); padding: 12px; border-radius: 4px; font-
         </div>
       </div>
       <table class="tbl">
-        <thead><tr><th>Node</th><th>Label</th><th>Callsign</th><th>Location</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Node</th><th>Label</th><th>Callsign</th><th>Location</th><th>Keyed</th><th>Connected</th><th>Actions</th></tr></thead>
         <tbody id="fav-tbody">
-          <tr><td colspan="5" class="muted" style="padding:14px">Loading...</td></tr>
+          <tr><td colspan="7" class="muted" style="padding:14px">Loading...</td></tr>
         </tbody>
       </table>
     </div>
@@ -668,6 +668,7 @@ function showPage(id) {
 
   // Stop live polling whenever we leave node-control
   stopNcPolling();
+  stopFavStatusPolling();
 
   var page = document.getElementById('page-' + id);
   if (page) page.classList.add('active');
@@ -679,7 +680,7 @@ function showPage(id) {
   currentPage = id;
 
   if      (id === 'dashboard')    refreshDashboard();
-  else if (id === 'node-control') { loadFavorites(); startNcPolling(); }
+  else if (id === 'node-control') { loadFavorites(); startNcPolling(); startFavStatusPolling(); }
   else if (id === 'raw-editor')   rawLoad();
   else if (id === 'backups')      loadBackups();
   else if (id === 'ami-diag')     loadSysInfo();
@@ -1542,15 +1543,15 @@ function toggleFavForm() {
 
 async function loadFavorites() {
   var tbody = document.getElementById('fav-tbody');
-  tbody.innerHTML = '<tr><td colspan="5" class="muted" style="padding:14px">Loading...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="7" class="muted" style="padding:14px">Loading...</td></tr>';
   var r = await api('/api/favorites');
   if (!r.ok) {
-    tbody.innerHTML = '<tr><td colspan="5" class="muted" style="padding:14px">' + esc(r.data.error || 'Failed') + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="muted" style="padding:14px">' + esc(r.data.error || 'Failed') + '</td></tr>';
     return;
   }
   var favs = r.data.favorites;
   if (!favs || !favs.length) {
-    tbody.innerHTML = '<tr><td colspan="5" class="muted" style="padding:14px">No favorites yet. Use Add Node above.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="muted" style="padding:14px">No favorites yet. Use Add Node above.</td></tr>';
     return;
   }
   tbody.innerHTML = favs.map(function(f) {
@@ -1559,6 +1560,8 @@ async function loadFavorites() {
       + '<td>' + esc(f.label) + '</td>'
       + '<td>' + esc(f.callsign || '') + '</td>'
       + '<td>' + esc(f.location || '') + '</td>'
+      + '<td id="fav-keyed-' + esc(f.node) + '"><span class="muted">...</span></td>'
+      + '<td id="fav-conn-' + esc(f.node) + '" class="mono"><span class="muted">...</span></td>'
       + '<td><div class="btn-row">'
       + '<button class="btn btn-sm btn-primary" onclick="favConnect(\'' + esc(f.node) + '\')">Connect</button>'
       + '<button class="btn btn-sm" onclick="favFill(\'' + esc(f.node) + '\')">Fill</button>'
@@ -1567,6 +1570,47 @@ async function loadFavorites() {
       + '</tr>';
   }).join('');
   ncLog('Favorites loaded: ' + favs.length, 'DEBUG');
+  updateFavoritesStatus();
+}
+
+// Keyed/connected-count for favorites comes from the public AllStarLink
+// stats API, polled server-side on its own (>=5s, default 30s) interval —
+// see FAVORITES_POLL_INTERVAL in app.py. This just reads that cache, so
+// polling it from the UI is cheap regardless of cadence; updates cells
+// in place to match the no-flicker pattern used elsewhere in this page.
+async function updateFavoritesStatus() {
+  var r = await api('/api/favorites/status');
+  if (!r.ok) return;
+  var favs = r.data.favorites || {};
+  Object.keys(favs).forEach(function(node) {
+    var s = favs[node];
+    var keyedCell = document.getElementById('fav-keyed-' + node);
+    var connCell  = document.getElementById('fav-conn-' + node);
+    if (keyedCell) {
+      if (s.error) {
+        keyedCell.innerHTML = '<span class="muted" title="' + esc(s.error) + '">N/A</span>';
+      } else {
+        keyedCell.innerHTML = s.keyed
+          ? '<span class="badge badge-ok">KEYED</span>'
+          : '<span class="badge badge-unk">NOT KEYED</span>';
+      }
+    }
+    if (connCell) {
+      connCell.textContent = s.error ? '—' : s.connected_count;
+    }
+  });
+}
+
+var _favStatusPollTimer = null;
+function startFavStatusPolling() {
+  stopFavStatusPolling();
+  // Server-side polling of the external API is already throttled to
+  // >=5s (default 30s); this just re-reads our own local cache, so 5s
+  // here keeps the UI reasonably fresh without adding any external load.
+  _favStatusPollTimer = setInterval(updateFavoritesStatus, 5000);
+}
+function stopFavStatusPolling() {
+  if (_favStatusPollTimer) { clearInterval(_favStatusPollTimer); _favStatusPollTimer = null; }
 }
 
 async function addFavorite() {
