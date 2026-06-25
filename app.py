@@ -910,7 +910,17 @@ def _collect_stanzas(content):
     current = None
     for line in content.splitlines():
         s = line.strip()
-        hdr = re.match(r'^\[([^\]]+)\](?:\(([^)]+)\))?', s)
+        # A commented-out stanza header (e.g. ";[daq-cham-1]", from example
+        # config shown disabled by default) must still count as a stanza
+        # boundary, even though it and everything under it is inactive.
+        # Otherwise its entirely-commented example content (device=,
+        # hwtype=, tag=, etc.) gets misattributed to whatever real stanza
+        # came before it — confirmed live: rpt.conf's disabled [daq-cham-1]/
+        # [meter-faces]/[alarms] example blocks were bleeding their example
+        # keys into [macro]'s entries, since none of those headers were
+        # recognized as boundaries.
+        header_candidate = s[1:].strip() if s.startswith(";") else s
+        hdr = re.match(r'^\[([^\]]+)\](?:\(([^)]+)\))?', header_candidate)
         if hdr:
             raw_name = hdr.group(1).strip()
             raw_tmpl = (hdr.group(2) or "").strip()
@@ -944,7 +954,7 @@ def _parse_kv_lines(lines_list):
             if indent > 8:
                 continue
             stripped = stripped[1:].strip()
-        m = re.match(r'^([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*([^;]*?)(?:\s*;.*)?$', stripped)
+        m = re.match(r'^([a-zA-Z0-9_][a-zA-Z0-9_]*)\s*=\s*([^;]*?)(?:\s*;.*)?$', stripped)
         if m:
             k = m.group(1).strip()
             v = m.group(2).strip()
@@ -982,6 +992,35 @@ def get_node_template_usage(content):
     for node_list in usage.values():
         node_list.sort()
     return usage
+
+
+def get_referenced_stanza_usage(content, setting_key, default_name):
+    """
+    For each node, resolve which stanza it points to for a given
+    name-override setting (e.g. setting_key='macro' -> the stanza holding
+    its DTMF macros, defaulting to 'macro' if the node/template chain
+    never sets one — that default matches app_rpt's own behavior).
+    Restricted to stanza names that actually exist in the file.
+    Returns {stanza_name: [node_numbers...]}.
+    """
+    stanzas = _collect_stanzas(content)
+    usage   = {}
+    for node in get_node_numbers(content):
+        settings = parse_stanza_settings(content, node)
+        name = (settings.get(setting_key) or {}).get("value") or default_name
+        if name in stanzas:
+            usage.setdefault(name, []).append(node)
+    for node_list in usage.values():
+        node_list.sort()
+    return usage
+
+
+def get_macro_stanza_usage(content):
+    return get_referenced_stanza_usage(content, "macro", "macro")
+
+
+def get_schedule_stanza_usage(content):
+    return get_referenced_stanza_usage(content, "scheduler", "schedule")
 
 
 def parse_stanza_settings(content, stanza_name):
@@ -1056,11 +1095,26 @@ def parse_node_settings(content):
         commented = stripped.startswith(";")
         if commented:
             stripped = stripped[1:].strip()
-        m = re.match(r'^([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*([^;]*?)(?:\s*;.*)?$', stripped)
+        m = re.match(r'^([a-zA-Z0-9_][a-zA-Z0-9_]*)\s*=\s*([^;]*?)(?:\s*;.*)?$', stripped)
         if m:
             k, v = m.group(1).strip(), m.group(2).strip()
             settings[k] = {"value": v, "commented": commented, "raw_line": line}
     return settings
+
+
+def _section_header_match(s):
+    """
+    Match a section header, real or commented-out. Mirrors the same fix in
+    _collect_stanzas(): a commented header like ";[daq-cham-1]" must still
+    count as a boundary, or everything under it (itself all comments, but
+    documentation/examples for a different, inactive stanza) gets treated
+    as still being inside whatever real section preceded it. Confirmed
+    live: saving a new key into [macro] silently overwrote an unrelated
+    commented DAQ pin example (";10 = inp" under [daq-cham-1]) because
+    this function didn't recognize ";[daq-cham-1]" as leaving [macro].
+    """
+    header_candidate = s[1:].strip() if s.startswith(";") else s
+    return re.match(r'^\[([^\]\(]+)', header_candidate)
 
 
 def update_setting_in_content(content, section, key, value, enable=True):
@@ -1072,13 +1126,13 @@ def update_setting_in_content(content, section, key, value, enable=True):
 
     for line in lines:
         s = line.strip()
-        sec_m = re.match(r'^\[([^\]\(]+)', s)
+        sec_m = _section_header_match(s)
         if sec_m:
             in_sec = (sec_m.group(1).strip() == section)
 
         if in_sec and not found:
             test = s.lstrip(";").strip()
-            km   = re.match(r'^([a-zA-Z_][a-zA-Z0-9_]*)\s*=', test)
+            km   = re.match(r'^([a-zA-Z0-9_][a-zA-Z0-9_]*)\s*=', test)
             if km and km.group(1) == key:
                 found = True
                 prefix = "" if enable else ";"
@@ -1093,7 +1147,7 @@ def update_setting_in_content(content, section, key, value, enable=True):
         inserted   = False
         for line in result:
             s     = line.strip()
-            sec_m = re.match(r'^\[([^\]\(]+)', s)
+            sec_m = _section_header_match(s)
             if sec_m:
                 if in_target and not inserted:
                     prefix = "" if enable else ";"
@@ -1217,6 +1271,45 @@ def validate_setting(key, value):
         if "max" in schema and num > schema["max"]:
             return f"{key}: {value!r} is above the maximum of {schema['max']}"
 
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Macro / schedule entry validation
+#
+# Per https://allstarlink.github.io/config/rpt_conf/ :
+#   [macro]    1 = *32000*32001     ; key = macro slot number, value = DTMF
+#                                   ; command sequence(s), space-separated,
+#                                   ; "p"/"P" for a ~500ms pause
+#   [schedule] 2 = 00 00 * * *      ; key = macro slot to run, value = cron-
+#                                   ; style "m h dom mon dow", star implied.
+# Only plain numbers and "*" are documented for schedule fields — no
+# confirmed support for ranges/lists/steps, so those are rejected here
+# rather than silently accepted and possibly mis-parsed by app_rpt.
+# ---------------------------------------------------------------------------
+MACRO_KEY_RE         = re.compile(r'^\d+$')
+MACRO_VALUE_RE       = re.compile(r'^[0-9*#A-Da-dPp\s]*$')
+SCHEDULE_FIELD_RE    = re.compile(r'^(\*|\d{1,2})$')
+
+
+def validate_macro_entry(key, value):
+    if not MACRO_KEY_RE.match(key):
+        return f"macro slot {key!r} must be a number"
+    if value and not MACRO_VALUE_RE.match(value):
+        return f"macro command {value!r} contains invalid characters (allowed: 0-9 * # A-D p, spaces)"
+    return None
+
+
+def validate_schedule_entry(key, value):
+    if not MACRO_KEY_RE.match(key):
+        return f"schedule key {key!r} must be a number (the macro slot to run)"
+    if value:
+        fields = value.split()
+        if len(fields) != 5:
+            return f"schedule value {value!r} must have exactly 5 fields: minute hour day-of-month month day-of-week"
+        for f in fields:
+            if not SCHEDULE_FIELD_RE.match(f):
+                return f"schedule field {f!r} is invalid — only a number or * is supported"
     return None
 
 
@@ -1404,10 +1497,14 @@ def index():
     content   = read_conf_file(RPT_CONF_PATH)
     nodes     = get_node_numbers(content) if content else []
     templates = sorted(get_node_template_usage(content).keys()) if content else []
+    macros    = sorted(get_macro_stanza_usage(content).keys()) if content else []
+    schedules = sorted(get_schedule_stanza_usage(content).keys()) if content else []
     return render_template("index.html",
                            conf_exists=content is not None,
                            nodes=nodes,
                            templates=templates,
+                           macros=macros,
+                           schedules=schedules,
                            conf_path=RPT_CONF_PATH)
 
 
@@ -1486,6 +1583,54 @@ def api_get_template_conf(name):
     return jsonify({"template": name, "settings": settings, "used_by": usage.get(name, [])})
 
 
+@app.route("/api/conf/macros")
+def api_get_macros():
+    """List DTMF macro stanzas actually referenced by a node, and which nodes use each."""
+    content = read_conf_file(RPT_CONF_PATH)
+    if content is None:
+        return jsonify({"error": "Cannot read rpt.conf"}), 404
+    return jsonify({"stanzas": get_macro_stanza_usage(content)})
+
+
+@app.route("/api/conf/macro/<name>")
+def api_get_macro_conf(name):
+    content = read_conf_file(RPT_CONF_PATH)
+    if content is None:
+        return jsonify({"error": "Cannot read rpt.conf"}), 404
+    if name not in _collect_stanzas(content):
+        return jsonify({"error": f"Stanza [{name}] not found in rpt.conf"}), 404
+    # Macro slots are always digit-keyed (per the documented format) — this
+    # also filters out non-numeric documentation lines like the stock
+    # config's own format-example comments, which are valid key=value
+    # syntax but aren't real macro entries.
+    entries = {k: v for k, v in parse_stanza_settings(content, name).items() if MACRO_KEY_RE.match(k)}
+    usage   = get_macro_stanza_usage(content)
+    return jsonify({"name": name, "entries": entries, "used_by": usage.get(name, [])})
+
+
+@app.route("/api/conf/schedules")
+def api_get_schedules():
+    """List scheduler stanzas actually referenced by a node, and which nodes use each."""
+    content = read_conf_file(RPT_CONF_PATH)
+    if content is None:
+        return jsonify({"error": "Cannot read rpt.conf"}), 404
+    return jsonify({"stanzas": get_schedule_stanza_usage(content)})
+
+
+@app.route("/api/conf/schedule/<name>")
+def api_get_schedule_conf(name):
+    content = read_conf_file(RPT_CONF_PATH)
+    if content is None:
+        return jsonify({"error": "Cannot read rpt.conf"}), 404
+    if name not in _collect_stanzas(content):
+        return jsonify({"error": f"Stanza [{name}] not found in rpt.conf"}), 404
+    # Schedule keys are always digit-keyed (the macro slot to run) — see
+    # the same filtering note in api_get_macro_conf.
+    entries = {k: v for k, v in parse_stanza_settings(content, name).items() if MACRO_KEY_RE.match(k)}
+    usage   = get_schedule_stanza_usage(content)
+    return jsonify({"name": name, "entries": entries, "used_by": usage.get(name, [])})
+
+
 @app.route("/api/save", methods=["POST"])
 def api_save():
     data    = request.json or {}
@@ -1509,12 +1654,22 @@ def api_save():
     changes = data.get("changes", {})
     log("INFO", f"[API] /api/save section={section!r} changes={list(changes.keys())}")
 
+    is_macro_stanza    = section in get_macro_stanza_usage(content)
+    is_schedule_stanza = section in get_schedule_stanza_usage(content)
+
     errors = []
     for key, info in changes.items():
-        if info.get("enabled", True):
-            err = validate_setting(key, info.get("value", ""))
-            if err:
-                errors.append(err)
+        if not info.get("enabled", True):
+            continue
+        value = info.get("value", "")
+        if is_macro_stanza:
+            err = validate_macro_entry(key, value)
+        elif is_schedule_stanza:
+            err = validate_schedule_entry(key, value)
+        else:
+            err = validate_setting(key, value)
+        if err:
+            errors.append(err)
     if errors:
         log("WARN", f"[API] /api/save rejected invalid value(s): {errors}")
         return jsonify({"error": "Invalid setting value(s)", "details": errors}), 400
