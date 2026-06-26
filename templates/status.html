@@ -249,6 +249,12 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
   cursor: pointer; letter-spacing: .04em; transition: all .15s; white-space: nowrap; }
 .map-btn.on { background: var(--accent); border-color: var(--accent); color: var(--bg); }
 
+/* Remove width caps in fullscreen — let both rows fill the screen */
+:fullscreen .top-row    { grid-template-columns: 260px 1fr; }
+:fullscreen .bottom-row { grid-template-columns: 300px 1fr; }
+:-webkit-full-screen .top-row    { grid-template-columns: 260px 1fr; }
+:-webkit-full-screen .bottom-row { grid-template-columns: 300px 1fr; }
+
 /* ── Footer ── */
 .footer { display: flex; align-items: center; justify-content: space-between;
   flex-wrap: wrap; gap: 4px 14px; padding-top: 7px; border-top: 1px solid var(--border);
