@@ -342,6 +342,8 @@ input:checked + .slider::before  { transform: translateX(16px); background: var(
 .dtmf-key { width:100%; height:48px; font-size:1.1rem; font-weight:600; padding:0; justify-content:center; }
 .dtmf-key:active { background: var(--accent); color: #000; }
 .log-panel div { margin-bottom: 1px; word-break: break-all; }
+.ast-cmd-ref { cursor: pointer; border-bottom: 1px dashed var(--accent); color: var(--accent); }
+.ast-cmd-ref:hover { opacity: 0.8; }
 .lt    { color: #4a5568; }
 .lOK   { color: var(--green); }
 .lWARN { color: var(--warn); }
@@ -909,8 +911,109 @@ sudo asterisk -rx "module reload manager"</pre>
     </div>
 
     <div class="card">
-      <div class="card-header">
-        <h2>Asterisk Log</h2>
+      <div class="card-header"><h2>CLI</h2></div>
+      <div class="card-body">
+        <p style="margin-bottom:10px;color:var(--text2);font-size:0.9rem">Run any Asterisk CLI command via AMI. Output appears below. Use ↑ / ↓ to navigate history.</p>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <input type="text" id="ast-cmd-input" placeholder="e.g. rpt show nodes" style="flex:1;font-family:var(--mono)"
+            onkeydown="astCmdKey(event)">
+          <button class="btn btn-primary" onclick="astRunCmd()">Run</button>
+          <button class="btn btn-sm" onclick="document.getElementById('ast-cmd-out').innerHTML='';document.getElementById('ast-cmd-input').value=''">Clear</button>
+        </div>
+        <div id="ast-cmd-out" class="log-panel" style="min-height:80px;max-height:320px;overflow-y:auto"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>Command Reference</h2></div>
+      <div class="card-body" style="padding-top:8px">
+
+        <details style="margin-bottom:6px">
+          <summary style="cursor:pointer;font-weight:600;padding:6px 0">Core</summary>
+          <table class="tbl" style="margin-top:6px">
+            <thead><tr><th>Command</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><span class="mono ast-cmd-ref" onclick="astUseCmd(this)">core show version</span></td><td>Asterisk build and version string</td></tr>
+              <tr><td><span class="mono ast-cmd-ref" onclick="astUseCmd(this)">core show uptime</span></td><td>How long Asterisk has been running</td></tr>
+              <tr><td><span class="mono ast-cmd-ref" onclick="astUseCmd(this)">core show channels</span></td><td>Active channels and their states</td></tr>
+              <tr><td><span class="mono ast-cmd-ref" onclick="astUseCmd(this)">core show calls</span></td><td>Current call count and processed totals</td></tr>
+              <tr><td><span class="mono ast-cmd-ref" onclick="astUseCmd(this)">core show settings</span></td><td>Global Asterisk configuration settings</td></tr>
+              <tr><td><span class="mono ast-cmd-ref" onclick="astUseCmd(this)">core set verbose 3</span></td><td>Set console verbosity (0–9; 3 = <code>-vvv</code>)</td></tr>
+              <tr><td><span class="mono ast-cmd-ref" onclick="astUseCmd(this)">core set debug 0</span></td><td>Set debug level (0 = off)</td></tr>
+            </tbody>
+          </table>
+        </details>
+
+        <details style="margin-bottom:6px">
+          <summary style="cursor:pointer;font-weight:600;padding:6px 0">RPT / ASL3</summary>
+          <table class="tbl" style="margin-top:6px">
+            <thead><tr><th>Command</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><span class="mono ast-cmd-ref" onclick="astUseCmd(this)">rpt show nodes</span></td><td>All configured RPT nodes and their current state</td></tr>
+              <tr><td><span class="mono ast-cmd-ref" onclick="astUseCmd(this)">rpt show variables &lt;node&gt;</span></td><td>Node variables: keyed state, DTMF, link flags</td></tr>
+              <tr><td><span class="mono ast-cmd-ref" onclick="astUseCmd(this)">rpt lstats &lt;node&gt;</span></td><td>Linked nodes and connection stats for a node</td></tr>
+              <tr><td><span class="mono ast-cmd-ref" onclick="astUseCmd(this)">rpt stats &lt;node&gt;</span></td><td>Full RPT statistics for a node</td></tr>
+              <tr><td><span class="mono ast-cmd-ref" onclick="astUseCmd(this)">rpt restart</span></td><td>Reload rpt.conf without restarting Asterisk</td></tr>
+              <tr><td><span class="mono ast-cmd-ref" onclick="astUseCmd(this)">rpt cmd &lt;node&gt; ilink 3 &lt;remote&gt;</span></td><td>Connect remote node (transceive)</td></tr>
+              <tr><td><span class="mono ast-cmd-ref" onclick="astUseCmd(this)">rpt cmd &lt;node&gt; ilink 1 &lt;remote&gt;</span></td><td>Disconnect a specific remote node</td></tr>
+              <tr><td><span class="mono ast-cmd-ref" onclick="astUseCmd(this)">rpt cmd &lt;node&gt; ilink 6</span></td><td>Disconnect all linked nodes</td></tr>
+              <tr><td><span class="mono ast-cmd-ref" onclick="astUseCmd(this)">rpt cmd &lt;node&gt; cop 3</span></td><td>Force station ID</td></tr>
+              <tr><td><span class="mono ast-cmd-ref" onclick="astUseCmd(this)">rpt cmd &lt;node&gt; cop 1</span></td><td>System status report</td></tr>
+            </tbody>
+          </table>
+        </details>
+
+        <details style="margin-bottom:6px">
+          <summary style="cursor:pointer;font-weight:600;padding:6px 0">Logger</summary>
+          <table class="tbl" style="margin-top:6px">
+            <thead><tr><th>Command</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><span class="mono ast-cmd-ref" onclick="astUseCmd(this)">logger show channels</span></td><td>Active log channels and their levels</td></tr>
+              <tr><td><span class="mono ast-cmd-ref" onclick="astUseCmd(this)">logger rotate</span></td><td>Rotate log files now</td></tr>
+            </tbody>
+          </table>
+        </details>
+
+        <details style="margin-bottom:6px">
+          <summary style="cursor:pointer;font-weight:600;padding:6px 0">Modules</summary>
+          <table class="tbl" style="margin-top:6px">
+            <thead><tr><th>Command</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><span class="mono ast-cmd-ref" onclick="astUseCmd(this)">module show</span></td><td>All loaded modules</td></tr>
+              <tr><td><span class="mono ast-cmd-ref" onclick="astUseCmd(this)">module show like rpt</span></td><td>Modules matching "rpt"</td></tr>
+              <tr><td><span class="mono ast-cmd-ref" onclick="astUseCmd(this)">module show like manager</span></td><td>AMI manager module info</td></tr>
+            </tbody>
+          </table>
+        </details>
+
+        <details style="margin-bottom:6px">
+          <summary style="cursor:pointer;font-weight:600;padding:6px 0">Manager / AMI</summary>
+          <table class="tbl" style="margin-top:6px">
+            <thead><tr><th>Command</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><span class="mono ast-cmd-ref" onclick="astUseCmd(this)">manager show connected</span></td><td>Currently connected AMI sessions</td></tr>
+              <tr><td><span class="mono ast-cmd-ref" onclick="astUseCmd(this)">manager show users</span></td><td>Configured AMI users and their permissions</td></tr>
+            </tbody>
+          </table>
+        </details>
+
+        <details>
+          <summary style="cursor:pointer;font-weight:600;padding:6px 0">SIP / PJSIP</summary>
+          <table class="tbl" style="margin-top:6px">
+            <thead><tr><th>Command</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><span class="mono ast-cmd-ref" onclick="astUseCmd(this)">pjsip show endpoints</span></td><td>Configured PJSIP endpoints</td></tr>
+              <tr><td><span class="mono ast-cmd-ref" onclick="astUseCmd(this)">pjsip show registrations</span></td><td>Active PJSIP registrations</td></tr>
+              <tr><td><span class="mono ast-cmd-ref" onclick="astUseCmd(this)">pjsip show contacts</span></td><td>Registered PJSIP contacts</td></tr>
+            </tbody>
+          </table>
+        </details>
+
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>Asterisk Log</h2>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <select id="ast-log-lines" style="width:auto">
             <option value="50">50 lines</option>
@@ -2772,6 +2875,82 @@ async function loadSysInfo() {
 /* ── Asterisk Console ───────────────────────────────────────────────────── */
 var _astAutoRefreshTimer = null;
 var _astClearTime        = null;   // set by astClearLog(); filters out older lines
+var _astCmdHistory       = [];     // command history for ↑/↓ navigation
+var _astCmdHistoryIdx    = -1;
+
+async function astRunCmd() {
+  var input  = document.getElementById('ast-cmd-input');
+  var out    = document.getElementById('ast-cmd-out');
+  var cmd    = input.value.trim();
+  if (!cmd) return;
+
+  // Prepend to history (skip duplicate of last entry)
+  if (_astCmdHistory[0] !== cmd) _astCmdHistory.unshift(cmd);
+  if (_astCmdHistory.length > 50) _astCmdHistory.pop();
+  _astCmdHistoryIdx = -1;
+
+  // Show the command being run
+  out.innerHTML = '<div class="lAMI">&gt; ' + esc(cmd) + '</div>'
+                + '<div class="muted" style="font-size:0.85rem"><span class="spinner"></span> running...</div>'
+                + out.innerHTML;
+
+  var r = await api('/api/asterisk/command', {
+    method:  'POST',
+    headers: {'Content-Type': 'application/json'},
+    body:    JSON.stringify({command: cmd})
+  });
+
+  // Remove the "running..." placeholder
+  var placeholder = out.querySelector('.muted');
+  if (placeholder) placeholder.remove();
+
+  if (!r.ok) {
+    out.innerHTML = '<div class="lERR">' + esc(r.data.error || ('HTTP ' + r.status)) + '</div>'
+                  + out.innerHTML;
+    return;
+  }
+
+  var lines = r.data.output || [];
+  if (!lines.length) lines = ['(no output)'];
+  var html = lines.map(function(l) {
+    return '<div style="font-size:0.85rem;font-family:var(--mono)">' + esc(l) + '</div>';
+  }).join('');
+  // Insert output right after the command line
+  var cmdLine = out.firstChild;
+  if (cmdLine) {
+    cmdLine.insertAdjacentHTML('afterend', html);
+  } else {
+    out.innerHTML = html;
+  }
+  input.value = '';
+}
+
+function astCmdKey(e) {
+  if (e.key === 'Enter') { astRunCmd(); return; }
+  var input = document.getElementById('ast-cmd-input');
+  if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (_astCmdHistoryIdx < _astCmdHistory.length - 1) {
+      _astCmdHistoryIdx++;
+      input.value = _astCmdHistory[_astCmdHistoryIdx];
+    }
+  } else if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (_astCmdHistoryIdx > 0) {
+      _astCmdHistoryIdx--;
+      input.value = _astCmdHistory[_astCmdHistoryIdx];
+    } else {
+      _astCmdHistoryIdx = -1;
+      input.value = '';
+    }
+  }
+}
+
+function astUseCmd(el) {
+  var cmd = el.textContent;
+  document.getElementById('ast-cmd-input').value = cmd;
+  document.getElementById('ast-cmd-input').focus();
+}
 
 function astClearLog() {
   _astClearTime = new Date();

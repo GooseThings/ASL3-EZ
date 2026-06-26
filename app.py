@@ -2278,6 +2278,41 @@ def api_asterisk_verbose():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/asterisk/command", methods=["POST"])
+def api_asterisk_command():
+    """
+    Run an arbitrary Asterisk CLI command via AMI and return its output.
+    A small blocklist prevents commands that could stop or restart Asterisk
+    from the CLI page (dedicated buttons exist for restart/reload).
+    """
+    data = request.get_json(force=True)
+    cmd  = str(data.get("command", "")).strip()
+
+    if not cmd:
+        return jsonify({"error": "command is required"}), 400
+    if len(cmd) > 512:
+        return jsonify({"error": "command too long (max 512 chars)"}), 400
+
+    # Block commands that would stop/restart Asterisk from this endpoint —
+    # those operations have their own dedicated buttons and confirmation flow.
+    _BLOCKED = ("core stop", "core shutdown", "core restart now",
+                "core restart gracefully", "core restart when convenient")
+    if any(cmd.lower().startswith(b) for b in _BLOCKED):
+        return jsonify({"error": f"Use the Restart/Reload button on the Dashboard for that operation."}), 403
+
+    def _run(ami):
+        lines = ami.command(cmd)
+        return {"ok": True, "command": cmd, "output": lines}
+
+    try:
+        result = ami_send_command(_run)
+        log("INFO", f"[API] CLI command: {cmd!r} -> {len(result['output'])} lines")
+        return jsonify(result)
+    except Exception as e:
+        log("ERROR", f"[API] /api/asterisk/command error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 # ── App settings (SECRET_KEY) ─────────────────────────────────────────────────
 #
 # SECRET_KEY signs Flask session cookies, which is how authentication state is
