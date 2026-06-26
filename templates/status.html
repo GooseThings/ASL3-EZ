@@ -425,6 +425,9 @@ function initMap() {
   _map = L.map('map', {
     zoomControl: true, attributionControl: false,
     center: [20, 0], zoom: 2, minZoom: 1,
+    /* Clamp panning to the range covered by the 3-copy grayline (-540° to +540°) */
+    maxBounds: [[-90, -540], [90, 540]],
+    maxBoundsViscosity: 1.0,
   });
 
   /* Load saved tile pref */
