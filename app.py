@@ -47,8 +47,12 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 try:
     import urllib.request as urlreq
+    import urllib.parse as urlparse
 except ImportError:
     import urllib2 as urlreq
+    import urllib as urlparse
+
+from collections import deque
 
 app = Flask(__name__)
 
@@ -765,6 +769,18 @@ def _poll_loop():
                         status = ami.get_node_status(node)
                         _ami_cache[node]    = status
                         _ami_cache_ts[node] = time.time()
+
+                        # Track keyed transitions for the Status Board activity feed
+                        own_key = f"own:{node}"
+                        if status.get("keyed") and not _keyed_prev_states.get(own_key):
+                            _record_keyed(node)
+                        _keyed_prev_states[own_key] = bool(status.get("keyed"))
+
+                        for cn, lnk in status.get("links", {}).items():
+                            lnk_key = f"lnk:{cn}"
+                            if lnk.get("keyed") and not _keyed_prev_states.get(lnk_key):
+                                _record_keyed(cn)
+                            _keyed_prev_states[lnk_key] = bool(lnk.get("keyed"))
                 except Exception as e:
                     _ami_last_error = str(e)
                     log("ERROR", f"[AMI-POLL] Error during poll: {e}")
@@ -895,6 +911,188 @@ def start_favstats_poller():
     t = threading.Thread(target=_favstats_poll_loop, name="favstats-poller", daemon=True)
     t.start()
     log("INFO", "[FAVSTATS-POLL] Poller thread launched")
+
+
+# ── Keyed history (for Status Board activity feed) ────────────────────────────
+_keyed_history      = deque(maxlen=20)
+_keyed_history_lock = threading.Lock()
+_keyed_prev_states  = {}   # {key: bool}  — track transitions per node/link
+
+
+def _record_keyed(node: str):
+    """Prepend a node to the keyed history (dedup consecutive same-node entries)."""
+    info  = lookup_node(node)
+    entry = {
+        "node":     node,
+        "callsign": info.get("callsign", ""),
+        "location": info.get("location", ""),
+        "ts":       time.time(),
+        "lat":      None,
+        "lon":      None,
+    }
+    with _keyed_history_lock:
+        if _keyed_history and _keyed_history[0]["node"] == node:
+            _keyed_history[0]["ts"] = entry["ts"]
+        else:
+            _keyed_history.appendleft(entry)
+
+
+# ── Nominatim geocoding cache ─────────────────────────────────────────────────
+NOMINATIM_URL   = "https://nominatim.openstreetmap.org/search?q={}&format=json&limit=1"
+_geocode_cache  = {}         # {location_str: {"lat": float, "lon": float} | None}
+_geocode_lock   = threading.Lock()
+_geocode_last   = [0.0]      # time of last Nominatim request (rate-limit: 1 req/s)
+_geocode_rlock  = threading.Lock()
+
+
+def _geocode(location: str):
+    """Return {"lat": float, "lon": float} for a location string, or None. Cached forever."""
+    if not location or not location.strip():
+        return None
+    loc = location.strip()
+    with _geocode_lock:
+        if loc in _geocode_cache:
+            return _geocode_cache[loc]
+
+    # Nominatim: at most 1 request per 1.1 seconds
+    with _geocode_rlock:
+        wait = 1.1 - (time.time() - _geocode_last[0])
+        if wait > 0:
+            time.sleep(wait)
+        _geocode_last[0] = time.time()
+        try:
+            url = NOMINATIM_URL.format(urlparse.quote_plus(loc))
+            req = urlreq.Request(url, headers={"User-Agent": "ASL3-EZ/1.0 (ham radio node manager)"})
+            with urlreq.urlopen(req, timeout=10) as resp:
+                results = json.loads(resp.read())
+            result = {"lat": float(results[0]["lat"]), "lon": float(results[0]["lon"])} if results else None
+        except Exception as e:
+            log("WARN", f"[GEOCODE] '{loc}': {e}")
+            result = None
+
+    with _geocode_lock:
+        _geocode_cache[loc] = result
+    return result
+
+
+# ── Global ASL activity (recently online nodes worldwide) ─────────────────────
+# Fetches the full node list from AllStarLink once every 5 minutes. The global
+# endpoint returns ~12 000 nodes but data.keyed is always null; we use
+# regseconds (last registration) as a proxy for recently-online nodes.
+# The server{} sub-object includes lat/lon for the hosting server — used for
+# map pins without any geocoding.
+ASL_GLOBAL_STATS_URL      = "https://stats.allstarlink.org/api/stats"
+GLOBAL_ACTIVITY_INTERVAL  = 300.0   # 5 minutes — conservative to avoid rate limits
+
+_global_nodes_cache = []   # list[dict] — up to 10 recently registered nodes
+_global_nodes_ts    = 0.0
+_global_nodes_lock  = threading.Lock()
+
+
+def _fetch_global_nodes():
+    """Download the AllStarLink global stats and return top 10 by regseconds."""
+    try:
+        req = urlreq.Request(
+            ASL_GLOBAL_STATS_URL,
+            headers={"User-Agent": "ASL3-EZ/1.0 (ham radio node monitor; status board)"},
+        )
+        with urlreq.urlopen(req, timeout=25) as resp:
+            data = json.loads(resp.read())
+
+        active = [n for n in data if n.get("node", {}).get("Status") == "Active"
+                  and n["node"].get("regseconds")]
+        active.sort(key=lambda x: x["node"]["regseconds"], reverse=True)
+
+        result = []
+        for n in active[:10]:
+            node_obj   = n["node"]
+            server_obj = node_obj.get("server") or {}
+            lat = lon = None
+            try:
+                if server_obj.get("Latitude") and server_obj.get("Logitude"):
+                    lat = float(server_obj["Latitude"])
+                    lon = float(server_obj["Logitude"])   # note: typo is in their API
+            except (ValueError, TypeError):
+                pass
+            import datetime as _dt
+            ts = node_obj.get("regseconds", 0)
+            result.append({
+                "node":     str(node_obj["name"]),
+                "callsign": node_obj.get("callsign", ""),
+                "location": server_obj.get("Location", "") or node_obj.get("node_frequency", ""),
+                "lat":      lat,
+                "lon":      lon,
+                "ts":       ts,
+            })
+        return result
+    except Exception as e:
+        log("WARN", f"[GLOBAL-ACTIVITY] Fetch failed: {e}")
+        return []
+
+
+def _global_activity_poll_loop():
+    global _global_nodes_ts
+    log("INFO", "[GLOBAL-ACTIVITY] Poller started")
+    while True:
+        try:
+            nodes = _fetch_global_nodes()
+            with _global_nodes_lock:
+                _global_nodes_cache.clear()
+                _global_nodes_cache.extend(nodes)
+                _global_nodes_ts = time.time()
+            log("INFO", f"[GLOBAL-ACTIVITY] Fetched {len(nodes)} recent global nodes")
+        except Exception as e:
+            log("WARN", f"[GLOBAL-ACTIVITY] Loop error: {e}")
+        time.sleep(GLOBAL_ACTIVITY_INTERVAL)
+
+
+def start_global_activity_poller():
+    t = threading.Thread(target=_global_activity_poll_loop, name="global-activity", daemon=True)
+    t.start()
+    log("INFO", "[GLOBAL-ACTIVITY] Poller thread launched")
+
+
+# ── Weather cache (wttr.in) ───────────────────────────────────────────────────
+WTTR_URL         = "https://wttr.in/{}?format=j1"
+WEATHER_INTERVAL = 600.0   # 10 minutes per location
+
+_weather_cache = {}   # {location: {"data": dict, "ts": float}}
+_weather_lock  = threading.Lock()
+
+
+def _fetch_weather(location: str) -> dict:
+    """Return current weather for a location from wttr.in. Cached 10 minutes."""
+    if not location or not location.strip():
+        return {"error": "No location configured for this node"}
+    loc = location.strip()
+
+    with _weather_lock:
+        entry = _weather_cache.get(loc)
+        if entry and (time.time() - entry["ts"]) < WEATHER_INTERVAL:
+            return entry["data"]
+
+    try:
+        url = WTTR_URL.format(urlparse.quote_plus(loc))
+        req = urlreq.Request(url, headers={"User-Agent": "ASL3-EZ/1.0"})
+        with urlreq.urlopen(req, timeout=12) as resp:
+            raw = json.loads(resp.read())
+        cc   = (raw.get("current_condition") or [{}])[0]
+        data = {
+            "location": loc,
+            "temp_f":   cc.get("temp_F", ""),
+            "temp_c":   cc.get("temp_C", ""),
+            "desc":     ((cc.get("weatherDesc") or [{}])[0]).get("value", ""),
+            "humidity": cc.get("humidity", ""),
+            "wind_mph": cc.get("windspeedMiles", ""),
+            "wind_dir": cc.get("winddir16Point", ""),
+            "error":    None,
+        }
+    except Exception as e:
+        data = {"error": str(e), "location": loc}
+
+    with _weather_lock:
+        _weather_cache[loc] = {"data": data, "ts": time.time()}
+    return data
 
 
 def get_cached_favstats(node: str) -> dict:
@@ -2250,6 +2448,49 @@ def api_status_board():
         "cpu_temp":         get_cpu_temp(),
         "disk":             get_disk_usage(),
         "ami_connected":    _ami_connected,
+    })
+
+
+@app.route("/api/status/weather")
+def api_status_weather():
+    """Current weather for the primary node's location. Cached 10 min."""
+    content  = read_conf_file(RPT_CONF_PATH)
+    nodes    = get_node_numbers(content) if content else []
+    location = ""
+    if nodes:
+        location = lookup_node(nodes[0]).get("location", "")
+    if not location:
+        location = request.args.get("location", "")
+    return jsonify(_fetch_weather(location))
+
+
+@app.route("/api/status/activity")
+def api_status_activity():
+    """
+    Combined activity feed for the Status Board:
+    - recently_keyed: nodes observed keying via this node's AMI (real-time)
+    - global_nodes:   top 10 most recently registered ASL nodes worldwide
+                      (polled every 5 min from stats.allstarlink.org)
+    """
+    with _keyed_history_lock:
+        keyed = list(_keyed_history)
+
+    # Attach geocoordinates to recently-keyed entries (cache hit = instant)
+    for entry in keyed:
+        if entry["lat"] is None and entry["location"]:
+            coords = _geocode(entry["location"])
+            if coords:
+                entry["lat"] = coords["lat"]
+                entry["lon"] = coords["lon"]
+
+    with _global_nodes_lock:
+        global_nodes = list(_global_nodes_cache[:10])
+        global_ts    = _global_nodes_ts
+
+    return jsonify({
+        "recently_keyed": keyed[:10],
+        "global_nodes":   global_nodes,
+        "global_updated": global_ts,
     })
 
 
@@ -3753,6 +3994,7 @@ def api_dtmf_cop():
 load_astdb()
 start_poller()
 start_favstats_poller()
+start_global_activity_poller()
 start_announcer()
 start_connector_scheduler()
 start_id_monitor()
