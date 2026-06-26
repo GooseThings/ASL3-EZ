@@ -129,7 +129,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
 .content-area { display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 0; }
 
 /* ── Top row: node + connected ── */
-.top-row { display: grid; grid-template-columns: 260px 1fr; gap: 10px; flex: 55; min-height: 0; }
+.top-row { display: grid; grid-template-columns: 260px minmax(0, 940px); gap: 10px; flex: 55; min-height: 0; }
 
 /* ── Node status card ── */
 .node-card {
