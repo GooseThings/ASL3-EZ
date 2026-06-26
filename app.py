@@ -2206,6 +2206,58 @@ def api_sysinfo():
     })
 
 
+@app.route("/api/status/board")
+def api_status_board():
+    """
+    Single aggregated endpoint for the Status Board page.
+    Returns everything needed in one call so the board only issues one
+    HTTP request per refresh cycle.
+    """
+    content    = read_conf_file(RPT_CONF_PATH)
+    nodes      = get_node_numbers(content) if content else []
+    ast_status = get_asterisk_status()
+
+    node_data = []
+    for node in nodes:
+        info     = lookup_node(node)
+        cached   = get_cached_status(node)
+        connected_details = []
+        for cn in cached.get("connected", []):
+            cn_info = lookup_node(cn)
+            connected_details.append({
+                "node":     cn,
+                "callsign": cn_info.get("callsign", ""),
+                "desc":     cn_info.get("desc", ""),
+                "location": cn_info.get("location", ""),
+                "keyed":    cached.get("links", {}).get(cn, {}).get("keyed", False),
+            })
+        node_data.append({
+            "node":      node,
+            "callsign":  info.get("callsign", ""),
+            "desc":      info.get("desc", ""),
+            "location":  info.get("location", ""),
+            "keyed":     cached.get("keyed", False),
+            "connected": connected_details,
+            "stale":     cached.get("stale", True),
+        })
+
+    return jsonify({
+        "nodes":            node_data,
+        "asterisk_active":  ast_status["active"],
+        "asterisk_version": ast_status["version"],
+        "asl_version":      get_asl_version(),
+        "uptime":           get_uptime(),
+        "cpu_temp":         get_cpu_temp(),
+        "disk":             get_disk_usage(),
+        "ami_connected":    _ami_connected,
+    })
+
+
+@app.route("/status")
+def status_board():
+    return render_template("status.html")
+
+
 # ── Asterisk console log viewer ───────────────────────────────────────────────
 
 @app.route("/api/asterisk/log")
