@@ -457,31 +457,23 @@ pre.codeblock { background: var(--bg3); padding: 12px; border-radius: 4px; font-
     <div class="nav-section">rpt.conf Editor</div>
     <button class="nav-item" onclick="showPage('general')">General Settings</button>
     {% for node in nodes %}
-    <button class="nav-item" onclick="showPage('node-{{ node }}')">
-      Node {{ node }}<span class="node-badge">{{ node }}</span>
-    </button>
+    <button class="nav-item" onclick="showPage('node-{{ node }}')">Node {{ node }}</button>
     {% endfor %}
 
     {% if templates %}
     <div class="nav-section">Global Templates</div>
     {% for tmpl in templates %}
-    <button class="nav-item" onclick="showPage('template-{{ tmpl }}')">
-      {{ tmpl }}<span class="node-badge">global</span>
-    </button>
+    <button class="nav-item" onclick="showPage('template-{{ tmpl }}')">{{ tmpl }}</button>
     {% endfor %}
     {% endif %}
 
     {% if macros or schedules %}
     <div class="nav-section">Macros &amp; Scheduling</div>
     {% for m in macros %}
-    <button class="nav-item" onclick="showPage('macro-{{ m }}')">
-      {{ m }}<span class="node-badge">macro</span>
-    </button>
+    <button class="nav-item" onclick="showPage('macro-{{ m }}')">{{ m }}</button>
     {% endfor %}
     {% for s in schedules %}
-    <button class="nav-item" onclick="showPage('schedule-{{ s }}')">
-      {{ s }}<span class="node-badge">schedule</span>
-    </button>
+    <button class="nav-item" onclick="showPage('schedule-{{ s }}')">{{ s }}</button>
     {% endfor %}
     {% endif %}
 
