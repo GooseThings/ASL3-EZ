@@ -921,7 +921,7 @@ sudo asterisk -rx "module reload manager"</pre>
           </select>
           <input type="text" id="ast-log-filter" placeholder="filter text..." style="width:160px">
           <button class="btn btn-primary btn-sm" onclick="astFetchLog()">Fetch Log</button>
-          <button class="btn btn-sm" onclick="clearLog('ast-log')">Clear</button>
+          <button class="btn btn-sm" onclick="astClearLog()">Clear</button>
           <label style="display:flex;align-items:center;gap:5px;font-size:0.85rem;cursor:pointer;margin:0">
             <input type="checkbox" id="ast-auto-refresh" style="width:auto" onchange="astToggleAutoRefresh()">
             Auto-refresh (5s)
@@ -2770,6 +2770,12 @@ async function loadSysInfo() {
 
 /* ── Asterisk Console ───────────────────────────────────────────────────── */
 var _astAutoRefreshTimer = null;
+var _astClearTime        = null;   // set by astClearLog(); filters out older lines
+
+function astClearLog() {
+  _astClearTime = new Date();
+  document.getElementById('ast-log').innerHTML = '';
+}
 
 async function astFetchLog() {
   var panel  = document.getElementById('ast-log');
@@ -2786,6 +2792,15 @@ async function astFetchLog() {
   }
   var data     = r.data;
   var logLines = (data.lines || []).slice().reverse();
+
+  // Drop lines logged before the last Clear
+  if (_astClearTime) {
+    logLines = logLines.filter(function(line) {
+      var m = line.match(/^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})/);
+      if (!m) return true;
+      return new Date(m[1]) >= _astClearTime;
+    });
+  }
 
   // Color-code by Asterisk log level keyword
   panel.innerHTML = logLines.map(function(line) {
