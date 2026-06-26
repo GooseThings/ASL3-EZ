@@ -272,7 +272,8 @@ def is_auth_configured():
 def check_auth():
     # These endpoints are always public (status board is designed for unauthenticated TV display)
     _PUBLIC = {'login', 'logout', 'static', None,
-               'status_board', 'api_status_board', 'api_status_weather', 'api_status_activity'}
+               'status_board', 'api_status_board', 'api_status_weather', 'api_status_activity',
+               'api_status_connect', 'api_status_disconnect'}
     if request.endpoint in _PUBLIC:
         return None
     # Everything else requires a logged-in session
@@ -2907,16 +2908,17 @@ def api_status_board():
             cn_coords  = _geocode(cn_loc) if cn_loc else None
             ls = ls_snapshot.get(cn, {})
             connected_details.append({
-                "node":         cn,
-                "callsign":     cn_info.get("callsign", ""),
-                "desc":         cn_info.get("desc", ""),
-                "location":     cn_loc,
-                "keyed":        cached.get("links", {}).get(cn, {}).get("keyed", False),
-                "connect_time": lct.get(cn, ""),
-                "keyups":       ls.get("keyups", 0),
-                "last_keyed":   ls.get("last_keyed"),
-                "lat":          cn_coords["lat"] if cn_coords else None,
-                "lon":          cn_coords["lon"] if cn_coords else None,
+                "node":          cn,
+                "callsign":      cn_info.get("callsign", ""),
+                "desc":          cn_info.get("desc", ""),
+                "location":      cn_loc,
+                "keyed":         cached.get("links", {}).get(cn, {}).get("keyed", False),
+                "connect_time":  lct.get(cn, ""),
+                "keyups":        ls.get("keyups", 0),
+                "last_keyed":    ls.get("last_keyed"),
+                "lat":           cn_coords["lat"] if cn_coords else None,
+                "lon":           cn_coords["lon"] if cn_coords else None,
+                "connect_state": cached.get("link_connect_state", {}).get(cn, "ESTABLISHED"),
             })
         location = info.get("location", "")
         coords   = _geocode(location) if location else None
@@ -2985,6 +2987,48 @@ def api_status_activity():
         "global_nodes":   global_nodes,
         "global_updated": global_ts,
     })
+
+
+@app.route("/api/status/connect", methods=["POST"])
+def api_status_connect():
+    """Connect a remote node to a local node — public endpoint for the Status Board."""
+    data        = request.json or {}
+    local_node  = str(data.get("local_node",  "")).strip()
+    remote_node = str(data.get("remote_node", "")).strip()
+    if not re.match(r'^\d{4,7}$', local_node):
+        return jsonify({"error": "Invalid local_node"}), 400
+    if not re.match(r'^\d{4,7}$', remote_node):
+        return jsonify({"error": "Invalid remote_node"}), 400
+    try:
+        with _ami_pool_lock:
+            ami = _ami_ensure_connected()
+            result = ami.rpt_cmd(local_node, f"ilink 3 {remote_node}")
+        log("INFO", f"[API] /api/status/connect {local_node} -> {remote_node}")
+        return jsonify({"ok": True, "output": result})
+    except Exception as e:
+        log("ERROR", f"[API] /api/status/connect error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/status/disconnect", methods=["POST"])
+def api_status_disconnect():
+    """Disconnect a remote node from a local node — public endpoint for the Status Board."""
+    data        = request.json or {}
+    local_node  = str(data.get("local_node",  "")).strip()
+    remote_node = str(data.get("remote_node", "")).strip()
+    if not re.match(r'^\d{4,7}$', local_node):
+        return jsonify({"error": "Invalid local_node"}), 400
+    if not re.match(r'^\d{4,7}$', remote_node):
+        return jsonify({"error": "Invalid remote_node"}), 400
+    try:
+        with _ami_pool_lock:
+            ami = _ami_ensure_connected()
+            result = ami.rpt_cmd(local_node, f"ilink 1 {remote_node}")
+        log("INFO", f"[API] /api/status/disconnect {local_node} -> {remote_node}")
+        return jsonify({"ok": True, "output": result})
+    except Exception as e:
+        log("ERROR", f"[API] /api/status/disconnect error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/status")

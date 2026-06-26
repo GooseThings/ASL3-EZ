@@ -182,8 +182,8 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
 .empty-msg { display: flex; align-items: center; justify-content: center; height: 100%;
   color: var(--text2); font-size: 0.95rem; min-height: 48px; }
 
-.node-row { display: grid; grid-template-columns: 10px 88px 120px 1fr;
-  gap: 0 14px; align-items: start; padding: 8px 18px;
+.node-row { display: grid; grid-template-columns: 10px 88px 120px 1fr auto;
+  gap: 0 14px; align-items: center; padding: 8px 18px;
   border-bottom: 1px solid var(--border); transition: background .15s; }
 .node-row:last-child { border-bottom: none; }
 .node-row:hover { background: var(--bg3); }
@@ -191,6 +191,8 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
   margin-top: 4px; }
 .nr-dot.keyed { background: var(--green); border-color: var(--green);
   box-shadow: 0 0 5px rgba(63,185,80,.7); }
+.nr-dot.connecting { background: #d9a520; border-color: #d9a520;
+  box-shadow: 0 0 5px rgba(217,165,32,.6); }
 .nr-num  { font-size: 1.05rem; font-weight: 700; font-family: var(--mono); }
 .nr-call { font-size: 0.95rem; font-weight: 600; color: var(--accent); letter-spacing: .03em; }
 .nr-right { display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
@@ -212,7 +214,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
 .activity-list::-webkit-scrollbar { width: 3px; }
 .activity-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
-.act-row { display: grid; grid-template-columns: 8px 1fr; gap: 0 10px;
+.act-row { display: grid; grid-template-columns: 8px 1fr auto; gap: 0 10px;
   align-items: center; padding: 8px 14px;
   border-bottom: 1px solid var(--border); transition: background .15s; }
 .act-row:last-child { border-bottom: none; }
@@ -254,6 +256,35 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
 :fullscreen .bottom-row { grid-template-columns: 300px 1fr; }
 :-webkit-full-screen .top-row    { grid-template-columns: 260px 1fr; }
 :-webkit-full-screen .bottom-row { grid-template-columns: 300px 1fr; }
+
+/* ── Status-board action buttons ── */
+.sb-btn {
+  font-size: 0.68rem; font-weight: 600; letter-spacing: .03em;
+  padding: 3px 8px; border-radius: 4px; border: 1px solid; cursor: pointer;
+  white-space: nowrap; transition: all .15s; flex-shrink: 0;
+}
+.sb-btn.connect    { background: rgba(88,166,255,.08); border-color: rgba(88,166,255,.3); color: var(--accent); }
+.sb-btn.connect:hover { background: rgba(88,166,255,.2); }
+.sb-btn.disconnect { background: rgba(248,81,73,.08);  border-color: rgba(248,81,73,.3);  color: var(--red); }
+.sb-btn.disconnect:hover { background: rgba(248,81,73,.2); }
+.sb-btn.neutral    { background: var(--bg3); border-color: var(--border); color: var(--text2); }
+.sb-btn.neutral:hover { color: var(--text); }
+
+/* small connect form that slides under the Connected Nodes header */
+.conn-form-bar { padding: 7px 18px; border-bottom: 1px solid var(--border);
+  display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+.conn-form-bar input { width: 100px; font-family: var(--mono); font-size: 0.82rem;
+  padding: 3px 7px; border: 1px solid var(--border); border-radius: 4px;
+  background: var(--bg3); color: var(--text); }
+
+/* toast notification */
+#sb-toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
+  padding: 8px 18px; border-radius: 6px; font-size: 0.82rem; font-weight: 600;
+  pointer-events: none; opacity: 0; transition: opacity .25s; z-index: 9999;
+  white-space: nowrap; }
+#sb-toast.show { opacity: 1; }
+#sb-toast.ok   { background: rgba(63,185,80,.18); border: 1px solid rgba(63,185,80,.4); color: var(--green); }
+#sb-toast.err  { background: rgba(248,81,73,.18); border: 1px solid rgba(248,81,73,.4); color: var(--red); }
 
 /* ── Footer ── */
 .footer { display: flex; align-items: center; justify-content: space-between;
@@ -297,6 +328,14 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
         <div class="card-header">
           <span class="card-title">Connected Nodes</span>
           <span class="card-count" id="conn-count"></span>
+          <button class="sb-btn connect" style="margin-left:auto" onclick="toggleConnForm()">+ Connect</button>
+        </div>
+        <div class="conn-form-bar" id="conn-form-bar" style="display:none">
+          <input id="conn-form-node" type="text" placeholder="Node #" maxlength="7"
+                 onkeydown="if(event.key==='Enter')statusConnectNew()">
+          <button class="sb-btn connect" onclick="statusConnectNew()">Connect</button>
+          <button class="sb-btn neutral" onclick="toggleConnForm()">Cancel</button>
+          <span id="conn-form-msg" style="font-size:0.75rem;color:var(--text2);margin-left:4px"></span>
         </div>
         <div class="node-list" id="node-list">
           <div class="empty-msg">Loading&hellip;</div>
@@ -350,6 +389,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
 
 </div>
 
+<div id="sb-toast"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 /* ── Helpers ── */
@@ -686,7 +726,11 @@ async function refreshBoard() {
 
     /* Connected nodes */
     var allLinked = [];
-    nodes.forEach(function(n) { (n.connected||[]).forEach(function(c){ allLinked.push(c); }); });
+    nodes.forEach(function(n) {
+      (n.connected||[]).forEach(function(c) {
+        allLinked.push(Object.assign({}, c, {local_node: n.node}));
+      });
+    });
     var nl = document.getElementById('node-list');
     document.getElementById('conn-count').textContent = allLinked.length ? allLinked.length + ' linked' : '';
     if (!allLinked.length) {
@@ -694,17 +738,23 @@ async function refreshBoard() {
     } else {
       nl.innerHTML = allLinked.map(function(c) {
         var meta = [];
+        var isConn = (c.connect_state || 'ESTABLISHED') === 'ESTABLISHED';
         if (c.connect_time) meta.push('Conn: <strong>' + esc(c.connect_time) + '</strong>');
         if (c.keyups)       meta.push('Keys: <strong>' + c.keyups + '</strong>');
         if (c.last_keyed)   meta.push('Last: <strong>' + relTime(c.last_keyed) + '</strong>');
+        var dotClass = !isConn ? ' connecting' : (c.keyed ? ' keyed' : '');
+        var dcBtn = '<button class="sb-btn disconnect" onclick="sbDisconnect(\'' +
+          esc(c.local_node) + '\',\'' + esc(c.node) + '\',this)">Disconnect</button>';
         return '<div class="node-row">' +
-          '<div class="nr-dot' + (c.keyed ? ' keyed' : '') + '"></div>' +
+          '<div class="nr-dot' + dotClass + '"></div>' +
           '<div class="nr-num">' + esc(c.node) + '</div>' +
           '<div class="nr-call">' + esc(c.callsign||'—') + '</div>' +
           '<div class="nr-right">' +
             '<div class="nr-loc">' + esc(c.location||c.desc||'') + '</div>' +
             (meta.length ? '<div class="nr-meta"><span>' + meta.join('</span><span>') + '</span></div>' : '') +
+            (!isConn ? '<div class="nr-meta" style="color:var(--warn)">Connecting…</div>' : '') +
           '</div>' +
+          dcBtn +
         '</div>';
       }).join('');
     }
@@ -755,13 +805,19 @@ async function refreshActivity() {
               lat:g.lat, lon:g.lon, ts:g.ts, type:'global'};
     }));
 
-    /* Activity list — no keyed/online badge, just source dot + node info */
+    /* Activity list — no keyed/online badge, just source dot + node info + connect btn */
     var al = document.getElementById('activity-list');
     document.getElementById('act-count').textContent = combined.length ? combined.length + ' nodes' : '';
     if (!combined.length) {
       al.innerHTML = '<div class="empty-msg">No activity data yet</div>';
     } else {
+      var localNode = (window._lastBoardNodes && window._lastBoardNodes[0])
+                      ? window._lastBoardNodes[0].node : '';
       al.innerHTML = combined.map(function(e) {
+        var connBtn = localNode
+          ? '<button class="sb-btn connect" onclick="sbConnect(\'' +
+              esc(localNode) + '\',\'' + esc(e.node) + '\',this)">Connect</button>'
+          : '';
         return '<div class="act-row">' +
           '<div class="act-dot ' + e.type + '"></div>' +
           '<div class="act-body">' +
@@ -772,6 +828,7 @@ async function refreshActivity() {
             '</div>' +
             '<div class="act-loc">' + esc(e.location||'') + '</div>' +
           '</div>' +
+          connBtn +
         '</div>';
       }).join('');
     }
@@ -779,6 +836,99 @@ async function refreshActivity() {
     _lastActivityPoints = combined;
     updateMap();
   } catch(e) {}
+}
+
+/* ── Status-board connect / disconnect ── */
+var _sbToastTimer = null;
+function sbToast(msg, ok) {
+  var t = document.getElementById('sb-toast');
+  if (!t) return;
+  t.textContent = msg;
+  t.className = 'show ' + (ok ? 'ok' : 'err');
+  if (_sbToastTimer) clearTimeout(_sbToastTimer);
+  _sbToastTimer = setTimeout(function() { t.className = ''; }, 3500);
+}
+
+async function sbConnect(localNode, remoteNode, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  try {
+    var r = await fetch('/api/status/connect', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({local_node: localNode, remote_node: remoteNode})
+    });
+    var d = await r.json();
+    if (r.ok && d.ok) {
+      sbToast('Connecting to ' + remoteNode + '…', true);
+      setTimeout(refreshBoard, 1500);
+    } else {
+      sbToast('Connect failed: ' + (d.error || r.status), false);
+      if (btn) { btn.disabled = false; btn.textContent = 'Connect'; }
+    }
+  } catch(e) {
+    sbToast('Connect error: ' + e.message, false);
+    if (btn) { btn.disabled = false; btn.textContent = 'Connect'; }
+  }
+}
+
+async function sbDisconnect(localNode, remoteNode, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  try {
+    var r = await fetch('/api/status/disconnect', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({local_node: localNode, remote_node: remoteNode})
+    });
+    var d = await r.json();
+    if (r.ok && d.ok) {
+      sbToast('Disconnected ' + remoteNode, true);
+      setTimeout(refreshBoard, 1500);
+    } else {
+      sbToast('Disconnect failed: ' + (d.error || r.status), false);
+      if (btn) { btn.disabled = false; btn.textContent = 'Disconnect'; }
+    }
+  } catch(e) {
+    sbToast('Disconnect error: ' + e.message, false);
+    if (btn) { btn.disabled = false; btn.textContent = 'Disconnect'; }
+  }
+}
+
+function toggleConnForm() {
+  var bar = document.getElementById('conn-form-bar');
+  if (!bar) return;
+  var show = bar.style.display === 'none' || bar.style.display === '';
+  bar.style.display = show ? 'flex' : 'none';
+  if (show) {
+    var inp = document.getElementById('conn-form-node');
+    if (inp) { inp.value = ''; inp.focus(); }
+  }
+}
+
+async function statusConnectNew() {
+  var inp = document.getElementById('conn-form-node');
+  if (!inp) return;
+  var remote = inp.value.trim();
+  if (!/^\d{4,7}$/.test(remote)) {
+    document.getElementById('conn-form-msg').textContent = 'Enter a 4-7 digit node number';
+    return;
+  }
+  var local = (window._lastBoardNodes && window._lastBoardNodes[0])
+               ? window._lastBoardNodes[0].node : '';
+  if (!local) { document.getElementById('conn-form-msg').textContent = 'No local node found'; return; }
+  document.getElementById('conn-form-msg').textContent = 'Connecting…';
+  var r = await fetch('/api/status/connect', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({local_node: local, remote_node: remote})
+  });
+  var d = await r.json();
+  if (r.ok && d.ok) {
+    sbToast('Connecting to ' + remote + '…', true);
+    toggleConnForm();
+    setTimeout(refreshBoard, 1500);
+  } else {
+    document.getElementById('conn-form-msg').textContent = d.error || ('Error ' + r.status);
+  }
 }
 
 /* ── Boot ── */
