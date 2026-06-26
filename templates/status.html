@@ -183,17 +183,22 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
   color: var(--text2); font-size: 0.95rem; min-height: 48px; }
 
 .node-row { display: grid; grid-template-columns: 10px 88px 120px 1fr;
-  gap: 0 14px; align-items: center; padding: 9px 18px;
+  gap: 0 14px; align-items: start; padding: 8px 18px;
   border-bottom: 1px solid var(--border); transition: background .15s; }
 .node-row:last-child { border-bottom: none; }
 .node-row:hover { background: var(--bg3); }
-.nr-dot { width: 9px; height: 9px; border-radius: 50%; background: #2a2a2a; border: 1px solid #333; }
+.nr-dot { width: 9px; height: 9px; border-radius: 50%; background: #2a2a2a; border: 1px solid #333;
+  margin-top: 4px; }
 .nr-dot.keyed { background: var(--green); border-color: var(--green);
   box-shadow: 0 0 5px rgba(63,185,80,.7); }
 .nr-num  { font-size: 1.05rem; font-weight: 700; font-family: var(--mono); }
 .nr-call { font-size: 0.95rem; font-weight: 600; color: var(--accent); letter-spacing: .03em; }
+.nr-right { display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
 .nr-loc  { font-size: 0.82rem; color: var(--text2); white-space: nowrap; overflow: hidden;
   text-overflow: ellipsis; }
+.nr-meta { font-size: 0.72rem; color: var(--text2); display: flex; gap: 10px; flex-wrap: wrap; }
+.nr-meta span { white-space: nowrap; }
+.nr-meta strong { color: var(--text); }
 
 /* ── Bottom row: activity + map ── */
 .bottom-row { display: grid; grid-template-columns: 300px 1fr; gap: 10px; flex: 45; min-height: 0; }
@@ -364,25 +369,53 @@ function initMap() {
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 18
   }).addTo(_map);
-  /* Dark OSM overlay via CSS filter is already applied */
+
+  /* Re-render markers at new size after every zoom change */
+  _map.on('zoomend', function() {
+    updateMap(_lastActivityPoints);
+  });
+}
+
+function pinSize() {
+  /* Return [w, h] for drop pins based on current zoom level */
+  if (!_map) return [16, 24];
+  var z = _map.getZoom();
+  if (z <= 2)  return [10, 15];
+  if (z <= 4)  return [14, 21];
+  if (z <= 6)  return [18, 27];
+  if (z <= 8)  return [22, 33];
+  return [26, 39];
+}
+
+function starSize() {
+  if (!_map) return [24, 24];
+  var z = _map.getZoom();
+  if (z <= 2)  return [14, 14];
+  if (z <= 4)  return [18, 18];
+  if (z <= 6)  return [24, 24];
+  if (z <= 8)  return [30, 30];
+  return [36, 36];
 }
 
 function makeIcon(color) {
-  var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="30" viewBox="0 0 20 30">' +
+  var s = pinSize();
+  var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + s[0] + '" height="' + s[1] +
+    '" viewBox="0 0 20 30">' +
     '<path d="M10 0C4.5 0 0 4.5 0 10c0 7.5 10 20 10 20S20 17.5 20 10C20 4.5 15.5 0 10 0z"' +
     ' fill="' + color + '" opacity="0.9"/>' +
     '<circle cx="10" cy="10" r="4" fill="white" opacity="0.9"/></svg>';
-  return L.divIcon({ html: svg, iconSize: [20,30], iconAnchor: [10,30],
-    popupAnchor: [0,-30], className: '' });
+  return L.divIcon({ html: svg, iconSize: s, iconAnchor: [s[0]/2, s[1]],
+    popupAnchor: [0, -s[1]], className: '' });
 }
 
 function makeStarIcon(color) {
-  /* 5-pointed star for the hosted node */
-  var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">' +
+  var s = starSize();
+  var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + s[0] + '" height="' + s[1] +
+    '" viewBox="0 0 32 32">' +
     '<polygon points="16,2 20,12 31,12 22,19 25,30 16,23 7,30 10,19 1,12 12,12"' +
     ' fill="' + color + '" stroke="white" stroke-width="1.5" opacity="0.95"/></svg>';
-  return L.divIcon({ html: svg, iconSize: [32,32], iconAnchor: [16,16],
-    popupAnchor: [0,-16], className: '' });
+  return L.divIcon({ html: svg, iconSize: s, iconAnchor: [s[0]/2, s[1]/2],
+    popupAnchor: [0, -s[1]/2], className: '' });
 }
 
 var _hostedNodes = [];         /* [{node, callsign, location, lat, lon}] — set by refreshBoard */
@@ -519,11 +552,18 @@ async function refreshBoard() {
       nl.innerHTML = '<div class="empty-msg">No nodes linked</div>';
     } else {
       nl.innerHTML = allLinked.map(function(c) {
+        var meta = [];
+        if (c.connect_time) meta.push('Conn: <strong>' + esc(c.connect_time) + '</strong>');
+        if (c.keyups)       meta.push('Keys: <strong>' + c.keyups + '</strong>');
+        if (c.last_keyed)   meta.push('Last: <strong>' + relTime(c.last_keyed) + '</strong>');
         return '<div class="node-row">' +
           '<div class="nr-dot' + (c.keyed ? ' keyed' : '') + '"></div>' +
           '<div class="nr-num">' + esc(c.node) + '</div>' +
           '<div class="nr-call">' + esc(c.callsign||'—') + '</div>' +
-          '<div class="nr-loc">' + esc(c.location||c.desc||'') + '</div>' +
+          '<div class="nr-right">' +
+            '<div class="nr-loc">' + esc(c.location||c.desc||'') + '</div>' +
+            (meta.length ? '<div class="nr-meta"><span>' + meta.join('</span><span>') + '</span></div>' : '') +
+          '</div>' +
         '</div>';
       }).join('');
     }

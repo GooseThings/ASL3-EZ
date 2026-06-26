@@ -655,7 +655,8 @@ class AMIClient:
         Connected nodes come from 'rpt lstats <node>' which gives one line
         per connected node containing the remote node number.
         """
-        status = {"keyed": False, "connected": [], "links": {}, "raw": [], "lstats": []}
+        status = {"keyed": False, "connected": [], "links": {}, "raw": [], "lstats": [],
+                  "link_connect_time": {}}
 
         # Primary: rpt show variables — RPT_RXKEYED for local keyed state,
         # RPT_ALINKS for per-link keyed state of already-connected nodes.
@@ -676,14 +677,25 @@ class AMIClient:
                             "mode":  flags[:-1] if flags.endswith(("K", "U")) else flags,
                         }
 
-        # Secondary: rpt lstats — definitive connected node list
+        # Secondary: rpt lstats — definitive connected node list + connect time
+        # Format: NODE  PEER  RECONNECTS  DIRECTION  CONNECT_TIME  CONNECT_STATE
         lstats = self.command(f"rpt lstats {node}")
         status["lstats"] = lstats
         log("DEBUG", f"[AMI] rpt lstats {node} -> {lstats}")
         for line in lstats:
-            for n in re.findall(r'\b(\d{4,7})\b', line):
-                if n != str(node) and n not in status["connected"]:
-                    status["connected"].append(n)
+            parts = line.split()
+            if len(parts) >= 5 and re.match(r'^\d{4,7}$', parts[0]):
+                cn = parts[0]
+                if cn != str(node) and cn not in status["connected"]:
+                    status["connected"].append(cn)
+                # CONNECT TIME is the 5th column (index 4), format HH:MM:SS
+                if re.match(r'^\d+:\d{2}:\d{2}$', parts[4]):
+                    status["link_connect_time"][cn] = parts[4]
+            else:
+                # Fallback: extract any node number from the line
+                for n in re.findall(r'\b(\d{4,7})\b', line):
+                    if n != str(node) and n not in status["connected"]:
+                        status["connected"].append(n)
 
         return status
 
@@ -772,17 +784,34 @@ def _poll_loop():
                         _ami_cache[node]    = status
                         _ami_cache_ts[node] = time.time()
 
-                        # Track keyed transitions for the Status Board activity feed
+                        # Track keyed transitions for activity feed + per-link stats
+                        now_ts  = time.time()
                         own_key = f"own:{node}"
                         if status.get("keyed") and not _keyed_prev_states.get(own_key):
                             _record_keyed(node)
                         _keyed_prev_states[own_key] = bool(status.get("keyed"))
 
+                        current_linked = set(status.get("connected", []))
+                        with _link_stats_lock:
+                            # Remove stats for nodes that are no longer connected
+                            for gone in set(_link_stats) - current_linked:
+                                del _link_stats[gone]
+                            # Ensure entry exists for each connected node
+                            for cn in current_linked:
+                                if cn not in _link_stats:
+                                    _link_stats[cn] = {"keyups": 0, "last_keyed": None}
+
                         for cn, lnk in status.get("links", {}).items():
                             lnk_key = f"lnk:{cn}"
-                            if lnk.get("keyed") and not _keyed_prev_states.get(lnk_key):
+                            now_keyed = bool(lnk.get("keyed"))
+                            was_keyed = _keyed_prev_states.get(lnk_key, False)
+                            if now_keyed and not was_keyed:
                                 _record_keyed(cn)
-                            _keyed_prev_states[lnk_key] = bool(lnk.get("keyed"))
+                                with _link_stats_lock:
+                                    if cn in _link_stats:
+                                        _link_stats[cn]["keyups"]     += 1
+                                        _link_stats[cn]["last_keyed"]  = now_ts
+                            _keyed_prev_states[lnk_key] = now_keyed
                 except Exception as e:
                     _ami_last_error = str(e)
                     log("ERROR", f"[AMI-POLL] Error during poll: {e}")
@@ -920,6 +949,10 @@ _keyed_history      = deque(maxlen=20)
 _keyed_history_lock = threading.Lock()
 _keyed_prev_states  = {}   # {key: bool}  — track transitions per node/link
 
+# ── Per-link live stats (keyup count + last keyed time) ───────────────────────
+_link_stats      = {}   # {node_str: {"keyups": int, "last_keyed": float|None}}
+_link_stats_lock = threading.Lock()
+
 
 def _record_keyed(node: str):
     """Prepend a node to the keyed history (dedup consecutive same-node entries)."""
@@ -977,77 +1010,87 @@ def _geocode(location: str):
     return result
 
 
-# ── Global ASL activity (recently online nodes worldwide) ─────────────────────
-# Fetches the full node list from AllStarLink once every 5 minutes. The global
-# endpoint returns ~12 000 nodes but data.keyed is always null; we use
-# regseconds (last registration) as a proxy for recently-online nodes.
-# The server{} sub-object includes lat/lon for the hosting server — used for
-# map pins without any geocoding.
-ASL_GLOBAL_STATS_URL      = "https://stats.allstarlink.org/api/stats"
-GLOBAL_ACTIVITY_INTERVAL  = 300.0   # 5 minutes — conservative to avoid rate limits
+# ── Global ASL activity (nodes connected to major public hubs) ────────────────
+# Instead of the 9.7 MB full-node-list endpoint (which triggers rate limits),
+# we poll a small curated list of major public hub nodes. Each request is ~3 KB.
+# From each hub's linkedNodes list we extract nodes with server lat/lon.
+# Polled every 5 minutes; 1-second gap between hub requests.
+ASL_HUB_STATS_URL     = "https://stats.allstarlink.org/api/stats/{}"
+GLOBAL_ACTIVITY_INTERVAL = 300.0   # 5 minutes between full hub sweeps
 
-_global_nodes_cache = []   # list[dict] — up to 10 recently registered nodes
+# Well-known public hubs with confirmed active linkedNodes populations.
+# The poller gracefully skips any that return no data.
+_ASL_HUBS = [27339, 41522, 2000, 55143, 3109050, 9050, 436000, 460220]
+
+_global_nodes_cache = []   # list[dict] — up to 10 nodes from linked hub nodes
 _global_nodes_ts    = 0.0
 _global_nodes_lock  = threading.Lock()
 
 
-def _fetch_global_nodes():
-    """Download the AllStarLink global stats and return top 10 by regseconds.
-    Raises urllib.error.HTTPError so the caller can inspect the status code."""
-    req = urlreq.Request(
-        ASL_GLOBAL_STATS_URL,
-        headers={"User-Agent": "ASL3-EZ/1.0 (ham radio node monitor; status board)"},
-    )
-    with urlreq.urlopen(req, timeout=25) as resp:
-        data = json.loads(resp.read())
-
-    active = [n for n in data
-              if n.get("node", {}).get("Status") == "Active" and n["node"].get("regseconds")]
-    active.sort(key=lambda x: x["node"]["regseconds"], reverse=True)
-
-    result = []
-    for n in active[:10]:
-        node_obj   = n["node"]
-        server_obj = node_obj.get("server") or {}
-        lat = lon = None
+def _fetch_hub_linked_nodes():
+    """
+    Query each hub in _ASL_HUBS for its linkedNodes list.
+    Returns up to 10 nodes sorted by most-recently registered, with lat/lon
+    taken directly from the server{} sub-object — no geocoding required.
+    """
+    seen  = set()
+    nodes = []
+    for hub in _ASL_HUBS:
         try:
-            if server_obj.get("Latitude") and server_obj.get("Logitude"):
-                lat = float(server_obj["Latitude"])
-                lon = float(server_obj["Logitude"])   # note: AllStarLink API typo
-        except (ValueError, TypeError):
-            pass
-        result.append({
-            "node":     str(node_obj["name"]),
-            "callsign": node_obj.get("callsign", ""),
-            "location": server_obj.get("Location", "") or node_obj.get("node_frequency", ""),
-            "lat":      lat,
-            "lon":      lon,
-            "ts":       node_obj.get("regseconds", 0),
-        })
-    return result
+            url = ASL_HUB_STATS_URL.format(hub)
+            req = urlreq.Request(url, headers={"User-Agent": "ASL3-EZ/1.0 (hub monitor)"})
+            with urlreq.urlopen(req, timeout=10) as resp:
+                d = json.loads(resp.read())
+            linked = (d.get("stats") or {}).get("data") or {}
+            linked = linked.get("linkedNodes") or []
+            for n in linked:
+                name = str(n.get("name", ""))
+                if not name or name in seen:
+                    continue
+                seen.add(name)
+                srv = n.get("server") or {}
+                lat = lon = None
+                try:
+                    if srv.get("Latitude") and srv.get("Logitude"):
+                        lat = float(srv["Latitude"])
+                        lon = float(srv["Logitude"])  # AllStarLink API typo
+                except (ValueError, TypeError):
+                    pass
+                nodes.append({
+                    "node":     name,
+                    "callsign": n.get("callsign", ""),
+                    "location": srv.get("Location", "") or n.get("node_frequency", ""),
+                    "lat":      lat,
+                    "lon":      lon,
+                    "ts":       n.get("regseconds", 0),
+                })
+        except Exception as e:
+            log("DEBUG", f"[GLOBAL-ACTIVITY] Hub {hub}: {e}")
+        time.sleep(1.0)   # 1 s gap between hub requests
+
+    nodes.sort(key=lambda x: x["ts"], reverse=True)
+    return nodes[:10]
 
 
 def _global_activity_poll_loop():
     global _global_nodes_ts
-    log("INFO", "[GLOBAL-ACTIVITY] Poller started — first fetch in 90s")
-    # Initial delay: avoid hammering AllStarLink on restart
-    time.sleep(90)
-    backoff = 0  # consecutive 429/error count
+    log("INFO", "[GLOBAL-ACTIVITY] Poller started — first fetch in 30s")
+    time.sleep(30)   # short startup delay
+    backoff = 0
     while True:
         try:
-            nodes = _fetch_global_nodes()
+            nodes = _fetch_hub_linked_nodes()
             with _global_nodes_lock:
                 _global_nodes_cache.clear()
                 _global_nodes_cache.extend(nodes)
                 _global_nodes_ts = time.time()
-            log("INFO", f"[GLOBAL-ACTIVITY] Fetched {len(nodes)} recent global nodes")
+            log("INFO", f"[GLOBAL-ACTIVITY] Fetched {len(nodes)} nodes from hub sweep")
             backoff = 0
             time.sleep(GLOBAL_ACTIVITY_INTERVAL)
         except Exception as e:
-            # Back off on 429 or network errors — double sleep each failure, cap at 30 min
-            backoff = min(backoff + 1, 6)
+            backoff = min(backoff + 1, 5)
             sleep_s = GLOBAL_ACTIVITY_INTERVAL * (2 ** (backoff - 1))
-            log("WARN", f"[GLOBAL-ACTIVITY] Fetch failed ({e}) — retry in {sleep_s:.0f}s")
+            log("WARN", f"[GLOBAL-ACTIVITY] Loop error ({e}) — retry in {sleep_s:.0f}s")
             time.sleep(sleep_s)
 
 
@@ -2425,14 +2468,21 @@ def api_status_board():
         info     = lookup_node(node)
         cached   = get_cached_status(node)
         connected_details = []
+        lct = cached.get("link_connect_time", {})
+        with _link_stats_lock:
+            ls_snapshot = dict(_link_stats)
         for cn in cached.get("connected", []):
             cn_info = lookup_node(cn)
+            ls = ls_snapshot.get(cn, {})
             connected_details.append({
-                "node":     cn,
-                "callsign": cn_info.get("callsign", ""),
-                "desc":     cn_info.get("desc", ""),
-                "location": cn_info.get("location", ""),
-                "keyed":    cached.get("links", {}).get(cn, {}).get("keyed", False),
+                "node":         cn,
+                "callsign":     cn_info.get("callsign", ""),
+                "desc":         cn_info.get("desc", ""),
+                "location":     cn_info.get("location", ""),
+                "keyed":        cached.get("links", {}).get(cn, {}).get("keyed", False),
+                "connect_time": lct.get(cn, ""),
+                "keyups":       ls.get("keyups", 0),
+                "last_keyed":   ls.get("last_keyed"),
             })
         location = info.get("location", "")
         coords   = _geocode(location) if location else None
