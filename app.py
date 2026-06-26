@@ -42,7 +42,8 @@ import grp
 import secrets
 from datetime import datetime
 from functools import wraps
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file
+import difflib
 from werkzeug.security import generate_password_hash, check_password_hash
 
 try:
@@ -212,6 +213,32 @@ def get_db():
         initial_id      INTEGER NOT NULL DEFAULT 1,
         last_id_time    TEXT,
         created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
+    )""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS connection_history (
+        id                INTEGER PRIMARY KEY AUTOINCREMENT,
+        local_node        TEXT    NOT NULL,
+        peer_node         TEXT    NOT NULL,
+        peer_callsign     TEXT    DEFAULT '',
+        peer_location     TEXT    DEFAULT '',
+        direction         TEXT    DEFAULT '',
+        connected_at      REAL    NOT NULL,
+        disconnected_at   REAL,
+        duration_seconds  REAL
+    )""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS alert_config (
+        id                 INTEGER PRIMARY KEY CHECK (id = 1),
+        enabled            INTEGER NOT NULL DEFAULT 0,
+        provider           TEXT    NOT NULL DEFAULT 'ntfy',
+        ntfy_topic         TEXT    NOT NULL DEFAULT '',
+        pushover_token     TEXT    NOT NULL DEFAULT '',
+        pushover_user      TEXT    NOT NULL DEFAULT '',
+        on_ami_disconnect  INTEGER NOT NULL DEFAULT 1,
+        on_ami_reconnect   INTEGER NOT NULL DEFAULT 0,
+        on_cpu_temp_high   INTEGER NOT NULL DEFAULT 1,
+        cpu_temp_threshold INTEGER NOT NULL DEFAULT 80,
+        on_node_connect    INTEGER NOT NULL DEFAULT 0,
+        on_node_disconnect INTEGER NOT NULL DEFAULT 0,
+        watch_nodes        TEXT    NOT NULL DEFAULT ''
     )""")
     conn.commit()
     return conn
@@ -656,7 +683,7 @@ class AMIClient:
         per connected node containing the remote node number.
         """
         status = {"keyed": False, "connected": [], "links": {}, "raw": [], "lstats": [],
-                  "link_connect_time": {}}
+                  "link_connect_time": {}, "link_direction": {}}
 
         # Primary: rpt show variables — RPT_RXKEYED for local keyed state,
         # RPT_ALINKS for per-link keyed state of already-connected nodes.
@@ -688,6 +715,8 @@ class AMIClient:
                 cn = parts[0]
                 if cn != str(node) and cn not in status["connected"]:
                     status["connected"].append(cn)
+                # DIRECTION is the 4th column (index 3), "IN" or "OUT"
+                status["link_direction"][cn] = parts[3]
                 # CONNECT TIME is the 5th column (index 4), format HH:MM:SS
                 if re.match(r'^\d+:\d{2}:\d{2}$', parts[4]):
                     status["link_connect_time"][cn] = parts[4]
@@ -776,6 +805,8 @@ def _poll_loop():
                 time.sleep(POLL_INTERVAL)
                 continue
 
+            _alert_events = []  # (ev_type, local_node_str, peer_str) — processed outside lock
+
             with _ami_pool_lock:
                 try:
                     ami = _ami_ensure_connected()
@@ -812,10 +843,47 @@ def _poll_loop():
                                         _link_stats[cn]["keyups"]     += 1
                                         _link_stats[cn]["last_keyed"]  = now_ts
                             _keyed_prev_states[lnk_key] = now_keyed
+
+                        # Connection history: detect connect/disconnect events
+                        node_str    = str(node)
+                        current_set = set(status.get("connected", []))
+                        prev_set    = _prev_connected_map.get(node_str, set())
+                        directions  = status.get("link_direction", {})
+                        for peer in current_set - prev_set:
+                            info = lookup_node(peer)
+                            _db_conn_open(node_str, peer,
+                                          info.get("callsign", ""),
+                                          info.get("location", ""),
+                                          directions.get(peer, ""))
+                            _alert_events.append(("connect", node_str, peer))
+                        for peer in prev_set - current_set:
+                            _db_conn_close(node_str, peer)
+                            _alert_events.append(("disconnect", node_str, peer))
+                        _prev_connected_map[node_str] = current_set
+
                 except Exception as e:
                     _ami_last_error = str(e)
                     log("ERROR", f"[AMI-POLL] Error during poll: {e}")
                     _ami_invalidate()
+
+            # Process node connect/disconnect alerts outside lock (may do network I/O)
+            for ev_type, local, peer in _alert_events:
+                try:
+                    cfg = _get_alert_config()
+                    if cfg and cfg["enabled"]:
+                        watches = [w.strip() for w in cfg["watch_nodes"].split(",") if w.strip()]
+                        if ev_type == "connect" and cfg["on_node_connect"]:
+                            if not watches or peer in watches or local in watches:
+                                _send_alert("ASL3-EZ: Node Connected",
+                                            f"Node {peer} connected to {local}")
+                        elif ev_type == "disconnect" and cfg["on_node_disconnect"]:
+                            if not watches or peer in watches or local in watches:
+                                _send_alert("ASL3-EZ: Node Disconnected",
+                                            f"Node {peer} disconnected from {local}")
+                except Exception:
+                    pass
+            # AMI state + CPU temp alerts — outside lock, OK to do network I/O here
+            _check_alerts(_ami_connected, get_cpu_temp())
 
         except Exception as outer:
             log("ERROR", f"[AMI-POLL] Unexpected outer error: {outer}")
@@ -953,6 +1021,13 @@ _keyed_prev_states  = {}   # {key: bool}  — track transitions per node/link
 _link_stats      = {}   # {node_str: {"keyups": int, "last_keyed": float|None}}
 _link_stats_lock = threading.Lock()
 
+# ── Connection history tracking ────────────────────────────────────────────────
+_prev_connected_map = {}  # {local_node_str: set(peer_str)}
+
+# ── Alert state ───────────────────────────────────────────────────────────────
+_alert_prev_ami    = None   # None=unknown, True=was connected, False=was disconnected
+_alert_cpu_alerted = False
+
 
 def _record_keyed(node: str):
     """Prepend a node to the keyed history (dedup consecutive same-node entries)."""
@@ -970,6 +1045,153 @@ def _record_keyed(node: str):
             _keyed_history[0]["ts"] = entry["ts"]
         else:
             _keyed_history.appendleft(entry)
+
+
+# ── Connection history DB helpers ──────────────────────────────────────────────
+
+def _db_conn_open(local_node, peer, callsign, location, direction):
+    """Insert a connection record only if none is already open for this pair."""
+    try:
+        db = get_db()
+        existing = db.execute(
+            "SELECT id FROM connection_history "
+            "WHERE local_node=? AND peer_node=? AND disconnected_at IS NULL",
+            (local_node, peer)
+        ).fetchone()
+        if existing:
+            return
+        db.execute(
+            "INSERT INTO connection_history "
+            "(local_node, peer_node, peer_callsign, peer_location, direction, connected_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (local_node, peer, callsign, location, direction, time.time())
+        )
+        db.commit()
+        log("DEBUG", f"[CONNHIST] Opened: {local_node} <-> {peer} ({direction})")
+    except Exception as e:
+        log("ERROR", f"[CONNHIST] _db_conn_open error: {e}")
+
+
+def _db_conn_close(local_node, peer):
+    """Close the most recent open record for this pair with duration."""
+    try:
+        db  = get_db()
+        now = time.time()
+        row = db.execute(
+            "SELECT id, connected_at FROM connection_history "
+            "WHERE local_node=? AND peer_node=? AND disconnected_at IS NULL "
+            "ORDER BY connected_at DESC LIMIT 1",
+            (local_node, peer)
+        ).fetchone()
+        if not row:
+            return
+        duration = now - row["connected_at"]
+        db.execute(
+            "UPDATE connection_history SET disconnected_at=?, duration_seconds=? WHERE id=?",
+            (now, duration, row["id"])
+        )
+        db.commit()
+        log("DEBUG", f"[CONNHIST] Closed: {local_node} <-> {peer} (duration={duration:.0f}s)")
+    except Exception as e:
+        log("ERROR", f"[CONNHIST] _db_conn_close error: {e}")
+
+
+def _db_conn_startup_cleanup():
+    """Close any records left open from a previous run."""
+    try:
+        db   = get_db()
+        now  = time.time()
+        rows = db.execute(
+            "SELECT id, connected_at FROM connection_history WHERE disconnected_at IS NULL"
+        ).fetchall()
+        for row in rows:
+            duration = now - row["connected_at"]
+            db.execute(
+                "UPDATE connection_history SET disconnected_at=?, duration_seconds=? WHERE id=?",
+                (now, duration, row["id"])
+            )
+        db.commit()
+        if rows:
+            log("INFO", f"[CONNHIST] Startup cleanup: closed {len(rows)} open record(s)")
+    except Exception as e:
+        log("ERROR", f"[CONNHIST] _db_conn_startup_cleanup error: {e}")
+
+
+# ── Alert helpers ──────────────────────────────────────────────────────────────
+
+def _get_alert_config():
+    """Return alert_config row as dict, or None if not configured."""
+    try:
+        db  = get_db()
+        row = db.execute("SELECT * FROM alert_config WHERE id=1").fetchone()
+        return dict(row) if row else None
+    except Exception as e:
+        log("ERROR", f"[ALERTS] _get_alert_config error: {e}")
+        return None
+
+
+def _send_alert(title, message, priority="default"):
+    """Dispatch a push notification via ntfy or Pushover."""
+    try:
+        cfg = _get_alert_config()
+        if not cfg or not cfg["enabled"]:
+            return
+        if cfg["provider"] == "ntfy":
+            if not cfg["ntfy_topic"]:
+                return
+            url     = f"https://ntfy.sh/{cfg['ntfy_topic']}"
+            headers = {"Title": title}
+            if priority == "high":
+                headers["Priority"] = "high"
+            req = urlreq.Request(url, data=message.encode("utf-8"),
+                                 headers=headers, method="POST")
+            with urlreq.urlopen(req, timeout=8) as resp:
+                log("INFO", f"[ALERTS] ntfy sent: {title!r} -> HTTP {resp.status}")
+        elif cfg["provider"] == "pushover":
+            if not cfg["pushover_token"] or not cfg["pushover_user"]:
+                return
+            body = urlparse.urlencode({
+                "token":    cfg["pushover_token"],
+                "user":     cfg["pushover_user"],
+                "title":    title,
+                "message":  message,
+                "priority": 1 if priority == "high" else 0,
+            }).encode("utf-8")
+            req = urlreq.Request(
+                "https://api.pushover.net/1/messages.json",
+                data=body,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                method="POST"
+            )
+            with urlreq.urlopen(req, timeout=8) as resp:
+                log("INFO", f"[ALERTS] pushover sent: {title!r} -> HTTP {resp.status}")
+    except Exception as e:
+        log("ERROR", f"[ALERTS] _send_alert error: {e}")
+
+
+def _check_alerts(ami_ok, cpu_temp):
+    """Check AMI state and CPU temp conditions, send alerts when thresholds cross."""
+    global _alert_prev_ami, _alert_cpu_alerted
+    cfg = _get_alert_config()
+    if not cfg or not cfg["enabled"]:
+        _alert_prev_ami = ami_ok
+        return
+    # AMI disconnect
+    if cfg["on_ami_disconnect"] and _alert_prev_ami is True and not ami_ok:
+        _send_alert("ASL3-EZ: AMI Offline", "Connection to Asterisk lost", "high")
+    # AMI reconnect
+    if cfg["on_ami_reconnect"] and _alert_prev_ami is False and ami_ok:
+        _send_alert("ASL3-EZ: AMI Reconnected", "Connection to Asterisk restored", "default")
+    _alert_prev_ami = ami_ok
+    # CPU temp — alert once when threshold is crossed, reset when it drops back
+    if cfg["on_cpu_temp_high"] and cpu_temp is not None:
+        thr = cfg["cpu_temp_threshold"]
+        if cpu_temp > thr and not _alert_cpu_alerted:
+            _send_alert("ASL3-EZ: High CPU Temp",
+                        f"CPU is {cpu_temp}C (threshold {thr}C)", "high")
+            _alert_cpu_alerted = True
+        elif cpu_temp <= thr:
+            _alert_cpu_alerted = False
 
 
 # ── Nominatim geocoding cache ─────────────────────────────────────────────────
@@ -2158,15 +2380,24 @@ def api_reload():
 def api_backups():
     if not os.path.exists(BACKUP_DIR):
         return jsonify({"backups": [], "backup_dir": BACKUP_DIR})
-    files = sorted(
+    names = sorted(
         [f for f in os.listdir(BACKUP_DIR) if f.endswith(".bak")],
         reverse=True
-    )[:10]
-    return jsonify({"backups": files, "backup_dir": BACKUP_DIR})
+    )
+    result = []
+    for name in names:
+        fpath = os.path.join(BACKUP_DIR, name)
+        try:
+            size = os.path.getsize(fpath)
+        except Exception:
+            size = 0
+        result.append({"name": name, "size": size})
+    return jsonify({"backups": result, "backup_dir": BACKUP_DIR})
 
 
 @app.route("/api/backup/<filename>")
 def api_get_backup(filename):
+    # Legacy endpoint kept for backward compatibility
     if not re.match(r'^rpt\.conf\.\d{8}_\d{6}\.bak$', filename):
         return jsonify({"error": "Invalid filename"}), 400
     path = os.path.join(BACKUP_DIR, filename)
@@ -2174,6 +2405,191 @@ def api_get_backup(filename):
         return jsonify({"error": "Not found"}), 404
     with open(path) as f:
         return jsonify({"content": f.read(), "filename": filename})
+
+
+@app.route("/api/backups/<name>/download")
+def api_backup_download(name):
+    if not re.match(r'^rpt\.conf\.\d{8}_\d{6}\.bak$', name):
+        return jsonify({"error": "Invalid filename"}), 400
+    path = os.path.join(BACKUP_DIR, name)
+    if not os.path.exists(path):
+        return jsonify({"error": "Not found"}), 404
+    return send_file(path, as_attachment=True, download_name=name)
+
+
+@app.route("/api/backups/<name>/diff")
+def api_backup_diff(name):
+    if not re.match(r'^rpt\.conf\.\d{8}_\d{6}\.bak$', name):
+        return jsonify({"error": "Invalid filename"}), 400
+    path = os.path.join(BACKUP_DIR, name)
+    if not os.path.exists(path):
+        return jsonify({"error": "Not found"}), 404
+    try:
+        with open(path) as f:
+            backup_lines = f.readlines()
+        current = read_conf_file(RPT_CONF_PATH)
+        if current is None:
+            return jsonify({"error": "Cannot read current rpt.conf"}), 500
+        current_lines = current.splitlines(keepends=True)
+        diff = list(difflib.unified_diff(
+            backup_lines, current_lines,
+            fromfile=name, tofile="rpt.conf (current)",
+            lineterm=""
+        ))
+        return jsonify({"diff": "".join(diff), "name": name})
+    except Exception as e:
+        log("ERROR", f"[API] /api/backups/{name}/diff error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/backups/<name>/restore", methods=["POST"])
+def api_backup_restore(name):
+    if not re.match(r'^rpt\.conf\.\d{8}_\d{6}\.bak$', name):
+        return jsonify({"error": "Invalid filename"}), 400
+    path = os.path.join(BACKUP_DIR, name)
+    if not os.path.exists(path):
+        return jsonify({"error": "Not found"}), 404
+    try:
+        with open(path) as f:
+            content = f.read()
+        backup = write_conf_file(RPT_CONF_PATH, content)
+        log("INFO", f"[API] Restored backup: {name}")
+        return jsonify({"ok": True, "backup": backup})
+    except PermissionError as e:
+        return jsonify({"error": str(e),
+                        "hint": "Service must run as root to write rpt.conf"}), 403
+    except Exception as e:
+        log("ERROR", f"[API] /api/backups/{name}/restore error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/backups/<name>", methods=["DELETE"])
+def api_backup_delete(name):
+    if not re.match(r'^rpt\.conf\.\d{8}_\d{6}\.bak$', name):
+        return jsonify({"error": "Invalid filename"}), 400
+    path = os.path.join(BACKUP_DIR, name)
+    if not os.path.exists(path):
+        return jsonify({"error": "Not found"}), 404
+    try:
+        os.unlink(path)
+        log("INFO", f"[API] Deleted backup: {name}")
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ── Connection History API ─────────────────────────────────────────────────────
+
+@app.route("/api/connection-history")
+def api_conn_history():
+    node   = request.args.get("node",   "").strip()
+    search = request.args.get("search", "").strip().lower()
+    try:
+        limit  = min(int(request.args.get("limit",  50)), 200)
+    except (ValueError, TypeError):
+        limit  = 50
+    try:
+        offset = int(request.args.get("offset", 0))
+    except (ValueError, TypeError):
+        offset = 0
+
+    db     = get_db()
+    where  = []
+    params = []
+    if node:
+        where.append("local_node = ?")
+        params.append(node)
+    if search:
+        where.append("(peer_node LIKE ? OR peer_callsign LIKE ? OR peer_location LIKE ?)")
+        pat = "%" + search + "%"
+        params.extend([pat, pat, pat])
+    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+
+    total = db.execute(
+        f"SELECT COUNT(*) FROM connection_history {where_sql}", params
+    ).fetchone()[0]
+    rows = db.execute(
+        f"SELECT * FROM connection_history {where_sql} "
+        "ORDER BY connected_at DESC LIMIT ? OFFSET ?",
+        params + [limit, offset]
+    ).fetchall()
+    return jsonify({
+        "total":  total,
+        "limit":  limit,
+        "offset": offset,
+        "rows":   [dict(r) for r in rows],
+    })
+
+
+@app.route("/api/connection-history", methods=["DELETE"])
+def api_conn_history_clear():
+    db = get_db()
+    db.execute("DELETE FROM connection_history")
+    db.commit()
+    log("INFO", "[API] Connection history cleared")
+    return jsonify({"ok": True})
+
+
+# ── Alerts API ─────────────────────────────────────────────────────────────────
+
+@app.route("/api/alerts/config")
+def api_alerts_get_config():
+    cfg = _get_alert_config()
+    if cfg is None:
+        # Return defaults before any config is saved
+        return jsonify({
+            "enabled": 0, "provider": "ntfy", "ntfy_topic": "",
+            "pushover_token": "", "pushover_user": "",
+            "on_ami_disconnect": 1, "on_ami_reconnect": 0,
+            "on_cpu_temp_high": 1, "cpu_temp_threshold": 80,
+            "on_node_connect": 0, "on_node_disconnect": 0, "watch_nodes": "",
+        })
+    return jsonify(dict(cfg))
+
+
+@app.route("/api/alerts/config", methods=["POST"])
+def api_alerts_save_config():
+    data = request.json or {}
+    db   = get_db()
+    db.execute(
+        """INSERT OR REPLACE INTO alert_config
+           (id, enabled, provider, ntfy_topic, pushover_token, pushover_user,
+            on_ami_disconnect, on_ami_reconnect, on_cpu_temp_high, cpu_temp_threshold,
+            on_node_connect, on_node_disconnect, watch_nodes)
+           VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            1 if data.get("enabled")           else 0,
+            str(data.get("provider",           "ntfy")),
+            str(data.get("ntfy_topic",         "")),
+            str(data.get("pushover_token",     "")),
+            str(data.get("pushover_user",      "")),
+            1 if data.get("on_ami_disconnect") else 0,
+            1 if data.get("on_ami_reconnect")  else 0,
+            1 if data.get("on_cpu_temp_high")  else 0,
+            int(data.get("cpu_temp_threshold", 80)),
+            1 if data.get("on_node_connect")   else 0,
+            1 if data.get("on_node_disconnect") else 0,
+            str(data.get("watch_nodes",        "")),
+        )
+    )
+    db.commit()
+    log("INFO", "[API] Alert config saved")
+    return jsonify({"ok": True})
+
+
+@app.route("/api/alerts/test", methods=["POST"])
+def api_alerts_test():
+    try:
+        cfg = _get_alert_config()
+        if not cfg:
+            return jsonify({"error": "No alert config saved yet"}), 400
+        if not cfg["enabled"]:
+            return jsonify({"error": "Alerts are disabled — enable them first"}), 400
+        _send_alert("ASL3-EZ: Test Alert",
+                    "This is a test notification from ASL3-EZ", "default")
+        return jsonify({"ok": True, "message": "Test alert sent"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 # ── Favorites API ─────────────────────────────────────────────────────────────
@@ -4055,6 +4471,7 @@ def api_dtmf_cop():
 # These run regardless of whether we're under gunicorn or direct python.
 # ---------------------------------------------------------------------------
 load_astdb()
+_db_conn_startup_cleanup()
 start_poller()
 start_favstats_poller()
 start_global_activity_poller()
