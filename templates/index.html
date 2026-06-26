@@ -2784,22 +2784,20 @@ async function astFetchLog() {
       + esc(r.data.error || ('HTTP ' + r.status)) + '</div>';
     return;
   }
-  var data   = r.data;
-  var logLines = data.lines || [];
+  var data     = r.data;
+  var logLines = (data.lines || []).slice().reverse();
 
   // Color-code by Asterisk log level keyword
   panel.innerHTML = logLines.map(function(line) {
     var cls = '';
     var l   = line.toLowerCase();
-    if      (l.includes('[error]') || l.includes('error['))   cls = 'lERR';
+    if      (l.includes('[error]') || l.includes('error['))     cls = 'lERR';
     else if (l.includes('[warning]') || l.includes('warning[')) cls = 'lWARN';
     else if (l.includes('[notice]') || l.includes('notice['))   cls = 'lOK';
     else if (l.includes('[debug]') || l.includes('debug['))     cls = 'lDBG';
     else if (l.includes('[verbose]') || l.includes('verbose[')) cls = 'lAMI';
     return '<div class="' + cls + '">' + esc(line) + '</div>';
   }).join('');
-
-  requestAnimationFrame(function() { panel.scrollTop = panel.scrollHeight; });
 }
 
 async function astSetVerbose() {
