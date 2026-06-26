@@ -4,8 +4,64 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ASL3-EZ Status Board</title>
+<script>(function(){var t=localStorage.getItem('asl3ez-theme');if(t)document.documentElement.setAttribute('data-theme',t);})();</script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <style>
+html[data-theme="midnight"] {
+  --bg:      #000000; --bg2:    #0c0c0c; --bg3:    #141414;
+  --border:  #252525; --accent: #4d9cf5; --green:  #3aad4e;
+  --warn:    #c98a1a; --danger: #e04444; --text:   #dde1e7; --text2:  #636363;
+}
+html[data-theme="light"] {
+  --bg:      #f6f8fa; --bg2:    #ffffff; --bg3:    #eaedf0;
+  --border:  #d0d7de; --accent: #0969da; --green:  #1a7f37;
+  --warn:    #9a6700; --danger: #cf222e; --text:   #1f2328; --text2:  #656d76;
+}
+html[data-theme="terminal"] {
+  --bg:      #001200; --bg2:    #001a00; --bg3:    #002200;
+  --border:  #1a4d1a; --accent: #00e040; --green:  #00c030;
+  --warn:    #ffaa00; --danger: #ff3333; --text:   #00e040; --text2:  #007a1a;
+}
+html[data-theme="amber"] {
+  --bg:      #0d0800; --bg2:    #160e00; --bg3:    #1e1500;
+  --border:  #4a3200; --accent: #ff9200; --green:  #a0c040;
+  --warn:    #ffb800; --danger: #ff4040; --text:   #ffb000; --text2:  #7a5200;
+}
+html[data-theme="nord"] {
+  --bg:      #2e3440; --bg2:    #3b4252; --bg3:    #434c5e;
+  --border:  #4c566a; --accent: #88c0d0; --green:  #a3be8c;
+  --warn:    #ebcb8b; --danger: #bf616a; --text:   #eceff4; --text2:  #9099a8;
+}
+html[data-theme="mario"] {
+  --bg:      #1a1464; --bg2:    #221a7a; --bg3:    #2e2490;
+  --border:  #3c32b0; --accent: #e8000d; --green:  #1aaa00;
+  --warn:    #f8c800; --danger: #f85000; --text:   #f8f8f8; --text2:  #c8b840;
+}
+html[data-theme="dracula"] {
+  --bg:      #282a36; --bg2:    #1e2030; --bg3:    #343746;
+  --border:  #44475a; --accent: #bd93f9; --green:  #50fa7b;
+  --warn:    #f1fa8c; --danger: #ff5555; --text:   #f8f8f2; --text2:  #6272a4;
+}
+html[data-theme="monokai"] {
+  --bg:      #272822; --bg2:    #1e1f1a; --bg3:    #3e3d32;
+  --border:  #49483e; --accent: #66d9e8; --green:  #a6e22e;
+  --warn:    #e6db74; --danger: #f92672; --text:   #f8f8f2; --text2:  #75715e;
+}
+html[data-theme="cyberpunk"] {
+  --bg:      #0d0d1a; --bg2:    #12122a; --bg3:    #1a1a3a;
+  --border:  #2a1a50; --accent: #ff00ff; --green:  #00ffaa;
+  --warn:    #ffee00; --danger: #ff0066; --text:   #e8e0ff; --text2:  #8870cc;
+}
+html[data-theme="solarized"] {
+  --bg:      #fdf6e3; --bg2:    #eee8d5; --bg3:    #e5dfc8;
+  --border:  #cdc7b0; --accent: #268bd2; --green:  #859900;
+  --warn:    #b58900; --danger: #dc322f; --text:   #657b83; --text2:  #93a1a1;
+}
+html[data-theme="cotton-candy"] {
+  --bg:      #fdf0fc; --bg2:    #fff5fe; --bg3:    #f5e6f8;
+  --border:  #ddb8e8; --accent: #b44cc0; --green:  #2e9e6e;
+  --warn:    #c87820; --danger: #c83050; --text:   #2a1030; --text2:  #8850a0;
+}
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
