@@ -629,6 +629,7 @@ async function refreshBoard() {
 
     /* Node card */
     var nodes = data.nodes || [];
+    window._lastBoardNodes = nodes;
     var nc = document.getElementById('node-card');
     if (!nodes.length) {
       nc.innerHTML = '<div class="node-label">NODE</div><div style="color:var(--text2)">No nodes configured</div>';
@@ -721,8 +722,16 @@ async function refreshActivity() {
     if (!r.ok) return;
     var data = await r.json();
 
-    var keyed   = data.recently_keyed || [];
-    var globals = data.global_nodes   || [];
+    /* Exclude nodes that are currently connected — they belong in the connected-nodes panel */
+    var connectedSet = {};
+    _connectedNodes.forEach(function(c) { connectedSet[c.node] = true; });
+    /* Also build connected set from all linked nodes (covers nodes without geocoords) */
+    var allLinkedNow = [];
+    (window._lastBoardNodes||[]).forEach(function(n){ (n.connected||[]).forEach(function(c){ allLinkedNow.push(c.node); }); });
+    allLinkedNow.forEach(function(id){ connectedSet[id] = true; });
+
+    var keyed   = (data.recently_keyed || []).filter(function(e){ return !connectedSet[e.node]; });
+    var globals = (data.global_nodes   || []).filter(function(g){ return !connectedSet[g.node]; });
 
     /* Deduplicate: local entries take priority */
     var seenNodes = {};
@@ -737,7 +746,7 @@ async function refreshActivity() {
               lat:g.lat, lon:g.lon, ts:g.ts, type:'global'};
     }));
 
-    /* Activity list */
+    /* Activity list — no keyed/online badge, just source dot + node info */
     var al = document.getElementById('activity-list');
     document.getElementById('act-count').textContent = combined.length ? combined.length + ' nodes' : '';
     if (!combined.length) {
@@ -750,7 +759,6 @@ async function refreshActivity() {
             '<div class="act-top">' +
               '<span class="act-node">' + esc(e.node) + '</span>' +
               (e.callsign ? '<span class="act-call">' + esc(e.callsign) + '</span>' : '') +
-              '<span class="act-badge ' + e.type + '">' + (e.type==='local' ? 'KEYED' : 'ONLINE') + '</span>' +
               '<span class="act-ts">' + (e.ts ? relTime(e.ts) : '') + '</span>' +
             '</div>' +
             '<div class="act-loc">' + esc(e.location||'') + '</div>' +
