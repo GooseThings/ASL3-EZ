@@ -2773,9 +2773,10 @@ async function ncStatus() {
     return;
   }
 
-  var d         = r.data;
-  var connected = d.connected || [];
-  var links     = d.links || {};
+  var d           = r.data;
+  var connected   = d.connected || [];
+  var links       = d.links || {};
+  var connStates  = d.link_connect_state || {};
 
   // ── First call: build skeleton HTML with stable element IDs ──────────
   // Subsequent calls only update text/class of existing elements — no
@@ -2821,7 +2822,7 @@ async function ncStatus() {
     // Connected set changed — rebuild table (only happens on connect/disconnect)
     section.setAttribute('data-connected', newKey);
     var html = '<table class="tbl">'
-             + '<thead><tr><th>Node</th><th>Keyed</th><th>Info</th><th>Action</th></tr></thead>'
+             + '<thead><tr><th>Node</th><th>Status</th><th>Info</th><th>Action</th></tr></thead>'
              + '<tbody id="nc-connected-tbody"></tbody>'
              + '</table>';
     section.innerHTML = html;
@@ -2851,16 +2852,20 @@ async function ncStatus() {
     });
   }
 
-  // Update per-link keyed badges in-place on every poll, regardless of
-  // whether the connected set changed, so keyup/unkey is reflected live
-  // rather than only when a node connects or disconnects.
+  // Update per-link status badges on every poll.
+  // Show "Connecting…" while the handshake is pending, keyed state once established.
   connected.forEach(function(n) {
-    var cell = document.getElementById('nc-keyed-' + n);
+    var cell  = document.getElementById('nc-keyed-' + n);
     if (!cell) return;
-    var isKeyed = !!(links[n] && links[n].keyed);
-    cell.innerHTML = isKeyed
-      ? '<span class="badge badge-ok">KEYED</span>'
-      : '<span class="badge badge-unk">NOT KEYED</span>';
+    var state = (connStates[n] || 'ESTABLISHED').toUpperCase();
+    if (state !== 'ESTABLISHED') {
+      cell.innerHTML = '<span class="badge" style="background:rgba(210,153,34,0.15);color:#d9a520;border:1px solid rgba(210,153,34,0.35)">Connecting…</span>';
+    } else {
+      var isKeyed = !!(links[n] && links[n].keyed);
+      cell.innerHTML = isKeyed
+        ? '<span class="badge badge-ok">KEYED</span>'
+        : '<span class="badge badge-unk">NOT KEYED</span>';
+    }
   });
 }
 

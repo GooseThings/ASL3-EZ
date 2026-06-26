@@ -683,7 +683,7 @@ class AMIClient:
         per connected node containing the remote node number.
         """
         status = {"keyed": False, "connected": [], "links": {}, "raw": [], "lstats": [],
-                  "link_connect_time": {}, "link_direction": {}}
+                  "link_connect_time": {}, "link_direction": {}, "link_connect_state": {}}
 
         # Primary: rpt show variables — RPT_RXKEYED for local keyed state,
         # RPT_ALINKS for per-link keyed state of already-connected nodes.
@@ -706,6 +706,9 @@ class AMIClient:
 
         # Secondary: rpt lstats — definitive connected node list + connect time
         # Format: NODE  PEER  RECONNECTS  DIRECTION  CONNECT_TIME  CONNECT_STATE
+        # CONNECT_STATE values: ESTABLISHED (fully up), CONNECTING (handshake pending),
+        # DISCONNECTING, etc.  We include all peers in "connected" so they show in the
+        # UI, but expose the state so the UI can distinguish CONNECTING from ESTABLISHED.
         lstats = self.command(f"rpt lstats {node}")
         status["lstats"] = lstats
         log("DEBUG", f"[AMI] rpt lstats {node} -> {lstats}")
@@ -717,9 +720,12 @@ class AMIClient:
                     status["connected"].append(cn)
                 # DIRECTION is the 4th column (index 3), "IN" or "OUT"
                 status["link_direction"][cn] = parts[3]
-                # CONNECT TIME is the 5th column (index 4), format HH:MM:SS
+                # CONNECT_TIME is the 5th column (index 4), format HH:MM:SS
                 if re.match(r'^\d+:\d{2}:\d{2}$', parts[4]):
                     status["link_connect_time"][cn] = parts[4]
+                # CONNECT_STATE is the 6th column (index 5)
+                if len(parts) >= 6:
+                    status["link_connect_state"][cn] = parts[5].upper()
             else:
                 # Fallback: extract any node number from the line
                 for n in re.findall(r'\b(\d{4,7})\b', line):
@@ -844,22 +850,30 @@ def _poll_loop():
                                         _link_stats[cn]["last_keyed"]  = now_ts
                             _keyed_prev_states[lnk_key] = now_keyed
 
-                        # Connection history: detect connect/disconnect events
+                        # Connection history: only record fully-established links.
+                        # Nodes in CONNECTING state are shown in the UI but do not
+                        # create a history entry or trigger alerts until the handshake
+                        # completes and CONNECT_STATE reaches ESTABLISHED.
                         node_str    = str(node)
-                        current_set = set(status.get("connected", []))
-                        prev_set    = _prev_connected_map.get(node_str, set())
+                        conn_states = status.get("link_connect_state", {})
+                        all_set     = set(status.get("connected", []))
+                        # Default to ESTABLISHED when state field is absent (older ASL builds)
+                        est_set     = {cn for cn in all_set
+                                       if conn_states.get(cn, "ESTABLISHED").upper() == "ESTABLISHED"}
+                        prev_est    = _prev_connected_map.get(node_str, set())
                         directions  = status.get("link_direction", {})
-                        for peer in current_set - prev_set:
+                        for peer in est_set - prev_est:
                             info = lookup_node(peer)
                             _db_conn_open(node_str, peer,
                                           info.get("callsign", ""),
                                           info.get("location", ""),
                                           directions.get(peer, ""))
                             _alert_events.append(("connect", node_str, peer))
-                        for peer in prev_set - current_set:
+                        for peer in prev_est - all_set:
+                            # Was established before and has now fully gone
                             _db_conn_close(node_str, peer)
                             _alert_events.append(("disconnect", node_str, peer))
-                        _prev_connected_map[node_str] = current_set
+                        _prev_connected_map[node_str] = est_set
 
                 except Exception as e:
                     _ami_last_error = str(e)
