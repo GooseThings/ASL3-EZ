@@ -295,8 +295,8 @@ def is_auth_configured():
 @app.before_request
 def check_auth():
     _PUBLIC          = {'login', 'logout', 'static', None,
-                        'status_board', 'api_status_board',
-                        'api_status_weather', 'api_status_activity',
+                        'status_board', 'status_board_redirect',
+                        'api_status_board', 'api_status_weather', 'api_status_activity',
                         'api_login', 'api_session'}
     _KIOSK_OR_ADMIN  = {'api_status_connect', 'api_status_disconnect'}
 
@@ -2221,14 +2221,14 @@ def get_asterisk_status():
 # ---------------------------------------------------------------------------
 # Flask routes
 # ---------------------------------------------------------------------------
-@app.route("/")
+@app.route("/asl3-ez-manager")
 def index():
     content   = read_conf_file(RPT_CONF_PATH)
     nodes     = get_node_numbers(content) if content else []
     templates = sorted(get_node_template_usage(content).keys()) if content else []
     macros    = sorted(get_macro_stanza_usage(content).keys()) if content else []
     schedules = sorted(get_schedule_stanza_usage(content).keys()) if content else []
-    return render_template("index.html",
+    return render_template("asl3-ez-manager.html",
                            conf_exists=content is not None,
                            nodes=nodes,
                            templates=templates,
@@ -3205,9 +3205,14 @@ def api_status_disconnect():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/status")
+@app.route("/")
 def status_board():
     return render_template("status.html")
+
+
+@app.route("/status")
+def status_board_redirect():
+    return redirect(url_for('status_board'), 301)
 
 
 # ── Asterisk console log viewer ───────────────────────────────────────────────
