@@ -96,6 +96,16 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
 .header-brand { display: flex; align-items: center; gap: 8px; color: var(--text2);
   font-size: 0.9rem; letter-spacing: 0.06em; }
 .header-brand strong { color: var(--accent); font-size: 1rem; }
+.hb-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  background: var(--green); opacity: 0.25; margin-left: 2px;
+}
+.hb-dot.pulse { animation: hb-pulse .9s ease-out 1 forwards; }
+@keyframes hb-pulse {
+  0%   { opacity: 1; transform: scale(1.6); box-shadow: 0 0 9px rgba(63,185,80,.9); }
+  60%  { opacity: .6; transform: scale(1.1); box-shadow: 0 0 4px rgba(63,185,80,.4); }
+  100% { opacity: .25; transform: scale(1);  box-shadow: none; }
+}
 .header-clock { font-size: 2.6rem; font-weight: 300; font-variant-numeric: tabular-nums;
   letter-spacing: 0.04em; }
 .header-actions { display: flex; align-items: center; gap: 10px; }
@@ -331,7 +341,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
 
   <!-- Header -->
   <header class="header">
-    <div class="header-brand"><strong>ASL3-EZ</strong> <span>NODE KIOSK</span></div>
+    <div class="header-brand"><strong>ASL3-EZ</strong> <span>NODE KIOSK</span><span class="hb-dot" id="hb-dot"></span></div>
     <div class="header-clock" id="clock">--:--:--</div>
     <div class="header-actions">
       <div class="ast-pill" id="ast-pill"><div class="dot"></div><span id="ast-text">Asterisk</span></div>
@@ -844,6 +854,8 @@ async function refreshBoard() {
 
     /* Keep favorites sidebar in sync with connected state */
     renderFavorites();
+
+    triggerHeartbeat();
   } catch(e) {}
 }
 
@@ -1077,6 +1089,15 @@ async function checkKioskSession() {
   } else {
     updateKioskUserBar(null, null);
   }
+}
+
+/* ── Heartbeat indicator ── */
+function triggerHeartbeat() {
+  var dot = document.getElementById('hb-dot');
+  if (!dot) return;
+  dot.classList.remove('pulse');
+  void dot.offsetWidth; /* force reflow to restart animation */
+  dot.classList.add('pulse');
 }
 
 /* ── Favorites sidebar ── */
