@@ -139,7 +139,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
 .content-area { display: grid; grid-template-columns: 1fr 210px; grid-template-rows: 55fr 45fr; gap: 10px; flex: 1; min-height: 0; }
 
 /* ── Top row: node + connected ── */
-.top-row { display: grid; grid-template-columns: 260px minmax(0, 940px); gap: 10px; flex: 55; min-height: 0; }
+.top-row { display: grid; grid-template-columns: 260px 1fr; gap: 10px; flex: 55; min-height: 0; }
 
 /* ── Node status card ── */
 .node-card {
@@ -213,7 +213,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
 .nr-meta strong { color: var(--text); }
 
 /* ── Bottom row: activity + map ── */
-.bottom-row { display: grid; grid-template-columns: 300px minmax(0, 900px); gap: 10px; flex: 45; min-height: 0; }
+.bottom-row { display: grid; grid-template-columns: 300px 1fr; gap: 10px; flex: 45; min-height: 0; }
 
 /* ── Activity panel ── */
 .activity-card {
@@ -293,11 +293,6 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
 .fav-actions { display: flex; gap: 4px; margin-top: 3px; }
 .fav-actions .sb-btn { font-size: 0.68rem; padding: 2px 8px; }
 
-/* Remove width caps in fullscreen — let both rows fill the screen */
-:fullscreen .top-row    { grid-template-columns: 260px 1fr; }
-:fullscreen .bottom-row { grid-template-columns: 300px 1fr; }
-:-webkit-full-screen .top-row    { grid-template-columns: 260px 1fr; }
-:-webkit-full-screen .bottom-row { grid-template-columns: 300px 1fr; }
 
 /* ── Status-board action buttons ── */
 .sb-btn {
