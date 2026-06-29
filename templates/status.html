@@ -334,13 +334,13 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
 .idle-badge.warn { background: rgba(255,179,0,.15); color: var(--warn); }
 
 /* toast notification */
-#sb-toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
-  padding: 8px 18px; border-radius: 6px; font-size: 0.82rem; font-weight: 600;
+#sb-toast { position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%);
+  padding: 10px 22px; border-radius: 8px; font-size: 0.85rem; font-weight: 600;
   pointer-events: none; opacity: 0; transition: opacity .25s; z-index: 9999;
-  white-space: nowrap; }
+  white-space: nowrap; box-shadow: 0 4px 16px rgba(0,0,0,.6); }
 #sb-toast.show { opacity: 1; }
-#sb-toast.ok   { background: rgba(63,185,80,.18); border: 1px solid rgba(63,185,80,.4); color: var(--green); }
-#sb-toast.err  { background: rgba(248,81,73,.18); border: 1px solid rgba(248,81,73,.4); color: var(--red); }
+#sb-toast.ok   { background: rgba(30,80,40,.97); border: 1px solid rgba(63,185,80,.7); color: #7ee787; }
+#sb-toast.err  { background: rgba(80,25,25,.97); border: 1px solid rgba(248,81,73,.7); color: #ff9492; }
 
 /* ── Footer ── */
 .footer { display: flex; align-items: center; justify-content: space-between;
