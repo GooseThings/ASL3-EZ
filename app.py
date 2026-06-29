@@ -1696,6 +1696,19 @@ def write_conf_file(path, content):
             except Exception as e:
                 log("WARN", f"[CONF] Could not set backup file permissions: {e}")
 
+    # Prune oldest backups, keeping only the most recent MAX_BACKUPS
+    MAX_BACKUPS = 20
+    try:
+        baks = sorted(
+            [f for f in os.listdir(BACKUP_DIR)
+             if re.match(r'^rpt\.conf\.\d{8}_\d{6}\.bak$', f)],
+        )
+        for old in baks[:-MAX_BACKUPS]:
+            os.unlink(os.path.join(BACKUP_DIR, old))
+            log("INFO", f"[CONF] Pruned old backup: {old}")
+    except Exception as e:
+        log("WARN", f"[CONF] Backup pruning failed: {e}")
+
     # Write atomically via temp file
     conf_dir = os.path.dirname(path)
     try:
