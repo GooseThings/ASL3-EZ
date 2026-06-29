@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="csrf-token" content="{{ csrf_token() }}">
 <title>ASL3-EZ Node Kiosk</title>
 <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
 <script>(function(){var t=localStorage.getItem('asl3ez-theme');if(t)document.documentElement.setAttribute('data-theme',t);})();</script>
@@ -502,7 +503,16 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
 <script>
 /* ── Helpers ── */
 function esc(s) {
-  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(s||'')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+var _csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+function apiFetch(url, opts) {
+  opts = opts || {};
+  opts.headers = Object.assign({'X-CSRFToken': _csrfToken}, opts.headers || {});
+  return fetch(url, opts);
 }
 function relTime(ts) {
   var d = Math.floor(Date.now()/1000 - ts);
@@ -774,7 +784,7 @@ function updateMap() {
 /* ── Weather bar ── */
 async function refreshWeather() {
   try {
-    var r = await fetch('/api/status/weather');
+    var r = await apiFetch('/api/status/weather');
     if (!r.ok) return;
     var w = await r.json();
     var bar = document.getElementById('weather-bar');
@@ -802,7 +812,7 @@ async function refreshWeather() {
 /* ── Board data ── */
 async function refreshBoard() {
   try {
-    var r = await fetch('/api/status/board', {cache: 'no-store'});
+    var r = await apiFetch('/api/status/board', {cache: 'no-store'});
     if (!r.ok) return;
     var data = await r.json();
 
@@ -928,7 +938,7 @@ async function refreshBoard() {
 /* ── Activity feed + map ── */
 async function refreshActivity() {
   try {
-    var r = await fetch('/api/status/activity', {cache: 'no-store'});
+    var r = await apiFetch('/api/status/activity', {cache: 'no-store'});
     if (!r.ok) return;
     var data = await r.json();
 
@@ -1015,7 +1025,7 @@ async function sbConnect(localNode, remoteNode, btn, permanent, monitor) {
   var label = monitor ? 'Monitor' : 'Connect';
   if (btn) { btn.disabled = true; btn.textContent = '…'; }
   try {
-    var r = await fetch('/api/status/connect', {
+    var r = await apiFetch('/api/status/connect', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({local_node: localNode, remote_node: remoteNode, permanent: !!permanent, monitor: !!monitor})
@@ -1040,7 +1050,7 @@ async function sbConnect(localNode, remoteNode, btn, permanent, monitor) {
 async function sbDisconnect(localNode, remoteNode, btn) {
   if (btn) { btn.disabled = true; btn.textContent = '…'; }
   try {
-    var r = await fetch('/api/status/disconnect', {
+    var r = await apiFetch('/api/status/disconnect', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({local_node: localNode, remote_node: remoteNode})
@@ -1076,7 +1086,7 @@ async function statusConnectNew() {
   var perm  = document.getElementById('conn-perm-chk');
   var permanent = perm && perm.checked;
   document.getElementById('conn-form-msg').textContent = 'Connecting…';
-  var r = await fetch('/api/status/connect', {
+  var r = await apiFetch('/api/status/connect', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({local_node: local, remote_node: remote, permanent: permanent})
@@ -1106,7 +1116,7 @@ async function statusMonitorNew() {
                ? window._lastBoardNodes[0].node : '';
   if (!local) { document.getElementById('conn-form-msg').textContent = 'No local node found'; return; }
   document.getElementById('conn-form-msg').textContent = 'Monitoring…';
-  var r = await fetch('/api/status/connect', {
+  var r = await apiFetch('/api/status/connect', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({local_node: local, remote_node: remote, permanent: false, monitor: true})
@@ -1145,7 +1155,7 @@ async function kioskLogin() {
   var username = document.getElementById('kl-user').value.trim();
   var password = document.getElementById('kl-pass').value;
   document.getElementById('kl-error').textContent = '';
-  var r = await fetch('/api/login', {
+  var r = await apiFetch('/api/login', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({username: username, password: password})
@@ -1167,7 +1177,7 @@ async function kioskLogin() {
 }
 
 async function kioskLogout() {
-  await fetch('/logout');
+  await apiFetch('/logout');
   updateKioskUserBar(null, null);
   sbToast('Logged out', true);
 }
@@ -1186,7 +1196,7 @@ function updateKioskUserBar(username, role) {
 }
 
 async function checkKioskSession() {
-  var r = await fetch('/api/session');
+  var r = await apiFetch('/api/session');
   var d = await r.json();
   if (d.logged_in) {
     window._kioskRole = d.role;
@@ -1214,7 +1224,7 @@ var _favorites = [];
 
 async function loadFavorites() {
   try {
-    var r = await fetch('/api/favorites', {cache: 'no-store'});
+    var r = await apiFetch('/api/favorites', {cache: 'no-store'});
     if (!r.ok) return;
     var d = await r.json();
     _favorites = d.favorites || [];
@@ -1329,7 +1339,7 @@ async function addToFavorites() {
     document.getElementById('conn-form-msg').textContent = 'Enter a 4-7 digit node number';
     return;
   }
-  var r = await fetch('/api/favorites/add', {
+  var r = await apiFetch('/api/favorites/add', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({node: node})
@@ -1345,7 +1355,7 @@ async function addToFavorites() {
 }
 
 async function removeFavorite(node) {
-  var r = await fetch('/api/favorites/delete', {
+  var r = await apiFetch('/api/favorites/delete', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({node: node})
@@ -1394,7 +1404,7 @@ function _startListen() {
   audio.onerror     = null;
 
   /* Pre-flight check: surface backend errors before touching <audio> */
-  fetch('/api/audio/check/' + node)
+  apiFetch('/api/audio/check/' + node)
     .then(function(r) { return r.json(); })
     .then(function(d) {
       if (!d.ok) {
@@ -1450,7 +1460,7 @@ function _stopListen() {
   _listenActive = false;
   _listenSetBtn('&#9834; Listen', '', false);
   if (node) {
-    fetch('/api/audio/stop', {
+    apiFetch('/api/audio/stop', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({node: node})

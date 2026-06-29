@@ -46,6 +46,9 @@ from functools import wraps
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, Response, stream_with_context
 import difflib
 from werkzeug.security import generate_password_hash, check_password_hash
+from flask_wtf.csrf import CSRFProtect
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 try:
     import urllib.request as urlreq
@@ -74,6 +77,7 @@ SERVICE_NAME    = os.environ.get("SERVICE_NAME",     "ASL3-EZ")
 SOUNDS_DIR      = os.environ.get("SOUNDS_DIR",       "/var/lib/asterisk/sounds/asl3ez")
 SERVICE_FILE_PATH = os.environ.get("SERVICE_FILE_PATH",
                                     f"/etc/systemd/system/{SERVICE_NAME}.service")
+SECURE_COOKIES  = os.environ.get("SECURE_COOKIES", "false").lower() == "true"
 
 # SECRET_KEY values that ship with the app/installer — used to warn the user
 # in the dashboard that they're still on the default and should change it.
@@ -130,6 +134,11 @@ _allmondb_lock   = threading.Lock()
 app.secret_key = SECRET_KEY
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE']   = SECURE_COOKIES
+app.config['WTF_CSRF_TIME_LIMIT']     = None  # tokens don't expire; rely on session lifetime
+
+csrf    = CSRFProtect(app)
+limiter = Limiter(app=app, key_func=get_remote_address, default_limits=[])
 
 # ---------------------------------------------------------------------------
 # Logging  (verbose, timestamp-prefixed, written to stdout for journald)
@@ -393,6 +402,7 @@ def check_auth():
 
 
 @app.route("/login", methods=["GET", "POST"])
+@limiter.limit("10 per minute; 50 per hour")
 def login():
     setup_mode = not is_auth_configured()
 
@@ -415,6 +425,7 @@ def login():
             db.execute("INSERT OR REPLACE INTO users (username, password_hash, role) VALUES (?,?,?)",
                        (username, generate_password_hash(password), "superuser"))
             db.commit()
+            session.clear()
             session["logged_in"] = True
             session["username"]  = username
             session["role"]      = "superuser"
@@ -425,6 +436,7 @@ def login():
         # Normal login
         user = get_db().execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
         if user and check_password_hash(user["password_hash"], password):
+            session.clear()
             session["logged_in"] = True
             session["username"]  = username
             session["role"]      = user["role"]
@@ -452,6 +464,7 @@ def logout():
 
 
 @app.route("/api/login", methods=["POST"])
+@limiter.limit("10 per minute; 50 per hour")
 def api_login():
     """JSON login for the Node Kiosk inline modal."""
     data     = request.json or {}
@@ -459,6 +472,7 @@ def api_login():
     password = str(data.get("password", ""))
     user     = get_db().execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
     if user and check_password_hash(user["password_hash"], password):
+        session.clear()
         session["logged_in"] = True
         session["username"]  = username
         session["role"]      = user["role"]
@@ -3214,6 +3228,8 @@ def api_ami_perm_connect():
 
 @app.route("/api/sysinfo")
 def api_sysinfo():
+    if session.get("role") not in ("admin", "superuser"):
+        return jsonify({"error": "Admin access required"}), 403
     creds       = parse_manager_conf()
     ami_user    = creds.get("user") or "NOT CONFIGURED"
     ast_status  = get_asterisk_status()
@@ -3961,6 +3977,8 @@ def api_lookup(node):
 
 @app.route("/api/debug/nodedb")
 def api_debug_nodedb():
+    if session.get("role") not in ("admin", "superuser"):
+        return jsonify({"error": "Admin access required"}), 403
     astdb_status = {}
     for path in ASTDB_PATHS:
         astdb_status[path] = os.path.exists(path)
@@ -5134,6 +5152,8 @@ def api_id_create():
         return jsonify({"error": "Invalid node number"}), 400
     if not sound_path:
         return jsonify({"error": "Sound path is required"}), 400
+    if not re.match(r'^[a-zA-Z0-9/_\-]{1,256}$', sound_path):
+        return jsonify({"error": "sound_path contains invalid characters"}), 400
 
     db = get_db()
     db.execute(
@@ -5166,6 +5186,8 @@ def api_id_update(iid):
         return jsonify({"error": "Invalid node number"}), 400
     if not sound_path:
         return jsonify({"error": "Sound path is required"}), 400
+    if not re.match(r'^[a-zA-Z0-9/_\-]{1,256}$', sound_path):
+        return jsonify({"error": "sound_path contains invalid characters"}), 400
 
     db.execute(
         "UPDATE id_configs SET name=?, node=?, sound_path=?, interval_sec=?, "

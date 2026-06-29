@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="csrf-token" content="{{ csrf_token() }}">
 <title>ASL3-EZ | AllStarLink 3 Node Manager</title>
 <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
 <script>(function(){var t=localStorage.getItem('asl3ez-theme');if(t)document.documentElement.setAttribute('data-theme',t);})();</script>
@@ -1884,10 +1885,17 @@ function esc(s) {
     .replace(/'/g,'&#39;');
 }
 
+var _csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+function apiFetch(url, opts) {
+  opts = opts || {};
+  opts.headers = Object.assign({'X-CSRFToken': _csrfToken}, opts.headers || {});
+  return fetch(url, opts);
+}
+
 /* ── API ────────────────────────────────────────────────────────────────── */
 async function api(url, opts) {
   try {
-    var r = await fetch(url, opts);
+    var r = await apiFetch(url, opts);
     var text = await r.text();
     var data;
     try {
@@ -3686,7 +3694,7 @@ async function ksSave() {
 
 /* ── Role-based nav visibility ─────────────────────────────────────────────── */
 async function applyRoleNav() {
-  var r = await fetch('/api/session');
+  var r = await apiFetch('/api/session');
   if (!r.ok) return;
   var d = await r.json();
   var role = d.role || '';
@@ -3757,7 +3765,7 @@ async function loadAnnouncements() {
   var el = document.getElementById('ann-list');
   if (!el) return;
   try {
-    var r = await fetch('/api/announcements');
+    var r = await apiFetch('/api/announcements');
     var list = await r.json();
     if (!list.length) {
       el.innerHTML = '<span class="muted">No announcements yet. Upload one above.</span>';
@@ -3836,14 +3844,14 @@ function annEditHide(id) {
 
 async function annToggle(id) {
   try {
-    var r = await fetch('/api/announcements/' + id + '/toggle', { method: 'POST' });
+    var r = await apiFetch('/api/announcements/' + id + '/toggle', { method: 'POST' });
     if (r.ok) loadAnnouncements();
   } catch(e) {}
 }
 
 async function annTestPlay(id) {
   try {
-    var r = await fetch('/api/announcements/' + id + '/play', { method: 'POST' });
+    var r = await apiFetch('/api/announcements/' + id + '/play', { method: 'POST' });
     var d = await r.json();
     if (!r.ok) alert('Playback error: ' + (d.error || r.status));
     else alert('Playback triggered on node.');
@@ -3853,7 +3861,7 @@ async function annTestPlay(id) {
 async function annDelete(id, name) {
   if (!confirm('Delete announcement "' + name + '"?\nThis will remove the audio file.')) return;
   try {
-    var r = await fetch('/api/announcements/' + id, { method: 'DELETE' });
+    var r = await apiFetch('/api/announcements/' + id, { method: 'DELETE' });
     if (r.ok) loadAnnouncements();
     else { var d = await r.json(); alert('Error: ' + (d.error || r.status)); }
   } catch(e) { alert('Error: ' + e); }
@@ -3870,7 +3878,7 @@ async function annSaveEdit(id) {
     window_end:   document.getElementById('ane-wend-'   + id).value,
   };
   try {
-    var r = await fetch('/api/announcements/' + id, {
+    var r = await apiFetch('/api/announcements/' + id, {
       method: 'PATCH',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(body),
@@ -3954,7 +3962,7 @@ async function dtmfSend() {
   if (!seq) { res.innerHTML = '<span style="color:var(--warn)">Enter a sequence first.</span>'; return; }
   res.innerHTML = '<span class="muted">Sending...</span>';
   try {
-    var r = await fetch('/api/dtmf/send', {
+    var r = await apiFetch('/api/dtmf/send', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ node: node, digits: seq })
     });
@@ -3978,7 +3986,7 @@ async function dtmfCop(fn) {
   var node = document.getElementById('dtmf-node').value;
   res.innerHTML = '<span class="muted">Sending cop ' + fn + '...</span>';
   try {
-    var r = await fetch('/api/dtmf/cop', {
+    var r = await apiFetch('/api/dtmf/cop', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ node: node, function: fn })
     });
@@ -4026,7 +4034,7 @@ async function idUploadFile() {
   fd.append('file', fileEl.files[0]);
   fd.append('name', fileEl.files[0].name.replace(/\.[^.]+$/, ''));
   try {
-    var r = await fetch('/api/id/upload', { method: 'POST', body: fd });
+    var r = await apiFetch('/api/id/upload', { method: 'POST', body: fd });
     var d = await r.json();
     if (!r.ok) { status.innerHTML = '<span style="color:var(--danger)">' + esc(d.error||'Upload failed') + '</span>'; return; }
     document.getElementById('nid-path').value = d.path;
@@ -4056,7 +4064,7 @@ async function loadIdConfigs() {
   if (!el) return;
   clearTimeout(_nidPollTimer);
   try {
-    var r = await fetch('/api/id');
+    var r = await apiFetch('/api/id');
     var list = await r.json();
     if (!list.length) { el.innerHTML = '<span class="muted">No ID monitors yet. Add one above.</span>'; return; }
     el.innerHTML = list.map(nidCard).join('');
@@ -4123,12 +4131,12 @@ function nidEditShow(id) { var el = document.getElementById('nid-edit-' + id); i
 function nidEditHide(id) { var el = document.getElementById('nid-edit-' + id); if (el) el.style.display = 'none'; }
 
 async function nidToggle(id) {
-  await fetch('/api/id/' + id + '/toggle', { method: 'POST' });
+  await apiFetch('/api/id/' + id + '/toggle', { method: 'POST' });
   loadIdConfigs();
 }
 
 async function nidTestPlay(id) {
-  var r = await fetch('/api/id/' + id + '/play', { method: 'POST' });
+  var r = await apiFetch('/api/id/' + id + '/play', { method: 'POST' });
   var d = await r.json();
   if (!r.ok) alert('Playback error: ' + (d.error || r.status));
   else loadIdConfigs();
@@ -4136,7 +4144,7 @@ async function nidTestPlay(id) {
 
 async function nidDelete(id, name) {
   if (!confirm('Delete ID monitor "' + name + '"?')) return;
-  var r = await fetch('/api/id/' + id, { method: 'DELETE' });
+  var r = await apiFetch('/api/id/' + id, { method: 'DELETE' });
   if (r.ok) loadIdConfigs();
   else { var d = await r.json(); alert('Error: ' + (d.error || r.status)); }
 }
@@ -4151,7 +4159,7 @@ async function nidSaveEdit(id) {
     idle_delay_sec: parseInt(document.getElementById('nide-idle-' + id).value, 10),
     initial_id:     document.getElementById('nide-init-' + id).checked,
   };
-  var r = await fetch('/api/id/' + id, {
+  var r = await apiFetch('/api/id/' + id, {
     method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
   });
   var d = await r.json();
@@ -4172,7 +4180,7 @@ async function createIdConfig() {
   if (!body.name)       { res.innerHTML = '<span style="color:var(--danger)">Name is required.</span>'; return; }
   if (!body.sound_path) { res.innerHTML = '<span style="color:var(--danger)">Sound path is required. Upload a file or enter a path.</span>'; return; }
   res.innerHTML = '<span class="muted">Saving...</span>';
-  var r = await fetch('/api/id', {
+  var r = await apiFetch('/api/id', {
     method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
   });
   var d = await r.json();
@@ -4213,7 +4221,7 @@ async function runDiagnostics() {
   if (!local) { res.innerHTML = '<span style="color:var(--danger)">Select a local node first.</span>'; return; }
   res.innerHTML = '<span class="muted">Running tests...</span>';
   try {
-    var r = await fetch('/api/connectors/diagnose', {
+    var r = await apiFetch('/api/connectors/diagnose', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({local_node: local, target_node: target}),
@@ -4249,7 +4257,7 @@ async function loadConnectors() {
   var el = document.getElementById('sc-list');
   if (!el) return;
   try {
-    var r = await fetch('/api/connectors');
+    var r = await apiFetch('/api/connectors');
     var list = await r.json();
     if (!list.length) { el.innerHTML = '<span class="muted">No connectors yet. Add one above.</span>'; return; }
     el.innerHTML = list.map(connCard).join('');
@@ -4505,34 +4513,34 @@ function connEditShow(id) { var el = document.getElementById('sc-edit-' + id); i
 function connEditHide(id) { var el = document.getElementById('sc-edit-' + id); if (el) el.style.display='none'; }
 
 async function connToggle(id) {
-  await fetch('/api/connectors/' + id + '/toggle', { method: 'POST' });
+  await apiFetch('/api/connectors/' + id + '/toggle', { method: 'POST' });
   loadConnectors();
 }
 
 async function connConnect(id) {
-  var r = await fetch('/api/connectors/' + id + '/connect', { method: 'POST' });
+  var r = await apiFetch('/api/connectors/' + id + '/connect', { method: 'POST' });
   if (r.ok) loadConnectors();
   else { var d = await r.json(); alert('Error: ' + (d.error || r.status)); }
 }
 
 async function connDisconnect(id) {
-  var r = await fetch('/api/connectors/' + id + '/disconnect', { method: 'POST' });
+  var r = await apiFetch('/api/connectors/' + id + '/disconnect', { method: 'POST' });
   if (r.ok) loadConnectors();
   else { var d = await r.json(); alert('Disconnect error: ' + (d.error || r.status)); }
 }
 
 async function connReset(id) {
-  await fetch('/api/connectors/' + id + '/reset', { method: 'POST' });
+  await apiFetch('/api/connectors/' + id + '/reset', { method: 'POST' });
   loadConnectors();
 }
 
 async function connSyncState(id) {
   // Pull fresh connector data then cross-check against diagnostics
-  var r = await fetch('/api/connectors/' + id);
+  var r = await apiFetch('/api/connectors/' + id);
   if (!r.ok) return;
   var c = await r.json();
   // Run a quick diagnose to get actual lstats
-  var dr = await fetch('/api/connectors/diagnose', {
+  var dr = await apiFetch('/api/connectors/diagnose', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({local_node: c.local_node, target_node: c.target_node}),
@@ -4544,7 +4552,7 @@ async function connSyncState(id) {
   var nowConnected = linkTest && linkTest.detail.indexOf('currently connected') !== -1;
   if (c.state === 'connected' && !nowConnected) {
     if (confirm('DB says connected but Asterisk shows the link is gone. Reset state to Idle?')) {
-      await fetch('/api/connectors/' + id + '/reset', { method: 'POST' });
+      await apiFetch('/api/connectors/' + id + '/reset', { method: 'POST' });
       loadConnectors();
     }
   } else if (c.state !== 'connected' && nowConnected) {
@@ -4557,7 +4565,7 @@ async function connSyncState(id) {
 
 async function connDelete(id, name) {
   if (!confirm('Delete connector "' + name + '"?')) return;
-  var r = await fetch('/api/connectors/' + id, { method: 'DELETE' });
+  var r = await apiFetch('/api/connectors/' + id, { method: 'DELETE' });
   if (r.ok) loadConnectors();
   else { var d = await r.json(); alert('Error: ' + (d.error || r.status)); }
 }
@@ -4572,7 +4580,7 @@ async function connSaveEdit(id) {
     idle_limit_sec: parseInt(document.getElementById('sce-idle-'   + id).value, 10),
     settle_sec:     parseInt(document.getElementById('sce-settle-' + id).value, 10),
   }, sched);
-  var r = await fetch('/api/connectors/' + id, {
+  var r = await apiFetch('/api/connectors/' + id, {
     method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
   });
   var d = await r.json();
@@ -4593,7 +4601,7 @@ async function createConnector() {
   if (!body.name)        { res.innerHTML = '<span style="color:var(--danger)">Name is required.</span>'; return; }
   if (!body.target_node) { res.innerHTML = '<span style="color:var(--danger)">Target node is required.</span>'; return; }
   res.innerHTML = '<span class="muted">Saving...</span>';
-  var r = await fetch('/api/connectors', {
+  var r = await apiFetch('/api/connectors', {
     method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
   });
   var d = await r.json();
@@ -4631,7 +4639,7 @@ async function uploadAnnouncement() {
   fd.append('play_cmd',     playCmd);
 
   try {
-    var r = await fetch('/api/announcements', { method: 'POST', body: fd });
+    var r = await apiFetch('/api/announcements', { method: 'POST', body: fd });
     var d = await r.json();
     if (!r.ok) {
       res.innerHTML = '<span style="color:var(--danger)">' + esc(d.error || 'Upload failed') + '</span>';
