@@ -358,7 +358,6 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
         <button class="btn-icon" onclick="kioskLogout()">Logout</button>
       </div>
       <button class="btn-icon" id="kiosk-login-btn" onclick="openKioskLogin()" style="display:none">Login</button>
-      <button class="btn-icon" id="listen-btn" onclick="toggleListen()" title="Listen to node audio">&#9834; Listen</button>
       <button class="btn-icon" onclick="toggleFS()" title="Fullscreen">&#x26F6; Fullscreen</button>
       <a class="btn-icon" href="/asl3-ez-manager">&#8592; Manager</a>
       <audio id="node-audio" preload="none"></audio>
@@ -385,6 +384,10 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
         <div class="card-header">
           <span class="card-title">Connected Nodes</span>
           <span class="card-count" id="conn-count"></span>
+          <span style="margin-left:auto;display:flex;align-items:center;gap:6px">
+            <span id="listen-delay-note" style="font-size:0.65rem;color:var(--text2);font-style:italic;display:none">~1s delay</span>
+            <button class="btn-icon" id="listen-btn" onclick="toggleListen()" title="Stream live audio from this node — expect ~1 second delay">&#9834; Listen</button>
+          </span>
         </div>
         <div class="conn-form-bar" id="conn-form-bar">
           <input id="conn-form-node" type="text" placeholder="Node #" maxlength="7"
@@ -1257,6 +1260,8 @@ function _listenSetBtn(html, color, disabled) {
   btn.innerHTML = html;
   btn.style.color = color || '';
   btn.disabled = !!disabled;
+  var note = document.getElementById('listen-delay-note');
+  if (note) note.style.display = (color === 'var(--green)') ? '' : 'none';
 }
 
 function _startListen() {
