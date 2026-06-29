@@ -1730,8 +1730,8 @@ sudo asterisk -rx "module reload manager"</pre>
       </div>
       <div class="card-body" style="padding:0">
         <table class="tbl" id="users-table">
-          <thead><tr><th>Username</th><th>Role</th><th>Created</th><th>Actions</th></tr></thead>
-          <tbody id="users-tbody"><tr><td colspan="4" class="muted" style="padding:14px">Loading…</td></tr></tbody>
+          <thead><tr><th>Username</th><th>Role</th><th>Idle Timeout</th><th>Created</th><th>Actions</th></tr></thead>
+          <tbody id="users-tbody"><tr><td colspan="5" class="muted" style="padding:14px">Loading…</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -1764,6 +1764,13 @@ sudo asterisk -rx "module reload manager"</pre>
           <div>
             <label style="font-size:0.82rem;font-weight:600;display:block;margin-bottom:4px">Confirm Password</label>
             <input id="uf-password2" type="password" placeholder="repeat password" class="val-input" style="width:100%">
+          </div>
+        </div>
+        <div class="form-row" style="margin-bottom:14px">
+          <div>
+            <label style="font-size:0.82rem;font-weight:600;display:block;margin-bottom:4px">Idle Timeout (minutes)</label>
+            <input id="uf-idle-timeout" type="number" min="0" max="480" placeholder="Default (30 min)" class="val-input" style="width:100%">
+            <div style="font-size:0.75rem;color:var(--text2);margin-top:3px">Leave blank to use the global default &middot; 0 = never expire</div>
           </div>
         </div>
         <div style="display:flex;gap:8px">
@@ -4670,12 +4677,18 @@ async function loadUsers() {
                   :                          'rgba(63,185,80,.1);color:var(--green)';
     var roleBadge = '<span style="background:' + roleColor + ';padding:1px 7px;border-radius:3px;font-size:0.75rem;font-weight:600">' + esc(u.role) + '</span>';
     var created = u.created_at ? new Date(u.created_at + 'Z').toLocaleDateString() : '—';
+    var timeoutDisplay = u.session_idle_timeout === null || u.session_idle_timeout === undefined
+      ? '<span style="color:var(--text2);font-size:0.82rem">30 min (default)</span>'
+      : u.session_idle_timeout === 0
+        ? '<span style="color:var(--text2);font-size:0.82rem">Never</span>'
+        : '<span style="font-size:0.82rem">' + Math.round(u.session_idle_timeout / 60) + ' min</span>';
     return '<tr>'
       + '<td style="font-weight:600">' + esc(u.username) + '</td>'
       + '<td>' + roleBadge + '</td>'
+      + '<td>' + timeoutDisplay + '</td>'
       + '<td style="color:var(--text2);font-size:0.82rem">' + created + '</td>'
       + '<td><div class="btn-row">'
-      + '<button class="btn btn-sm" onclick="editUser(' + u.id + ',\'' + esc(u.username) + '\',\'' + esc(u.role) + '\')">Edit</button>'
+      + '<button class="btn btn-sm" onclick="editUser(' + u.id + ',\'' + esc(u.username) + '\',\'' + esc(u.role) + '\',' + (u.session_idle_timeout === null || u.session_idle_timeout === undefined ? 'null' : u.session_idle_timeout) + ')">Edit</button>'
       + '<button class="btn btn-warn btn-sm" onclick="deleteUser(' + u.id + ',\'' + esc(u.username) + '\')">Delete</button>'
       + '</div></td>'
       + '</tr>';
@@ -4685,28 +4698,38 @@ async function loadUsers() {
 function showCreateUserForm() {
   document.getElementById('user-form-card').style.display = '';
   document.getElementById('user-form-title').textContent = 'New User';
-  document.getElementById('uf-id').value       = '';
-  document.getElementById('uf-username').value = '';
-  document.getElementById('uf-username').disabled = false;
-  document.getElementById('uf-role').value     = 'user';
-  document.getElementById('uf-password').value = '';
-  document.getElementById('uf-password2').value = '';
+  document.getElementById('uf-id').value            = '';
+  document.getElementById('uf-username').value      = '';
+  document.getElementById('uf-username').disabled   = false;
+  document.getElementById('uf-role').value          = 'user';
+  document.getElementById('uf-password').value      = '';
+  document.getElementById('uf-password2').value     = '';
+  document.getElementById('uf-idle-timeout').value  = '';
   document.getElementById('uf-pw-label').textContent = 'Password';
-  document.getElementById('uf-status').textContent = '';
+  document.getElementById('uf-status').textContent  = '';
   document.getElementById('user-form-card').scrollIntoView({behavior:'smooth'});
 }
 
-function editUser(id, username, role) {
+function editUser(id, username, role, idleTimeoutSecs) {
   document.getElementById('user-form-card').style.display = '';
   document.getElementById('user-form-title').textContent = 'Edit: ' + username;
-  document.getElementById('uf-id').value       = id;
-  document.getElementById('uf-username').value = username;
-  document.getElementById('uf-username').disabled = true;
-  document.getElementById('uf-role').value     = role;
-  document.getElementById('uf-password').value = '';
-  document.getElementById('uf-password2').value = '';
+  document.getElementById('uf-id').value            = id;
+  document.getElementById('uf-username').value      = username;
+  document.getElementById('uf-username').disabled   = true;
+  document.getElementById('uf-role').value          = role;
+  document.getElementById('uf-password').value      = '';
+  document.getElementById('uf-password2').value     = '';
   document.getElementById('uf-pw-label').textContent = 'New Password (leave blank to keep current)';
-  document.getElementById('uf-status').textContent = '';
+  document.getElementById('uf-status').textContent  = '';
+  /* Convert stored seconds → minutes for the input; blank = global default */
+  var inp = document.getElementById('uf-idle-timeout');
+  if (idleTimeoutSecs === null || idleTimeoutSecs === undefined) {
+    inp.value = '';
+  } else if (idleTimeoutSecs === 0) {
+    inp.value = 0;
+  } else {
+    inp.value = Math.round(idleTimeoutSecs / 60);
+  }
   document.getElementById('user-form-card').scrollIntoView({behavior:'smooth'});
 }
 
@@ -4729,6 +4752,19 @@ async function saveUser() {
   var payload = {role: role};
   if (!id) payload.username = uname;
   if (pw) payload.password = pw;
+
+  var idleVal = document.getElementById('uf-idle-timeout').value.trim();
+  if (idleVal === '') {
+    payload.session_idle_timeout = null;          // restore global default
+  } else {
+    var mins = parseInt(idleVal, 10);
+    if (isNaN(mins) || mins < 0 || mins > 480) {
+      st.style.color = 'var(--red)';
+      st.textContent = 'Idle timeout must be 0–480 minutes (or blank for default).';
+      return;
+    }
+    payload.session_idle_timeout = mins * 60;     // store as seconds; 0 = never
+  }
 
   var url    = id ? '/api/users/' + id : '/api/users';
   var method = id ? 'PUT' : 'POST';

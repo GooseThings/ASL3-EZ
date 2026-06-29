@@ -309,6 +309,13 @@ def get_db():
         conn.execute("UPDATE users SET role='user'      WHERE role='kiosk'")
         conn.execute("INSERT OR IGNORE INTO settings (key,value) VALUES ('roles_v3_migrated','1')")
         conn.commit()
+    # Per-user session idle timeout column (NULL = use global SESSION_IDLE_TIMEOUT)
+    try:
+        conn.execute("ALTER TABLE users ADD COLUMN session_idle_timeout INTEGER DEFAULT NULL")
+        conn.commit()
+    except Exception:
+        pass  # column already exists
+
     # Seed kiosk defaults
     for _k, _v in [
         ('kiosk_idle_timeout_sec', '600'),
@@ -373,12 +380,14 @@ def check_auth():
     logged_in = session.get('logged_in')
     role      = session.get('role', '')
 
-    # Idle session timeout: expire sessions inactive for > SESSION_IDLE_TIMEOUT seconds.
-    # last_active is updated on every non-public request so any API poll resets it.
+    # Idle session timeout: expire sessions inactive for too long.
+    # idle_timeout is stored in the session at login (per-user value or global default).
+    # 0 means never expire.
     if logged_in:
-        now         = time.time()
-        last_active = session.get('last_active', now)
-        if now - last_active > SESSION_IDLE_TIMEOUT:
+        now          = time.time()
+        last_active  = session.get('last_active', now)
+        idle_timeout = session.get('idle_timeout', SESSION_IDLE_TIMEOUT)
+        if idle_timeout and now - last_active > idle_timeout:
             session.clear()
             logged_in = False
             if request.path.startswith('/api/'):
@@ -440,11 +449,13 @@ def login():
             db.execute("INSERT OR REPLACE INTO users (username, password_hash, role) VALUES (?,?,?)",
                        (username, generate_password_hash(password), "superuser"))
             db.commit()
+            new_user = db.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
             session.clear()
-            session["logged_in"] = True
-            session["username"]  = username
-            session["role"]      = "superuser"
-            session["user_id"]   = db.execute("SELECT id FROM users WHERE username=?", (username,)).fetchone()["id"]
+            session["logged_in"]    = True
+            session["username"]     = username
+            session["role"]         = "superuser"
+            session["user_id"]      = new_user["id"]
+            session["idle_timeout"] = new_user["session_idle_timeout"] if new_user["session_idle_timeout"] is not None else SESSION_IDLE_TIMEOUT
             log("INFO", f"[AUTH] Initial account created for '{username}'")
             return redirect(url_for('index'))
 
@@ -452,10 +463,11 @@ def login():
         user = get_db().execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
         if user and check_password_hash(user["password_hash"], password):
             session.clear()
-            session["logged_in"] = True
-            session["username"]  = username
-            session["role"]      = user["role"]
-            session["user_id"]   = user["id"]
+            session["logged_in"]    = True
+            session["username"]     = username
+            session["role"]         = user["role"]
+            session["user_id"]      = user["id"]
+            session["idle_timeout"] = user["session_idle_timeout"] if user["session_idle_timeout"] is not None else SESSION_IDLE_TIMEOUT
             log("INFO", f"[AUTH] Login: '{username}' (role={user['role']})")
             if user["role"] == "user":
                 return redirect(url_for('status_board'))
@@ -490,8 +502,9 @@ def api_login():
         session.clear()
         session["logged_in"] = True
         session["username"]  = username
-        session["role"]      = user["role"]
-        session["user_id"]   = user["id"]
+        session["role"]         = user["role"]
+        session["user_id"]      = user["id"]
+        session["idle_timeout"] = user["session_idle_timeout"] if user["session_idle_timeout"] is not None else SESSION_IDLE_TIMEOUT
         log("INFO", f"[AUTH] API Login: '{username}' (role={user['role']})")
         # session.clear() above invalidated the CSRF token that was baked into
         # the already-loaded status page meta tag.  Return the fresh token so
@@ -2918,7 +2931,7 @@ def api_alerts_test():
 @app.route("/api/users")
 def api_users_list():
     rows = get_db().execute(
-        "SELECT id, username, role, created_at FROM users ORDER BY role DESC, username"
+        "SELECT id, username, role, created_at, session_idle_timeout FROM users ORDER BY role DESC, username"
     ).fetchall()
     return jsonify({"users": [dict(r) for r in rows]})
 
@@ -2979,6 +2992,20 @@ def api_users_update(uid):
         if len(pw) < 8:
             return jsonify({"error": "Password must be at least 8 characters."}), 400
         updates.append("password_hash=?"); params.append(generate_password_hash(pw))
+    if "session_idle_timeout" in data:
+        raw = data["session_idle_timeout"]
+        if raw is None:
+            # None/null → restore global default
+            updates.append("session_idle_timeout=?"); params.append(None)
+        else:
+            try:
+                secs = int(raw)
+                if secs < 0:
+                    return jsonify({"error": "Idle timeout must be 0 (never) or a positive number of seconds"}), 400
+                # 0 → never expire; positive → custom timeout in seconds
+                updates.append("session_idle_timeout=?"); params.append(secs)
+            except (TypeError, ValueError):
+                return jsonify({"error": "Idle timeout must be a number"}), 400
     if not updates:
         return jsonify({"ok": True, "note": "Nothing to update"})
     params.append(uid)
