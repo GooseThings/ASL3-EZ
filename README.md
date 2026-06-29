@@ -285,4 +285,4 @@ ASL3-EZ/
 
 GPL-2.0 — use freely, at your own risk. Not affiliated with AllStarLink, Inc.
 
-*73 de WE8CHZ*
+*73 de N8GMZ*
