@@ -3282,7 +3282,7 @@ def api_status_board():
             "stale":     cached.get("stale", True),
         })
 
-    return jsonify({
+    resp = jsonify({
         "nodes":            node_data,
         "asterisk_active":  ast_status["active"],
         "asterisk_version": ast_status["version"],
@@ -3292,6 +3292,8 @@ def api_status_board():
         "disk":             get_disk_usage(),
         "ami_connected":    _ami_connected,
     })
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @app.route("/api/status/weather")
@@ -3333,12 +3335,14 @@ def api_status_activity():
         global_nodes = list(_global_nodes_cache[:10])
         global_ts    = _global_nodes_ts
 
-    return jsonify({
+    resp = jsonify({
         "recently_keyed":    keyed[:10],
         "global_nodes":      global_nodes,
         "global_updated":    global_ts,
         "pin_duration_min":  pin_min,
     })
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @app.route("/api/status/connect", methods=["POST"])

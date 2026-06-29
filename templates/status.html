@@ -800,7 +800,7 @@ async function refreshWeather() {
 /* ── Board data ── */
 async function refreshBoard() {
   try {
-    var r = await fetch('/api/status/board');
+    var r = await fetch('/api/status/board', {cache: 'no-store'});
     if (!r.ok) return;
     var data = await r.json();
 
@@ -926,7 +926,7 @@ async function refreshBoard() {
 /* ── Activity feed + map ── */
 async function refreshActivity() {
   try {
-    var r = await fetch('/api/status/activity');
+    var r = await fetch('/api/status/activity', {cache: 'no-store'});
     if (!r.ok) return;
     var data = await r.json();
 
