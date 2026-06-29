@@ -1242,7 +1242,6 @@ async function favDisconnect(localNode, remoteNode, btn) {
 
 /* ── Audio listen ── */
 var _listenActive = false;
-var _listenTimeout = null;
 
 function toggleListen() {
   if (_listenActive) {
@@ -1271,9 +1270,8 @@ function _startListen() {
   _listenSetBtn('... Connecting', 'var(--text2)', true);
 
   /* Clear any previous listeners */
-  audio.oncanplay = null;
-  audio.onerror   = null;
-  if (_listenTimeout) { clearTimeout(_listenTimeout); _listenTimeout = null; }
+  audio.onloadstart = null;
+  audio.onerror     = null;
 
   /* Pre-flight check: surface backend errors before touching <audio> */
   fetch('/api/audio/check/' + node)
@@ -1293,11 +1291,13 @@ function _startListen() {
 }
 
 function _doStartListen(audio, node) {
-  audio.oncanplay = function() {
-    if (_listenTimeout) { clearTimeout(_listenTimeout); _listenTimeout = null; }
+  /* loadstart fires as soon as the browser opens the HTTP connection —
+     the stream is live even if the node is silent. Audio plays
+     automatically whenever someone transmits. */
+  audio.onloadstart = function() {
     _listenActive = true;
     _listenSetBtn('&#9646;&#9646; Mute', 'var(--green)', false);
-    sbToast('Listening to node ' + node, true);
+    sbToast('Monitoring node ' + node + ' — audio plays when active', true);
   };
 
   audio.onerror = function() {
@@ -1306,25 +1306,12 @@ function _doStartListen(audio, node) {
     var msg   = audio.error ? audio.error.message : '';
     _listenSetBtn('&#9834; Listen', '', false);
     _listenActive = false;
-    if (_listenTimeout) { clearTimeout(_listenTimeout); _listenTimeout = null; }
     sbToast('Audio error: ' + code + (msg ? ' — ' + msg : ''), false);
   };
-
-  /* 20-second timeout: if canplay hasn't fired, something is wrong */
-  _listenTimeout = setTimeout(function() {
-    if (!_listenActive) {
-      audio.pause();
-      audio.src = '';
-      _listenSetBtn('&#9834; Listen', '', false);
-      sbToast('Timed out waiting for audio stream', false);
-    }
-  }, 20000);
 
   audio.src = '/api/audio/stream/' + node;
   audio.load();
   audio.play().catch(function(e) {
-    /* Autoplay policy or other play() rejection */
-    if (_listenTimeout) { clearTimeout(_listenTimeout); _listenTimeout = null; }
     _listenSetBtn('&#9834; Listen', '', false);
     _listenActive = false;
     sbToast('Playback blocked: ' + e.message, false);
@@ -1336,9 +1323,8 @@ function _stopListen() {
   var audio = document.getElementById('node-audio');
   var node  = (window._lastBoardNodes && window._lastBoardNodes[0])
               ? window._lastBoardNodes[0].node : '';
-  if (_listenTimeout) { clearTimeout(_listenTimeout); _listenTimeout = null; }
-  audio.oncanplay = null;
-  audio.onerror   = null;
+  audio.onloadstart = null;
+  audio.onerror     = null;
   audio.pause();
   audio.src = '';
   _listenActive = false;
