@@ -3861,6 +3861,7 @@ def _start_broadcast(node):
         '-fflags', '+nobuffer',
         '-f', 's16le', '-ar', '8000', '-ac', '1', '-channel_layout', 'mono',
         '-i', 'pipe:0',
+        '-ar', '48000',        # resample to Opus native rate before encoding
         '-c:a', 'libopus', '-b:a', '24k',
         '-frame_duration', '20',
         '-application', 'audio',

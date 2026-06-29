@@ -1454,8 +1454,8 @@ var _listenObjURL    = null;   // MediaSource blob URL pending revoke
 var _listenRenewTimer= null;   // safety-valve reconnect
 
 /* MSE live-edge tuning */
-var _LISTEN_CATCHUP_S  = 2.5;          // jump to live if we lag > this many seconds
-var _LISTEN_KEEPBUF_S  = 8;            // retain this many seconds of buffer behind playhead
+var _LISTEN_CATCHUP_S  = 0.5;             // jump to live if we lag > this many seconds
+var _LISTEN_KEEPBUF_S  = 1.0;            // retain this many seconds of buffer behind playhead
 var _LISTEN_RENEW_MS   = 30 * 60 * 1000; // hard reconnect every 30 min (safety valve)
 
 function toggleListen() {
@@ -1569,7 +1569,7 @@ function _doStartListenMSE(audio, node) {
         var liveEdge = sb.buffered.end(sb.buffered.length - 1);
         var lag = liveEdge - audio.currentTime;
         if (lag > _LISTEN_CATCHUP_S) {
-          audio.currentTime = liveEdge - 0.3;
+          audio.currentTime = liveEdge - 0.1;
           console.log('[AUDIO] live-edge skip: lag=' + lag.toFixed(2) + 's');
         }
       }
