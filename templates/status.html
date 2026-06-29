@@ -1451,12 +1451,17 @@ var _listenActive    = false;
 var _listenNode      = '';
 var _listenCtrl      = null;   // AbortController for in-flight fetch
 var _listenObjURL    = null;   // MediaSource blob URL pending revoke
-var _listenRenewTimer= null;   // safety-valve reconnect
+var _listenRenewTimer= null;   // safety-valve reconnect (30 min)
+var _listenRateTimer = null;   // rate-control interval
 
-/* MSE live-edge tuning */
-var _LISTEN_CATCHUP_S  = 0.5;             // jump to live if we lag > this many seconds
-var _LISTEN_KEEPBUF_S  = 1.0;            // retain this many seconds of buffer behind playhead
-var _LISTEN_RENEW_MS   = 30 * 60 * 1000; // hard reconnect every 30 min (safety valve)
+/* MSE live-edge tuning.
+   Instead of jumping, we speed up playback slightly when drifting behind.
+   Chrome uses pitch-preserving WSOLA for playbackRate, so 1.06x sounds
+   like the same audio just very slightly faster — inaudible on voice.
+   A hard jump is kept only as a last resort for extreme stalls (>2s). */
+var _LISTEN_KEEPBUF_S  = 1.0;            // trim buffer older than this behind playhead
+var _LISTEN_RATE_MS    = 150;            // how often (ms) to run the rate controller
+var _LISTEN_RENEW_MS   = 30 * 60 * 1000;
 
 function toggleListen() {
   if (_listenActive) { _stopListen(); } else { _startListen(); }
@@ -1561,25 +1566,42 @@ function _doStartListenMSE(audio, node) {
 
     sb.addEventListener('updateend', function() {
       cleaning = false;
-
-      /* Live-edge enforcement: if we have more than _LISTEN_CATCHUP_S of
-         unplayed audio buffered ahead, skip playback forward to near-live.
-         This prevents the delay from growing if Chrome stalls briefly. */
-      if (sb.buffered.length > 0) {
-        var liveEdge = sb.buffered.end(sb.buffered.length - 1);
-        var lag = liveEdge - audio.currentTime;
-        if (lag > _LISTEN_CATCHUP_S) {
-          audio.currentTime = liveEdge - 0.1;
-          console.log('[AUDIO] live-edge skip: lag=' + lag.toFixed(2) + 's');
-        }
-      }
-
       appendNext();
     });
 
     sb.addEventListener('error', function(e) {
       console.error('[AUDIO] SourceBuffer error', e);
     });
+
+    /* Rate controller: runs every _LISTEN_RATE_MS and nudges playbackRate
+       to gently chase the live edge without an audible jump.
+       Chrome uses pitch-preserving WSOLA so the speedup is transparent.
+         lag < 0.15s  → 1.00× (at live edge, normal speed)
+         0.15–0.4s    → 1.05× (5% faster, imperceptible)
+         0.4–2.0s     → 1.12× (12% faster, barely noticeable)
+         > 2.0s       → hard jump (network stall recovery only) */
+    if (_listenRateTimer) clearInterval(_listenRateTimer);
+    _listenRateTimer = setInterval(function() {
+      if (!_listenActive || !sb || sb.updating || !sb.buffered.length) return;
+      var liveEdge = sb.buffered.end(sb.buffered.length - 1);
+      var lag      = liveEdge - audio.currentTime;
+      var rate;
+      if (lag > 2.0) {
+        audio.currentTime = liveEdge - 0.1;
+        rate = 1.0;
+        console.log('[AUDIO] emergency jump: lag=' + lag.toFixed(3) + 's');
+      } else if (lag > 0.4) {
+        rate = 1.12;
+      } else if (lag > 0.15) {
+        rate = 1.05;
+      } else {
+        rate = 1.0;
+      }
+      if (audio.playbackRate !== rate) {
+        audio.playbackRate = rate;
+        if (rate !== 1.0) console.log('[AUDIO] rate=' + rate + ' lag=' + lag.toFixed(3) + 's');
+      }
+    }, _LISTEN_RATE_MS);
 
     /* Fetch the stream and pump chunks into the SourceBuffer */
     apiFetch('/api/audio/stream/' + node, { signal: ctrl.signal })
@@ -1689,11 +1711,13 @@ function _doStartListenFallback(audio, node) {
 }
 
 function _stopListen() {
-  if (_listenRenewTimer) { clearTimeout(_listenRenewTimer); _listenRenewTimer = null; }
+  if (_listenRenewTimer) { clearTimeout(_listenRenewTimer);  _listenRenewTimer = null; }
+  if (_listenRateTimer)  { clearInterval(_listenRateTimer);  _listenRateTimer  = null; }
   if (_listenCtrl) { _listenCtrl.abort(); _listenCtrl = null; }
   if (_listenObjURL) { URL.revokeObjectURL(_listenObjURL); _listenObjURL = null; }
 
   var audio = document.getElementById('node-audio');
+  audio.playbackRate = 1.0;
   var node  = _listenNode || ((window._lastBoardNodes && window._lastBoardNodes[0])
               ? window._lastBoardNodes[0].node : '');
   audio.onloadstart = null;
