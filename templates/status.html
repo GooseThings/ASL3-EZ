@@ -1424,22 +1424,19 @@ async function removeFavorite(node) {
 }
 
 /* ── Audio listen ── */
-var _listenActive     = false;
-var _listenNode       = '';
-var _listenRenewTimer = null;
+var _listenActive    = false;
+var _listenNode      = '';
+var _listenCtrl      = null;   // AbortController for in-flight fetch
+var _listenObjURL    = null;   // MediaSource blob URL pending revoke
+var _listenRenewTimer= null;   // safety-valve reconnect
 
-/* Browsers accumulate the HTTP stream in memory forever when using a plain
-   <audio src>.  After ~150 s of buffered-ahead audio Chrome pauses fetching;
-   when it eventually resumes it may be out of sync.  We reconnect every
-   RENEW_MS milliseconds to stay well under that ceiling. */
-var _LISTEN_RENEW_MS = 8 * 60 * 1000;  // 8 minutes
+/* MSE live-edge tuning */
+var _LISTEN_CATCHUP_S  = 2.5;          // jump to live if we lag > this many seconds
+var _LISTEN_KEEPBUF_S  = 8;            // retain this many seconds of buffer behind playhead
+var _LISTEN_RENEW_MS   = 30 * 60 * 1000; // hard reconnect every 30 min (safety valve)
 
 function toggleListen() {
-  if (_listenActive) {
-    _stopListen();
-  } else {
-    _startListen();
-  }
+  if (_listenActive) { _stopListen(); } else { _startListen(); }
 }
 
 function _listenSetBtn(html, color, disabled) {
@@ -1458,15 +1455,10 @@ function _startListen() {
   if (!node) { sbToast('No local node found', false); return; }
 
   var audio = document.getElementById('node-audio');
-
-  /* Immediate feedback — user knows something is happening */
   _listenSetBtn('... Connecting', 'var(--text2)', true);
-
-  /* Clear any previous listeners */
   audio.onloadstart = null;
   audio.onerror     = null;
 
-  /* Pre-flight check: surface backend errors before touching <audio> */
   apiFetch('/api/audio/check/' + node)
     .then(function(r) { return r.json(); })
     .then(function(d) {
@@ -1485,79 +1477,199 @@ function _startListen() {
 
 function _doStartListen(audio, node) {
   _listenNode = node;
-
-  /* Cancel any pending renewal timer from a prior session */
   if (_listenRenewTimer) { clearTimeout(_listenRenewTimer); _listenRenewTimer = null; }
+  if (_listenCtrl) { _listenCtrl.abort(); _listenCtrl = null; }
+  if (_listenObjURL) { URL.revokeObjectURL(_listenObjURL); _listenObjURL = null; }
 
-  /* loadstart fires as soon as the browser opens the HTTP connection —
-     the stream is live even if the node is silent. */
+  /* Use MediaSource Extensions when available (Chrome/Firefox/Edge).
+     MSE lets us control the buffer directly and jump to the live edge,
+     eliminating the 5–30 s startup delay that the plain <audio src>
+     element builds up before it decides to start playback. */
+  if (typeof MediaSource !== 'undefined' &&
+      MediaSource.isTypeSupported('audio/webm; codecs=opus')) {
+    _doStartListenMSE(audio, node);
+  } else {
+    _doStartListenFallback(audio, node);
+  }
+}
+
+function _doStartListenMSE(audio, node) {
+  var ctrl = new AbortController();
+  _listenCtrl = ctrl;
+
+  var ms  = new MediaSource();
+  var url = URL.createObjectURL(ms);
+  _listenObjURL = url;
+
+  /* pending: Uint8Arrays waiting to be appended to the SourceBuffer.
+     cleaning: true while a sb.remove() is in progress (also blocks appendBuffer). */
+  var pending  = [];
+  var cleaning = false;
+
+  function appendNext() {
+    if (!sb || sb.updating || cleaning) return;
+
+    /* Remove old data behind the playhead to prevent unbounded memory use */
+    if (sb.buffered.length > 0 && audio.currentTime > _LISTEN_KEEPBUF_S + 1) {
+      var cut = audio.currentTime - _LISTEN_KEEPBUF_S;
+      var s0  = sb.buffered.start(0);
+      if (cut > s0 + 0.1) {
+        cleaning = true;
+        try { sb.remove(s0, cut); } catch(e) { cleaning = false; }
+        return;
+      }
+    }
+
+    if (pending.length === 0) return;
+    var chunk = pending.shift();
+    try { sb.appendBuffer(chunk); }
+    catch(e) { console.error('[AUDIO] appendBuffer:', e.name, e.message); }
+  }
+
+  var sb = null;
+
+  ms.addEventListener('sourceopen', function() {
+    URL.revokeObjectURL(url);
+    _listenObjURL = null;
+
+    try { sb = ms.addSourceBuffer('audio/webm; codecs=opus'); }
+    catch(e) { sbToast('Codec not supported: ' + e.message, false); return; }
+    sb.mode = 'sequence';
+
+    sb.addEventListener('updateend', function() {
+      cleaning = false;
+
+      /* Live-edge enforcement: if we have more than _LISTEN_CATCHUP_S of
+         unplayed audio buffered ahead, skip playback forward to near-live.
+         This prevents the delay from growing if Chrome stalls briefly. */
+      if (sb.buffered.length > 0) {
+        var liveEdge = sb.buffered.end(sb.buffered.length - 1);
+        var lag = liveEdge - audio.currentTime;
+        if (lag > _LISTEN_CATCHUP_S) {
+          audio.currentTime = liveEdge - 0.3;
+          console.log('[AUDIO] live-edge skip: lag=' + lag.toFixed(2) + 's');
+        }
+      }
+
+      appendNext();
+    });
+
+    sb.addEventListener('error', function(e) {
+      console.error('[AUDIO] SourceBuffer error', e);
+    });
+
+    /* Fetch the stream and pump chunks into the SourceBuffer */
+    apiFetch('/api/audio/stream/' + node, { signal: ctrl.signal })
+      .then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+
+        _listenActive = true;
+        _listenSetBtn('&#9646;&#9646; Mute', 'var(--green)', false);
+        sbToast('Monitoring node ' + node + ' — audio plays when active', true);
+        console.log('[AUDIO] MSE connected to node', node, new Date().toISOString());
+
+        var reader = r.body.getReader();
+        function pump() {
+          if (ctrl.signal.aborted) return;
+          reader.read().then(function(result) {
+            if (result.done || ctrl.signal.aborted) {
+              try { ms.endOfStream(); } catch(e) {}
+              return;
+            }
+            pending.push(result.value);
+            appendNext();
+            pump();
+          }).catch(function(e) {
+            if (e.name === 'AbortError') return;
+            console.error('[AUDIO] stream read error:', e.message);
+            if (_listenActive) {
+              _listenActive = false;
+              _listenSetBtn('&#9834; Listen', '', false);
+              sbToast('Stream dropped — click Listen to reconnect', false);
+            }
+          });
+        }
+        pump();
+      })
+      .catch(function(e) {
+        if (e.name === 'AbortError') return;
+        _listenActive = false;
+        _listenSetBtn('&#9834; Listen', '', false);
+        sbToast('Audio stream error: ' + e.message, false);
+      });
+  });
+
+  audio.onerror = function() {
+    if (ctrl.signal.aborted) return;
+    var codes = {1:'ABORTED',2:'NETWORK',3:'DECODE',4:'FORMAT'};
+    var code = audio.error ? (codes[audio.error.code]||'ERR_'+audio.error.code) : 'unknown';
+    var msg  = audio.error ? audio.error.message : '';
+    console.error('[AUDIO] error', code, msg,
+                  'networkState='+audio.networkState, 'readyState='+audio.readyState);
+    _listenActive = false;
+    _listenSetBtn('&#9834; Listen', '', false);
+    sbToast('Audio error: ' + code + (msg ? ' — ' + msg : ''), false);
+  };
+
+  audio.src = url;
+  audio.play().catch(function(e) {
+    if (ctrl.signal.aborted) return;
+    console.error('[AUDIO] play() rejected:', e.name, e.message);
+    _listenActive = false;
+    _listenSetBtn('&#9834; Listen', '', false);
+    sbToast('Playback blocked: ' + e.message, false);
+  });
+
+  /* Safety valve: force a clean reconnect every 30 minutes */
+  _listenRenewTimer = setTimeout(function() {
+    if (!_listenActive) return;
+    console.log('[AUDIO] 30-min safety reconnect');
+    _stopListen();
+    setTimeout(function() { _startListen(); }, 500);
+  }, _LISTEN_RENEW_MS);
+}
+
+function _doStartListenFallback(audio, node) {
+  /* Plain <audio src> for browsers without MSE/WebM support (e.g., Safari).
+     High-latency (browser buffers aggressively) but functional. */
   audio.onloadstart = function() {
     _listenActive = true;
     _listenSetBtn('&#9646;&#9646; Mute', 'var(--green)', false);
     sbToast('Monitoring node ' + node + ' — audio plays when active', true);
-    console.log('[AUDIO] stream connected to node', node,
-                'at', new Date().toISOString());
+    console.log('[AUDIO] fallback src connected to node', node);
   };
-
   audio.onerror = function() {
-    var codes = {1:'ABORTED', 2:'NETWORK', 3:'DECODE', 4:'FORMAT'};
-    var code  = audio.error ? (codes[audio.error.code] || ('ERR_' + audio.error.code)) : 'unknown';
-    var msg   = audio.error ? audio.error.message : '';
-    console.error('[AUDIO] error', code, msg,
-                  'networkState=' + audio.networkState,
-                  'readyState='   + audio.readyState);
-    _listenSetBtn('&#9834; Listen', '', false);
+    var codes = {1:'ABORTED',2:'NETWORK',3:'DECODE',4:'FORMAT'};
+    var code = audio.error ? (codes[audio.error.code]||'ERR_'+audio.error.code) : 'unknown';
     _listenActive = false;
-    sbToast('Audio error: ' + code + (msg ? ' — ' + msg : ''), false);
-  };
-
-  /* Extra diagnostic events (console only, no toasts) */
-  audio.onstalled = function() {
-    console.warn('[AUDIO] stalled — buffered:', _audioBufferedSeconds(audio));
-  };
-  audio.onwaiting = function() {
-    console.warn('[AUDIO] waiting — buffered:', _audioBufferedSeconds(audio));
+    _listenSetBtn('&#9834; Listen', '', false);
+    sbToast('Audio error: ' + code, false);
   };
   audio.onended = function() {
-    console.warn('[AUDIO] stream ended unexpectedly');
-    _listenSetBtn('&#9834; Listen', '', false);
     _listenActive = false;
-    sbToast('Audio stream ended — click Listen to reconnect', false);
+    _listenSetBtn('&#9834; Listen', '', false);
+    sbToast('Stream ended — click Listen to reconnect', false);
   };
-
   audio.src = '/api/audio/stream/' + node;
   audio.load();
   audio.play().catch(function(e) {
-    console.error('[AUDIO] play() rejected:', e.name, e.message);
-    _listenSetBtn('&#9834; Listen', '', false);
     _listenActive = false;
+    _listenSetBtn('&#9834; Listen', '', false);
     sbToast('Playback blocked: ' + e.message, false);
     audio.src = '';
   });
-
-  /* Schedule a silent reconnect before the browser buffer ceiling is hit.
-     The old HTTP connection is torn down, a new one opens, and the user
-     hears a brief gap (~0.5 s) but never an outright dropout. */
   _listenRenewTimer = setTimeout(function() {
     if (!_listenActive) return;
-    console.log('[AUDIO] scheduled reconnect (buffer renewal) for node', node);
-    audio.pause();
-    audio.src = '';
-    audio.load();
-    /* Brief pause lets the server close its generator cleanly */
-    setTimeout(function() { _doStartListen(audio, node); }, 500);
-  }, _LISTEN_RENEW_MS);
-}
-
-function _audioBufferedSeconds(audio) {
-  try {
-    var b = audio.buffered;
-    return b.length ? (b.end(b.length - 1) - b.start(0)).toFixed(1) + 's' : '0s';
-  } catch(e) { return '?'; }
+    audio.pause(); audio.src = ''; audio.load();
+    setTimeout(function() { _doStartListenFallback(audio, node); }, 500);
+  }, 8 * 60 * 1000);
 }
 
 function _stopListen() {
   if (_listenRenewTimer) { clearTimeout(_listenRenewTimer); _listenRenewTimer = null; }
+  if (_listenCtrl) { _listenCtrl.abort(); _listenCtrl = null; }
+  if (_listenObjURL) { URL.revokeObjectURL(_listenObjURL); _listenObjURL = null; }
+
   var audio = document.getElementById('node-audio');
   var node  = _listenNode || ((window._lastBoardNodes && window._lastBoardNodes[0])
               ? window._lastBoardNodes[0].node : '');
@@ -1565,6 +1677,7 @@ function _stopListen() {
   audio.onerror     = null;
   audio.pause();
   audio.src = '';
+  audio.load();
   _listenActive = false;
   _listenNode   = '';
   _listenSetBtn('&#9834; Listen', '', false);

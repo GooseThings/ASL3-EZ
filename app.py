@@ -3798,7 +3798,7 @@ def _start_broadcast(node):
         '-frame_duration', '20',
         '-application', 'audio',
         '-f', 'webm',
-        '-cluster_time_limit', '200',
+        '-cluster_time_limit', '50',
         'pipe:1',
     ]
     log('DEBUG', f'[AUDIO] launching ffmpeg: {" ".join(ffmpeg_cmd)}')
