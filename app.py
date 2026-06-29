@@ -3394,9 +3394,10 @@ def api_status_connect():
         return jsonify({"error": "Invalid local_node"}), 400
     if not re.match(r'^\d{4,7}$', remote_node):
         return jsonify({"error": "Invalid remote_node"}), 400
-    # Only admin/superuser may mark a connection as permanent (no idle timeout)
     caller_role = session.get('role', '')
-    permanent   = bool(data.get("permanent", False)) and caller_role in ('admin', 'superuser')
+    # Admin/superuser connections are always permanent (never idle-disconnected).
+    # Kiosk (user) connections are always transient regardless of what is sent.
+    permanent   = caller_role in ('admin', 'superuser')
     monitor     = bool(data.get("monitor", False))
     ilink_mode  = "2" if monitor else "3"   # 2=monitor (listen-only), 3=transceive
     try:
