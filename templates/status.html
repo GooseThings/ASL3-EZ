@@ -794,8 +794,8 @@ async function refreshWeather() {
     if (!r.ok) return;
     var w = await r.json();
     var bar = document.getElementById('weather-bar');
-    if (w.error) {
-      bar.innerHTML = '<span class="weather-loading">' + esc(w.error) + '</span>';
+    if (w.error && !w.temp_f && !w.temp_c) {
+      bar.innerHTML = '<span class="weather-loading">Weather unavailable</span>';
       return;
     }
     var temp = '';
@@ -804,6 +804,7 @@ async function refreshWeather() {
     else if (w.temp_c) temp = w.temp_c + '°C';
 
     var html = '<span class="weather-location">&#127748; ' + esc(w.location) + '</span>';
+    if (w.stale) html += '<span class="weather-item" title="Weather service unreachable — showing last known data" style="color:var(--text2)">(stale)</span>';
     html += '<span class="weather-sep">|</span>';
     html += '<div class="weather-items">';
     if (w.desc)     html += '<span class="weather-item"><strong>' + esc(w.desc) + '</strong></span>';

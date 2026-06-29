@@ -1556,12 +1556,17 @@ def start_global_activity_poller():
 WTTR_URL         = "https://wttr.in/{}?format=j1"
 WEATHER_INTERVAL = 600.0   # 10 minutes per location
 
-_weather_cache = {}   # {location: {"data": dict, "ts": float}}
-_weather_lock  = threading.Lock()
+_weather_cache      = {}   # {location: {"data": dict, "ts": float}}
+_weather_last_good  = {}   # {location: dict}  — last successful fetch, never overwritten by errors
+_weather_lock       = threading.Lock()
 
 
 def _fetch_weather(location: str) -> dict:
-    """Return current weather for a location from wttr.in. Cached 10 minutes."""
+    """Return current weather for a location from wttr.in. Cached 10 minutes.
+
+    On failure, returns the last successful data with stale=True rather than
+    an error, so the weather bar stays useful during transient outages.
+    """
     if not location or not location.strip():
         return {"error": "No location configured for this node"}
     loc = location.strip()
@@ -1586,13 +1591,21 @@ def _fetch_weather(location: str) -> dict:
             "wind_mph": cc.get("windspeedMiles", ""),
             "wind_dir": cc.get("winddir16Point", ""),
             "error":    None,
+            "stale":    False,
         }
+        with _weather_lock:
+            _weather_cache[loc]     = {"data": data, "ts": time.time()}
+            _weather_last_good[loc] = data
+        return data
     except Exception as e:
-        data = {"error": str(e), "location": loc}
-
-    with _weather_lock:
-        _weather_cache[loc] = {"data": data, "ts": time.time()}
-    return data
+        log("WARN", f"[WEATHER] fetch failed for '{loc}': {e}")
+        with _weather_lock:
+            good = _weather_last_good.get(loc)
+            # Schedule a retry after a short interval rather than waiting the full 10 min
+            _weather_cache[loc] = {"data": None, "ts": time.time() - WEATHER_INTERVAL + 60}
+        if good:
+            return {**good, "stale": True, "error": None}
+        return {"error": "Weather unavailable", "location": loc, "stale": True}
 
 
 def get_cached_favstats(node: str) -> dict:
