@@ -318,9 +318,9 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
 .conn-form-bar input { width: 100px; font-family: var(--mono); font-size: 0.82rem;
   padding: 3px 7px; border: 1px solid var(--border); border-radius: 4px;
   background: var(--bg3); color: var(--text); }
-.perm-label { font-size: 0.72rem; color: var(--text2); display: flex; align-items: center;
-  gap: 4px; user-select: none; cursor: pointer; white-space: nowrap; }
-.perm-label input[type=checkbox] { cursor: pointer; accent-color: var(--accent); }
+.perm-label { font-size: 0.72rem; color: var(--text2); display: inline-flex; align-items: center;
+  gap: 4px; user-select: none; cursor: pointer; white-space: nowrap; width: fit-content; }
+.perm-label input[type=checkbox] { cursor: pointer; accent-color: var(--accent); width: auto; flex-shrink: 0; }
 /* idle-countdown badge in node rows */
 .idle-badge { font-size: 0.68rem; padding: 1px 6px; border-radius: 3px; font-weight: 600;
   background: rgba(88,166,255,.1); color: var(--accent); white-space: nowrap; }
