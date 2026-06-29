@@ -3649,12 +3649,17 @@ async function ksSave() {
   if (isNaN(mins) || mins < 1 || mins > 1440) {
     st.textContent = 'Enter 1–1440 minutes.'; st.style.color = 'var(--danger)'; return;
   }
-  var fmtEl = document.querySelector('input[name="ks-clock-fmt"]:checked');
-  var tzEl  = document.getElementById('ks-timezone');
-  var r = await api('/api/kiosk/settings', 'PUT', {
+  var fmtEl   = document.querySelector('input[name="ks-clock-fmt"]:checked');
+  var tzEl    = document.getElementById('ks-timezone');
+  var payload = {
     idle_timeout_sec: mins * 60,
     clock_format:     fmtEl ? fmtEl.value : '12',
     timezone:         tzEl  ? tzEl.value  : 'UTC',
+  };
+  var r = await api('/api/kiosk/settings', {
+    method:  'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body:    JSON.stringify(payload),
   });
   if (r.ok) { st.textContent = 'Saved.'; st.style.color = 'var(--success)'; }
   else       { st.textContent = r.data.error || 'Error'; st.style.color = 'var(--danger)'; }
