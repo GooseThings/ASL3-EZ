@@ -3539,7 +3539,7 @@ def _start_broadcast(node):
             'Action':  'MixMonitor',
             'Channel': channel,
             'File':    fifo_path,
-            'Options': 'b',
+            'Options': '',
         })
         raw = ami._recv_until('\r\n\r\n', timeout=ami.timeout)
         pkt = ami._parse_packet(raw)
