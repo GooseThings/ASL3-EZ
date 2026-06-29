@@ -375,7 +375,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
       <button class="btn-icon" onclick="toggleFS()" title="Fullscreen">&#x26F6; Fullscreen</button>
       <a class="btn-icon" href="/asl3-ez-manager">&#8592; Manager</a>
       <audio id="node-audio" preload="none">
-        <source type="audio/ogg">
+        <source type="audio/webm; codecs=opus">
       </audio>
     </div>
   </header>
@@ -1424,7 +1424,15 @@ async function removeFavorite(node) {
 }
 
 /* ── Audio listen ── */
-var _listenActive = false;
+var _listenActive     = false;
+var _listenNode       = '';
+var _listenRenewTimer = null;
+
+/* Browsers accumulate the HTTP stream in memory forever when using a plain
+   <audio src>.  After ~150 s of buffered-ahead audio Chrome pauses fetching;
+   when it eventually resumes it may be out of sync.  We reconnect every
+   RENEW_MS milliseconds to stay well under that ceiling. */
+var _LISTEN_RENEW_MS = 8 * 60 * 1000;  // 8 minutes
 
 function toggleListen() {
   if (_listenActive) {
@@ -1476,31 +1484,42 @@ function _startListen() {
 }
 
 function _doStartListen(audio, node) {
+  _listenNode = node;
+
+  /* Cancel any pending renewal timer from a prior session */
+  if (_listenRenewTimer) { clearTimeout(_listenRenewTimer); _listenRenewTimer = null; }
+
   /* loadstart fires as soon as the browser opens the HTTP connection —
-     the stream is live even if the node is silent. Audio plays
-     automatically whenever someone transmits. */
+     the stream is live even if the node is silent. */
   audio.onloadstart = function() {
     _listenActive = true;
     _listenSetBtn('&#9646;&#9646; Mute', 'var(--green)', false);
     sbToast('Monitoring node ' + node + ' — audio plays when active', true);
-    console.log('[AUDIO] stream connected to node', node);
+    console.log('[AUDIO] stream connected to node', node,
+                'at', new Date().toISOString());
   };
 
   audio.onerror = function() {
     var codes = {1:'ABORTED', 2:'NETWORK', 3:'DECODE', 4:'FORMAT'};
     var code  = audio.error ? (codes[audio.error.code] || ('ERR_' + audio.error.code)) : 'unknown';
     var msg   = audio.error ? audio.error.message : '';
-    console.error('[AUDIO] error', code, msg, 'networkState='+audio.networkState, 'readyState='+audio.readyState);
+    console.error('[AUDIO] error', code, msg,
+                  'networkState=' + audio.networkState,
+                  'readyState='   + audio.readyState);
     _listenSetBtn('&#9834; Listen', '', false);
     _listenActive = false;
     sbToast('Audio error: ' + code + (msg ? ' — ' + msg : ''), false);
   };
 
-  /* Extra diagnostic events — logged to console only, not shown as toasts */
-  audio.onstalled  = function() { console.warn('[AUDIO] stalled — no data from server'); };
-  audio.onwaiting  = function() { console.warn('[AUDIO] waiting — buffering'); };
-  audio.onended    = function() {
-    console.warn('[AUDIO] stream ended');
+  /* Extra diagnostic events (console only, no toasts) */
+  audio.onstalled = function() {
+    console.warn('[AUDIO] stalled — buffered:', _audioBufferedSeconds(audio));
+  };
+  audio.onwaiting = function() {
+    console.warn('[AUDIO] waiting — buffered:', _audioBufferedSeconds(audio));
+  };
+  audio.onended = function() {
+    console.warn('[AUDIO] stream ended unexpectedly');
     _listenSetBtn('&#9834; Listen', '', false);
     _listenActive = false;
     sbToast('Audio stream ended — click Listen to reconnect', false);
@@ -1515,17 +1534,39 @@ function _doStartListen(audio, node) {
     sbToast('Playback blocked: ' + e.message, false);
     audio.src = '';
   });
+
+  /* Schedule a silent reconnect before the browser buffer ceiling is hit.
+     The old HTTP connection is torn down, a new one opens, and the user
+     hears a brief gap (~0.5 s) but never an outright dropout. */
+  _listenRenewTimer = setTimeout(function() {
+    if (!_listenActive) return;
+    console.log('[AUDIO] scheduled reconnect (buffer renewal) for node', node);
+    audio.pause();
+    audio.src = '';
+    audio.load();
+    /* Brief pause lets the server close its generator cleanly */
+    setTimeout(function() { _doStartListen(audio, node); }, 500);
+  }, _LISTEN_RENEW_MS);
+}
+
+function _audioBufferedSeconds(audio) {
+  try {
+    var b = audio.buffered;
+    return b.length ? (b.end(b.length - 1) - b.start(0)).toFixed(1) + 's' : '0s';
+  } catch(e) { return '?'; }
 }
 
 function _stopListen() {
+  if (_listenRenewTimer) { clearTimeout(_listenRenewTimer); _listenRenewTimer = null; }
   var audio = document.getElementById('node-audio');
-  var node  = (window._lastBoardNodes && window._lastBoardNodes[0])
-              ? window._lastBoardNodes[0].node : '';
+  var node  = _listenNode || ((window._lastBoardNodes && window._lastBoardNodes[0])
+              ? window._lastBoardNodes[0].node : '');
   audio.onloadstart = null;
   audio.onerror     = null;
   audio.pause();
   audio.src = '';
   _listenActive = false;
+  _listenNode   = '';
   _listenSetBtn('&#9834; Listen', '', false);
   if (node) {
     apiFetch('/api/audio/stop', {

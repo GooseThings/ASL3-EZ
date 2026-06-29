@@ -3776,18 +3776,29 @@ def _start_broadcast(node):
     # O_NONBLOCK lets the relay loop read without blocking when silent.
     fifo_fd = os.open(fifo_path, os.O_RDWR | os.O_NONBLOCK)
 
-    # ffmpeg reads from stdin (fed by our relay loop), writes Ogg/Opus to stdout.
+    # ffmpeg reads from stdin (fed by our relay loop), writes WebM/Opus to stdout.
     # Using stdin avoids ffmpeg ever blocking on the FIFO directly and lets us
     # inject silence frames to keep the stream alive during quiet periods.
+    #
+    # -application audio (NOT voip): the 'voip' mode enables Voice Activity
+    # Detection (VAD) and Discontinuous Transmission (DTX).  Ham radio audio
+    # has CTCSS tones, noise floor, and intermittent speech that VAD classifies
+    # as "not voice", producing near-silent comfort-noise frames.  'audio' mode
+    # disables all voice-specific processing and encodes the signal as-is.
+    #
+    # WebM container (not Ogg): browsers handle live WebM streams more reliably.
+    # -cluster_time_limit 200 forces a new WebM cluster every 200 ms so the
+    # browser always has fresh decode-able data and latency stays low.
     ffmpeg_cmd = [
         'ffmpeg', '-loglevel', 'warning',
         '-fflags', '+nobuffer',
-        '-f', 's16le', '-ar', '8000', '-ac', '1',
+        '-f', 's16le', '-ar', '8000', '-ac', '1', '-channel_layout', 'mono',
         '-i', 'pipe:0',
         '-c:a', 'libopus', '-b:a', '24k',
         '-frame_duration', '20',
-        '-application', 'voip',
-        '-f', 'ogg',
+        '-application', 'audio',
+        '-f', 'webm',
+        '-cluster_time_limit', '200',
         'pipe:1',
     ]
     log('DEBUG', f'[AUDIO] launching ffmpeg: {" ".join(ffmpeg_cmd)}')
@@ -3870,9 +3881,9 @@ def api_audio_stream(node):
 
     return Response(
         stream_with_context(generate()),
-        mimetype='audio/ogg',
+        mimetype='audio/webm; codecs=opus',
         headers={
-            'Cache-Control':    'no-cache, no-store',
+            'Cache-Control':     'no-cache, no-store',
             'X-Accel-Buffering': 'no',
             'Transfer-Encoding': 'chunked',
         },
