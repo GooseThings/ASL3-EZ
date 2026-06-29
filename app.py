@@ -362,14 +362,14 @@ def check_auth():
     logged_in = session.get('logged_in')
     role      = session.get('role', '')
 
-    # Sessions created before role tracking was added won't have 'role'.
-    # Look it up from the DB and patch the session so subsequent requests are fast.
-    if logged_in and not role:
+    # Refresh role from DB if missing or if 'admin' (the pre-v3 role that was
+    # migrated to 'superuser' in the DB but not in existing sessions).
+    if logged_in and (not role or role == 'admin'):
         username = session.get('username', '')
         if username:
             row = get_db().execute("SELECT role FROM users WHERE username=?",
                                    (username,)).fetchone()
-            if row:
+            if row and row['role'] != role:
                 role = row['role']
                 session['role'] = role
 
