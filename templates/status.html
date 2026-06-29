@@ -374,7 +374,9 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
       <button class="btn-icon" id="kiosk-login-btn" onclick="openKioskLogin()" style="display:none">Login</button>
       <button class="btn-icon" onclick="toggleFS()" title="Fullscreen">&#x26F6; Fullscreen</button>
       <a class="btn-icon" href="/asl3-ez-manager">&#8592; Manager</a>
-      <audio id="node-audio" preload="none"></audio>
+      <audio id="node-audio" preload="none">
+        <source type="audio/ogg">
+      </audio>
     </div>
   </header>
 
@@ -1481,20 +1483,33 @@ function _doStartListen(audio, node) {
     _listenActive = true;
     _listenSetBtn('&#9646;&#9646; Mute', 'var(--green)', false);
     sbToast('Monitoring node ' + node + ' — audio plays when active', true);
+    console.log('[AUDIO] stream connected to node', node);
   };
 
   audio.onerror = function() {
     var codes = {1:'ABORTED', 2:'NETWORK', 3:'DECODE', 4:'FORMAT'};
     var code  = audio.error ? (codes[audio.error.code] || ('ERR_' + audio.error.code)) : 'unknown';
     var msg   = audio.error ? audio.error.message : '';
+    console.error('[AUDIO] error', code, msg, 'networkState='+audio.networkState, 'readyState='+audio.readyState);
     _listenSetBtn('&#9834; Listen', '', false);
     _listenActive = false;
     sbToast('Audio error: ' + code + (msg ? ' — ' + msg : ''), false);
   };
 
+  /* Extra diagnostic events — logged to console only, not shown as toasts */
+  audio.onstalled  = function() { console.warn('[AUDIO] stalled — no data from server'); };
+  audio.onwaiting  = function() { console.warn('[AUDIO] waiting — buffering'); };
+  audio.onended    = function() {
+    console.warn('[AUDIO] stream ended');
+    _listenSetBtn('&#9834; Listen', '', false);
+    _listenActive = false;
+    sbToast('Audio stream ended — click Listen to reconnect', false);
+  };
+
   audio.src = '/api/audio/stream/' + node;
   audio.load();
   audio.play().catch(function(e) {
+    console.error('[AUDIO] play() rejected:', e.name, e.message);
     _listenSetBtn('&#9834; Listen', '', false);
     _listenActive = false;
     sbToast('Playback blocked: ' + e.message, false);
