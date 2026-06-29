@@ -962,6 +962,16 @@ pre.codeblock { background: var(--bg3); padding: 12px; border-radius: 4px; font-
           <label class="form-label">Kiosk Timezone</label>
           <select id="ks-timezone" class="form-control" style="max-width:300px"></select>
         </div>
+        <div class="form-group" style="margin-top:16px">
+          <label class="form-label">Map Pin Duration (minutes)</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="number" id="ks-pin-min" class="form-control" style="width:90px"
+                   min="1" max="480" value="60">
+            <span style="font-size:0.82rem;color:var(--text-muted)">
+              How long activity pins remain visible on the Network Map (1–480 min).
+            </span>
+          </div>
+        </div>
         <button class="btn btn-success" onclick="ksSave()" style="margin-top:8px">Save</button>
         <span id="ks-status" style="margin-left:10px;font-size:0.82rem"></span>
       </div>
@@ -3639,6 +3649,8 @@ async function ksLoad() {
   var rb  = document.getElementById('ks-clock-' + fmt);
   if (rb) rb.checked = true;
   ksPopulateTZ(d.timezone || 'UTC');
+  var pinInp = document.getElementById('ks-pin-min');
+  if (pinInp) pinInp.value = d.map_pin_duration_min || 60;
 }
 
 async function ksSave() {
@@ -3651,10 +3663,16 @@ async function ksSave() {
   }
   var fmtEl   = document.querySelector('input[name="ks-clock-fmt"]:checked');
   var tzEl    = document.getElementById('ks-timezone');
+  var pinInp  = document.getElementById('ks-pin-min');
+  var pinMin  = pinInp ? parseInt(pinInp.value, 10) : 60;
+  if (isNaN(pinMin) || pinMin < 1 || pinMin > 480) {
+    st.textContent = 'Map pin duration must be 1–480 minutes.'; st.style.color = 'var(--danger)'; return;
+  }
   var payload = {
-    idle_timeout_sec: mins * 60,
-    clock_format:     fmtEl ? fmtEl.value : '12',
-    timezone:         tzEl  ? tzEl.value  : 'UTC',
+    idle_timeout_sec:     mins * 60,
+    clock_format:         fmtEl ? fmtEl.value : '12',
+    timezone:             tzEl  ? tzEl.value  : 'UTC',
+    map_pin_duration_min: pinMin,
   };
   var r = await api('/api/kiosk/settings', {
     method:  'PUT',

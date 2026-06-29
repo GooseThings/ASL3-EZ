@@ -420,7 +420,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
 
       <div class="map-card">
         <div class="card-header">
-          <span class="card-title">Network Map</span>
+          <span class="card-title">Network Map</span><span id="map-pin-dur-label" style="font-size:0.65rem;color:var(--text2);font-style:italic;margin-left:6px"></span>
           <div class="map-ctl">
             <select class="map-ctl-sel" id="map-tile-sel" onchange="changeTiles(this.value)">
               <option value="dark">OSM Dark</option>
@@ -972,6 +972,10 @@ async function refreshActivity() {
 
     _lastActivityPoints = combined;
     updateMap();
+
+    var pinMin = data.pin_duration_min || 60;
+    var pinLabel = document.getElementById('map-pin-dur-label');
+    if (pinLabel) pinLabel.textContent = '· pins ' + pinMin + ' min';
   } catch(e) {}
 }
 

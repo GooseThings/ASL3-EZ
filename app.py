@@ -1167,7 +1167,7 @@ def start_favstats_poller():
 
 
 # ── Keyed history (for Status Board activity feed) ────────────────────────────
-_keyed_history      = deque(maxlen=20)
+_keyed_history      = deque(maxlen=500)   # enough for 60-min window at high activity
 _keyed_history_lock = threading.Lock()
 _keyed_prev_states  = {}   # {key: bool}  — track transitions per node/link
 
@@ -2645,9 +2645,10 @@ def api_backup_delete(name):
 @app.route("/api/kiosk/settings")
 def api_kiosk_settings_get():
     return jsonify({
-        "idle_timeout_sec": int(get_setting('kiosk_idle_timeout_sec', '600') or 600),
-        "clock_format":     get_setting('kiosk_clock_format', '12'),
-        "timezone":         get_setting('kiosk_timezone', 'UTC'),
+        "idle_timeout_sec":    int(get_setting('kiosk_idle_timeout_sec', '600') or 600),
+        "clock_format":        get_setting('kiosk_clock_format', '12'),
+        "timezone":            get_setting('kiosk_timezone', 'UTC'),
+        "map_pin_duration_min": int(get_setting('kiosk_map_pin_duration_min', '60') or 60),
     })
 
 
@@ -2677,6 +2678,14 @@ def api_kiosk_settings_put():
         except Exception:
             return jsonify({"error": f"Unknown timezone: {tz}"}), 400
         set_setting('kiosk_timezone', tz)
+    if "map_pin_duration_min" in data:
+        try:
+            val = int(data["map_pin_duration_min"])
+            if not (1 <= val <= 480):
+                return jsonify({"error": "map_pin_duration_min must be 1–480 minutes"}), 400
+            set_setting('kiosk_map_pin_duration_min', str(val))
+        except (TypeError, ValueError):
+            return jsonify({"error": "map_pin_duration_min must be an integer"}), 400
     return jsonify({"ok": True})
 
 
@@ -3266,8 +3275,11 @@ def api_status_activity():
     - global_nodes:   top 10 most recently registered ASL nodes worldwide
                       (polled every 5 min from stats.allstarlink.org)
     """
+    pin_min = int(get_setting('kiosk_map_pin_duration_min', '60') or 60)
+    cutoff  = time.time() - pin_min * 60
+
     with _keyed_history_lock:
-        keyed = list(_keyed_history)
+        keyed = [e for e in _keyed_history if e["ts"] >= cutoff]
 
     # Attach geocoordinates to recently-keyed entries (cache hit = instant)
     for entry in keyed:
@@ -3282,9 +3294,10 @@ def api_status_activity():
         global_ts    = _global_nodes_ts
 
     return jsonify({
-        "recently_keyed": keyed[:10],
-        "global_nodes":   global_nodes,
-        "global_updated": global_ts,
+        "recently_keyed":    keyed[:10],
+        "global_nodes":      global_nodes,
+        "global_updated":    global_ts,
+        "pin_duration_min":  pin_min,
     })
 
 
