@@ -293,7 +293,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
 .fav-call { font-size: 0.75rem; font-weight: 600; color: var(--accent); }
 .fav-loc  { font-size: 0.67rem; color: var(--text2); overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; }
-.fav-actions { display: flex; gap: 4px; margin-top: 3px; }
+.fav-actions { display: flex; flex-direction: column; gap: 3px; margin-top: 3px; }
 .fav-actions .sb-btn { font-size: 0.68rem; padding: 2px 8px; }
 
 
@@ -956,10 +956,12 @@ async function refreshActivity() {
                       ? window._lastBoardNodes[0].node : '';
       al.innerHTML = combined.map(function(e) {
         var connBtn = localNode
-          ? '<button class="sb-btn connect" onclick="sbConnect(\'' +
-              esc(localNode) + '\',\'' + esc(e.node) + '\',this)">Connect</button>' +
-            '<button class="sb-btn monitor" onclick="sbConnect(\'' +
-              esc(localNode) + '\',\'' + esc(e.node) + '\',this,false,true)">Monitor</button>'
+          ? '<div style="display:flex;flex-direction:column;gap:3px;align-items:stretch">' +
+              '<button class="sb-btn connect" onclick="sbConnect(\'' +
+                esc(localNode) + '\',\'' + esc(e.node) + '\',this)">Connect</button>' +
+              '<button class="sb-btn monitor" onclick="sbConnect(\'' +
+                esc(localNode) + '\',\'' + esc(e.node) + '\',this,false,true)">Monitor</button>' +
+            '</div>'
           : '';
         return '<div class="act-row">' +
           '<div class="act-dot ' + e.type + '"></div>' +
