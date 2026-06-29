@@ -395,6 +395,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
           <input id="conn-form-node" type="text" placeholder="Node #" maxlength="7"
                  onkeydown="if(event.key==='Enter')statusConnectNew()">
           <button class="sb-btn connect" onclick="statusConnectNew()">Connect</button>
+          <button class="sb-btn monitor" onclick="statusMonitorNew()">Monitor</button>
           <label class="perm-label" id="perm-label" style="display:none">
             <input type="checkbox" id="conn-perm-chk"> Permanent
           </label>
@@ -1074,6 +1075,35 @@ async function statusConnectNew() {
     sbToast((permanent ? 'Permanently connecting' : 'Connecting') + ' to ' + remote + '…', true);
     inp.value = '';
     if (perm) perm.checked = false;
+    document.getElementById('conn-form-msg').textContent = '';
+    setTimeout(refreshBoard, 1500);
+  } else {
+    document.getElementById('conn-form-msg').textContent = d.error || ('Error ' + r.status);
+  }
+}
+
+async function statusMonitorNew() {
+  var inp = document.getElementById('conn-form-node');
+  if (!inp) return;
+  var remote = inp.value.trim();
+  if (!/^\d{4,7}$/.test(remote)) {
+    document.getElementById('conn-form-msg').textContent = 'Enter a 4-7 digit node number';
+    return;
+  }
+  var local = (window._lastBoardNodes && window._lastBoardNodes[0])
+               ? window._lastBoardNodes[0].node : '';
+  if (!local) { document.getElementById('conn-form-msg').textContent = 'No local node found'; return; }
+  document.getElementById('conn-form-msg').textContent = 'Monitoring…';
+  var r = await fetch('/api/status/connect', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({local_node: local, remote_node: remote, permanent: false, monitor: true})
+  });
+  if (r.status === 401) { openKioskLogin(statusMonitorNew, []); return; }
+  var d = await r.json();
+  if (r.ok && d.ok) {
+    sbToast('Monitoring ' + remote + '…', true);
+    inp.value = '';
     document.getElementById('conn-form-msg').textContent = '';
     setTimeout(refreshBoard, 1500);
   } else {
