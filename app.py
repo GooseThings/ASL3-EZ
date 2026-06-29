@@ -46,7 +46,7 @@ from functools import wraps
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, Response, stream_with_context
 import difflib
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask_wtf.csrf import CSRFProtect
+from flask_wtf.csrf import CSRFProtect, generate_csrf
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
@@ -478,7 +478,11 @@ def api_login():
         session["role"]      = user["role"]
         session["user_id"]   = user["id"]
         log("INFO", f"[AUTH] API Login: '{username}' (role={user['role']})")
-        return jsonify({"ok": True, "role": user["role"], "username": username})
+        # session.clear() above invalidated the CSRF token that was baked into
+        # the already-loaded status page meta tag.  Return the fresh token so
+        # the JS can update _csrfToken without requiring a full page reload.
+        return jsonify({"ok": True, "role": user["role"], "username": username,
+                        "csrf_token": generate_csrf()})
     log("WARN", f"[AUTH] API Login failed for '{username}'")
     return jsonify({"error": "Invalid username or password"}), 401
 
@@ -3394,10 +3398,9 @@ def api_status_connect():
         return jsonify({"error": "Invalid local_node"}), 400
     if not re.match(r'^\d{4,7}$', remote_node):
         return jsonify({"error": "Invalid remote_node"}), 400
+    # Only admin/superuser may mark a connection permanent (no idle timeout)
     caller_role = session.get('role', '')
-    # Admin/superuser connections are always permanent (never idle-disconnected).
-    # Kiosk (user) connections are always transient regardless of what is sent.
-    permanent   = caller_role in ('admin', 'superuser')
+    permanent   = bool(data.get("permanent", False)) and caller_role in ('admin', 'superuser')
     monitor     = bool(data.get("monitor", False))
     ilink_mode  = "2" if monitor else "3"   # 2=monitor (listen-only), 3=transceive
     try:

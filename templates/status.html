@@ -1163,6 +1163,9 @@ async function kioskLogin() {
   var d = await r.json();
   if (r.ok && d.ok) {
     window._kioskRole = d.role;
+    /* session.clear() on the server invalidated the meta-tag CSRF token;
+       refresh _csrfToken so subsequent apiFetch calls don't get 403s. */
+    if (d.csrf_token) _csrfToken = d.csrf_token;
     closeKioskModal();
     updateKioskUserBar(d.username, d.role);
     var pl = document.getElementById('perm-label');
