@@ -1370,19 +1370,16 @@ sudo asterisk -rx "module reload manager"</pre>
               <input type="text" id="sc-target" class="val-input" placeholder="666380" style="width:100%">
             </div>
           </div>
-          <div>
-            <label class="toggle-label" style="display:block;margin-bottom:3px">Auto-connect time <span class="muted">(leave blank for manual only)</span></label>
-            <input type="time" id="sc-time" class="val-input" style="width:100%">
+          <div id="sc-sched-section" style="grid-column:1/-1">
+            <!-- populated by scSchedSectionHTML() on DOMContentLoaded -->
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px">
-            <div>
-              <label class="toggle-label" style="display:block;margin-bottom:3px">Idle timeout (sec)</label>
-              <input type="number" id="sc-idle" class="val-input" value="180" min="30" style="width:100%">
-            </div>
-            <div>
-              <label class="toggle-label" style="display:block;margin-bottom:3px">Settle period (sec)</label>
-              <input type="number" id="sc-settle" class="val-input" value="300" min="0" style="width:100%">
-            </div>
+          <div>
+            <label class="toggle-label" style="display:block;margin-bottom:3px">Idle timeout (sec)</label>
+            <input type="number" id="sc-idle" class="val-input" value="180" min="30" style="width:100%">
+          </div>
+          <div>
+            <label class="toggle-label" style="display:block;margin-bottom:3px">Settle period (sec)</label>
+            <input type="number" id="sc-settle" class="val-input" value="300" min="0" style="width:100%">
           </div>
         </div>
         <div id="sc-create-result" style="margin-top:10px"></div>
@@ -3701,6 +3698,9 @@ async function applyRoleNav() {
 window.addEventListener('DOMContentLoaded', function() {
   log('ASL3-EZ loaded.', 'INFO');
   applyRoleNav();
+  // Initialize Add Connector schedule section
+  var scSec = document.getElementById('sc-sched-section');
+  if (scSec) scSec.innerHTML = scSchedSectionHTML('sc-', 'daily', '', '');
   {% if not conf_exists %}
   log('rpt.conf not found at {{ conf_path }}. Check path and permissions.', 'WARN');
   {% endif %}
@@ -4270,8 +4270,175 @@ function connStateLabel(state) {
   return '<span class="muted">' + esc(state) + '</span>';
 }
 
+var _SC_DAYS_SHORT   = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+var _SC_MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function connScheduleLabel(c) {
+  var stype = c.schedule_type || 'daily';
+  var sdays = c.schedule_days || '';
+  var time  = c.connect_time  || '';
+  if (stype === 'manual' || !time) return 'Manual only';
+  var at = ' at ' + esc(time);
+  var p;
+  if (stype === 'daily') return 'Daily' + at;
+  if (stype === 'weekly') {
+    var days = sdays.split(',').filter(Boolean).map(function(d){return _SC_DAYS_SHORT[parseInt(d)]||'?';}).join(', ');
+    return 'Weekly (' + (days || '—') + ')' + at;
+  }
+  if (stype === 'biweekly') {
+    p = sdays.split(':');
+    return 'Bi-weekly, ' + (_SC_DAYS_SHORT[parseInt(p[0])]||'Mon') + ', ' + (p[1]==='1'?'odd':'even') + ' wks' + at;
+  }
+  if (stype === 'monthly') return 'Monthly, day ' + esc(sdays) + at;
+  if (stype === 'bimonthly') {
+    p = sdays.split(':');
+    return 'Every 2 mo. from ' + (_SC_MONTHS_SHORT[parseInt(p[1]||1)-1]||'Jan') + ', day ' + (p[0]||'1') + at;
+  }
+  if (stype === 'quarterly') {
+    p = sdays.split(':');
+    return 'Quarterly from ' + (_SC_MONTHS_SHORT[parseInt(p[1]||1)-1]||'Jan') + ', day ' + (p[0]||'1') + at;
+  }
+  if (stype === 'yearly') {
+    p = sdays.split('-');
+    return 'Yearly, ' + (_SC_MONTHS_SHORT[parseInt(p[0]||1)-1]||'Jan') + ' ' + (p[1]||'1') + at;
+  }
+  if (stype === 'onetime') return 'Once on ' + esc(sdays) + at + (c.enabled ? ' (then disables)' : '');
+  return esc(time);
+}
+
+function scSchedSectionHTML(prefix, stype, sdays, time) {
+  stype = stype || 'daily';
+  sdays = sdays || '';
+  time  = time  || '';
+  var p = prefix;
+
+  var bwP  = sdays.split(':');
+  var mP   = sdays.split(':');
+  var yP   = sdays.split('-');
+  var wdays = (stype === 'weekly') ? sdays.split(',') : [];
+
+  var typeOpts = [
+    ['manual',    'Manual only'],
+    ['daily',     'Daily'],
+    ['weekly',    'Weekly (selected days)'],
+    ['biweekly',  'Bi-Weekly'],
+    ['monthly',   'Monthly'],
+    ['bimonthly', 'Every 2 Months'],
+    ['quarterly', 'Quarterly (every 3 months)'],
+    ['yearly',    'Yearly'],
+    ['onetime',   'One-Time']
+  ].map(function(o){
+    return '<option value="'+o[0]+'"'+(o[0]===stype?' selected':'')+'>'+o[1]+'</option>';
+  }).join('');
+
+  var mOpts = function(sel) {
+    return _SC_MONTHS_SHORT.map(function(m,i){
+      var v=String(i+1); return '<option value="'+v+'"'+(v===String(sel)?' selected':'')+'>'+m+'</option>';
+    }).join('');
+  };
+  var dOpts = function(sel) {
+    return _SC_DAYS_SHORT.map(function(d,i){
+      var v=String(i); return '<option value="'+v+'"'+(v===String(sel)?' selected':'')+'>'+d+'</option>';
+    }).join('');
+  };
+
+  var wdChecks = _SC_DAYS_SHORT.map(function(d,i){
+    var chk = wdays.indexOf(String(i)) >= 0 ? ' checked' : '';
+    return '<label style="display:inline-flex;align-items:center;gap:3px;margin-right:6px">' +
+           '<input type="checkbox" id="'+p+'sched-wd-'+i+'"'+chk+'> '+d+'</label>';
+  }).join('');
+
+  var showTR  = stype === 'manual'                                          ? 'display:none;' : '';
+  var showW   = stype === 'weekly'                                          ? '' : 'display:none;';
+  var showBW  = stype === 'biweekly'                                        ? 'display:grid;' : 'display:none;';
+  var showMD  = (stype==='monthly'||stype==='bimonthly'||stype==='quarterly') ? '' : 'display:none;';
+  var showSM  = (stype==='bimonthly'||stype==='quarterly')                  ? '' : 'display:none;';
+  var showY   = stype === 'yearly'                                          ? 'display:grid;' : 'display:none;';
+  var showOT  = stype === 'onetime'                                         ? '' : 'display:none;';
+
+  return '<div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end">' +
+    '<div><label class="toggle-label" style="display:block;margin-bottom:3px">Schedule</label>' +
+    '<select id="'+p+'sched-type" class="val-input" style="width:100%" onchange="scShowExtra(\''+p+'\')">' +
+    typeOpts + '</select></div>' +
+    '<div id="'+p+'sched-time-row" style="'+showTR+'">' +
+    '<label class="toggle-label" style="display:block;margin-bottom:3px">Connect Time</label>' +
+    '<input type="time" id="'+p+'sched-time" class="val-input" value="'+esc(time)+'"></div>' +
+  '</div>' +
+  '<div style="margin-top:8px;display:flex;flex-direction:column;gap:8px">' +
+    '<div id="'+p+'sched-weekly" style="'+showW+'">' +
+      '<label class="toggle-label" style="display:block;margin-bottom:3px">Days of Week</label>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:4px 10px">'+wdChecks+'</div></div>' +
+    '<div id="'+p+'sched-biweekly" style="'+showBW+'grid-template-columns:1fr 1fr;gap:0 8px">' +
+      '<div><label class="toggle-label" style="display:block;margin-bottom:3px">Day of Week</label>' +
+      '<select id="'+p+'sched-bw-day" class="val-input" style="width:100%">'+dOpts(bwP[0]||'0')+'</select></div>' +
+      '<div><label class="toggle-label" style="display:block;margin-bottom:3px">Which Weeks</label>' +
+      '<select id="'+p+'sched-bw-parity" class="val-input" style="width:100%">' +
+      '<option value="0"'+((bwP[1]||'0')==='0'?' selected':'')+'>Even (2,4,6…)</option>' +
+      '<option value="1"'+(bwP[1]==='1'?' selected':'')+'>Odd (1,3,5…)</option>' +
+      '</select></div></div>' +
+    '<div id="'+p+'sched-monthly-day" style="'+showMD+'">' +
+      '<label class="toggle-label" style="display:block;margin-bottom:3px">Day of Month (1–28)</label>' +
+      '<input type="number" id="'+p+'sched-dom" class="val-input" min="1" max="28" value="'+esc(mP[0]||'1')+'" style="width:120px"></div>' +
+    '<div id="'+p+'sched-start-month" style="'+showSM+'">' +
+      '<label class="toggle-label" style="display:block;margin-bottom:3px">Starting Month</label>' +
+      '<select id="'+p+'sched-sm" class="val-input" style="width:160px">'+mOpts(mP[1]||'1')+'</select></div>' +
+    '<div id="'+p+'sched-yearly" style="'+showY+'grid-template-columns:140px 100px;gap:0 8px">' +
+      '<div><label class="toggle-label" style="display:block;margin-bottom:3px">Month</label>' +
+      '<select id="'+p+'sched-ym" class="val-input" style="width:100%">'+mOpts(yP[0]||'1')+'</select></div>' +
+      '<div><label class="toggle-label" style="display:block;margin-bottom:3px">Day</label>' +
+      '<input type="number" id="'+p+'sched-yd" class="val-input" min="1" max="31" value="'+esc(yP[1]||'1')+'" style="width:100%"></div></div>' +
+    '<div id="'+p+'sched-onetime" style="'+showOT+'">' +
+      '<label class="toggle-label" style="display:block;margin-bottom:3px">Date</label>' +
+      '<input type="date" id="'+p+'sched-odate" class="val-input" value="'+esc(stype==='onetime'?sdays:'')+'" style="width:180px"></div>' +
+  '</div>';
+}
+
+function scShowExtra(prefix) {
+  var stype = document.getElementById(prefix + 'sched-type').value;
+  var tr = document.getElementById(prefix + 'sched-time-row');
+  if (tr) tr.style.display = (stype === 'manual') ? 'none' : '';
+  var ids = ['weekly','biweekly','monthly-day','start-month','yearly','onetime'];
+  ids.forEach(function(id){ var el = document.getElementById(prefix+'sched-'+id); if(el) el.style.display='none'; });
+  var show = function(id, d) { var el = document.getElementById(prefix+'sched-'+id); if(el) el.style.display = d||''; };
+  switch(stype) {
+    case 'weekly':    show('weekly'); break;
+    case 'biweekly':  show('biweekly','grid'); break;
+    case 'monthly':   show('monthly-day'); break;
+    case 'bimonthly': show('monthly-day'); show('start-month'); break;
+    case 'quarterly': show('monthly-day'); show('start-month'); break;
+    case 'yearly':    show('yearly','grid'); break;
+    case 'onetime':   show('onetime'); break;
+  }
+}
+
+function scReadSchedule(prefix) {
+  var stype = document.getElementById(prefix + 'sched-type').value;
+  var timeEl = document.getElementById(prefix + 'sched-time');
+  var time = (stype !== 'manual' && timeEl) ? (timeEl.value || null) : null;
+  var sdays = '';
+  if (stype === 'weekly') {
+    var days = [];
+    for (var i=0;i<7;i++) { var el=document.getElementById(prefix+'sched-wd-'+i); if(el&&el.checked) days.push(String(i)); }
+    sdays = days.join(',');
+  } else if (stype === 'biweekly') {
+    var d=document.getElementById(prefix+'sched-bw-day'), par=document.getElementById(prefix+'sched-bw-parity');
+    sdays = (d?d.value:'0') + ':' + (par?par.value:'0');
+  } else if (stype === 'monthly') {
+    var el=document.getElementById(prefix+'sched-dom'); sdays=el?el.value:'1';
+  } else if (stype === 'bimonthly' || stype === 'quarterly') {
+    var d=document.getElementById(prefix+'sched-dom'), m=document.getElementById(prefix+'sched-sm');
+    sdays = (d?d.value:'1') + ':' + (m?m.value:'1');
+  } else if (stype === 'yearly') {
+    var ym=document.getElementById(prefix+'sched-ym'), yd=document.getElementById(prefix+'sched-yd');
+    sdays = String(parseInt(ym?ym.value:1)).padStart(2,'0') + '-' + String(parseInt(yd?yd.value:1)).padStart(2,'0');
+  } else if (stype === 'onetime') {
+    var el=document.getElementById(prefix+'sched-odate'); sdays=el?el.value:'';
+  }
+  return {schedule_type: stype, schedule_days: sdays, connect_time: time};
+}
+
 function connCard(c) {
-  var schedule = c.connect_time ? 'Daily at ' + esc(c.connect_time) : 'Manual only';
+  var schedule = connScheduleLabel(c);
   var details = '';
   if (c.connected_at)   details += '<div><span class="muted">Connected at:</span> ' + esc(c.connected_at) + '</div>';
   if (c.last_activity)  details += '<div><span class="muted">Last activity:</span> ' + esc(c.last_activity) + '</div>';
@@ -4311,6 +4478,7 @@ function connCard(c) {
 }
 
 function connEditForm(c) {
+  var ep = 'sce-' + c.id + '-';
   return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 18px">' +
     '<div><label class="toggle-label" style="display:block;margin-bottom:3px">Name</label>' +
       '<input type="text" id="sce-name-' + c.id + '" class="val-input" value="' + esc(c.name) + '" style="width:100%"></div>' +
@@ -4320,14 +4488,11 @@ function connEditForm(c) {
       '<div><label class="toggle-label" style="display:block;margin-bottom:3px">Target Node</label>' +
         '<input type="text" id="sce-target-' + c.id + '" class="val-input" value="' + esc(c.target_node) + '" style="width:100%"></div>' +
     '</div>' +
-    '<div><label class="toggle-label" style="display:block;margin-bottom:3px">Auto-connect time</label>' +
-      '<input type="time" id="sce-time-' + c.id + '" class="val-input" value="' + esc(c.connect_time||'') + '" style="width:100%"></div>' +
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 8px">' +
-      '<div><label class="toggle-label" style="display:block;margin-bottom:3px">Idle timeout (s)</label>' +
-        '<input type="number" id="sce-idle-' + c.id + '" class="val-input" value="' + c.idle_limit_sec + '" min="30" style="width:100%"></div>' +
-      '<div><label class="toggle-label" style="display:block;margin-bottom:3px">Settle (s)</label>' +
-        '<input type="number" id="sce-settle-' + c.id + '" class="val-input" value="' + c.settle_sec + '" min="0" style="width:100%"></div>' +
-    '</div>' +
+    '<div style="grid-column:1/-1">' + scSchedSectionHTML(ep, c.schedule_type, c.schedule_days, c.connect_time) + '</div>' +
+    '<div><label class="toggle-label" style="display:block;margin-bottom:3px">Idle timeout (s)</label>' +
+      '<input type="number" id="sce-idle-' + c.id + '" class="val-input" value="' + c.idle_limit_sec + '" min="30" style="width:100%"></div>' +
+    '<div><label class="toggle-label" style="display:block;margin-bottom:3px">Settle (s)</label>' +
+      '<input type="number" id="sce-settle-' + c.id + '" class="val-input" value="' + c.settle_sec + '" min="0" style="width:100%"></div>' +
   '</div>' +
   '<div id="sce-result-' + c.id + '" style="margin-top:8px"></div>' +
   '<div style="margin-top:10px;display:flex;gap:8px">' +
@@ -4398,15 +4563,15 @@ async function connDelete(id, name) {
 }
 
 async function connSaveEdit(id) {
-  var res  = document.getElementById('sce-result-' + id);
-  var body = {
+  var res   = document.getElementById('sce-result-' + id);
+  var sched = scReadSchedule('sce-' + id + '-');
+  var body = Object.assign({
     name:           document.getElementById('sce-name-'   + id).value.trim(),
     local_node:     document.getElementById('sce-local-'  + id).value.trim(),
     target_node:    document.getElementById('sce-target-' + id).value.trim(),
-    connect_time:   document.getElementById('sce-time-'   + id).value || null,
     idle_limit_sec: parseInt(document.getElementById('sce-idle-'   + id).value, 10),
     settle_sec:     parseInt(document.getElementById('sce-settle-' + id).value, 10),
-  };
+  }, sched);
   var r = await fetch('/api/connectors/' + id, {
     method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
   });
@@ -4416,15 +4581,15 @@ async function connSaveEdit(id) {
 }
 
 async function createConnector() {
-  var res = document.getElementById('sc-create-result');
-  var body = {
+  var res   = document.getElementById('sc-create-result');
+  var sched = scReadSchedule('sc-');
+  var body = Object.assign({
     name:           document.getElementById('sc-name').value.trim(),
     local_node:     document.getElementById('sc-local').value.trim(),
     target_node:    document.getElementById('sc-target').value.trim(),
-    connect_time:   document.getElementById('sc-time').value || null,
     idle_limit_sec: parseInt(document.getElementById('sc-idle').value, 10),
     settle_sec:     parseInt(document.getElementById('sc-settle').value, 10),
-  };
+  }, sched);
   if (!body.name)        { res.innerHTML = '<span style="color:var(--danger)">Name is required.</span>'; return; }
   if (!body.target_node) { res.innerHTML = '<span style="color:var(--danger)">Target node is required.</span>'; return; }
   res.innerHTML = '<span class="muted">Saving...</span>';
@@ -4436,7 +4601,7 @@ async function createConnector() {
   res.innerHTML = '<span style="color:var(--green)">Saved: ' + esc(d.name) + '</span>';
   document.getElementById('sc-name').value = '';
   document.getElementById('sc-target').value = '';
-  document.getElementById('sc-time').value = '';
+  document.getElementById('sc-sched-section').innerHTML = scSchedSectionHTML('sc-', 'daily', '', '');
   loadConnectors();
 }
 

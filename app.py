@@ -221,8 +221,17 @@ def get_db():
         state_updated   TEXT,
         connected_at    TEXT,
         last_activity   TEXT,
-        created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
+        created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+        schedule_type   TEXT    NOT NULL DEFAULT 'daily',
+        schedule_days   TEXT    NOT NULL DEFAULT ''
     )""")
+    # Migrate older rows that lack the new schedule columns
+    _conn_cols = {r[1] for r in conn.execute("PRAGMA table_info(connectors)").fetchall()}
+    if 'schedule_type' not in _conn_cols:
+        conn.execute("ALTER TABLE connectors ADD COLUMN schedule_type TEXT NOT NULL DEFAULT 'daily'")
+    if 'schedule_days' not in _conn_cols:
+        conn.execute("ALTER TABLE connectors ADD COLUMN schedule_days TEXT NOT NULL DEFAULT ''")
+    conn.commit()
     conn.execute("""CREATE TABLE IF NOT EXISTS id_configs (
         id              INTEGER PRIMARY KEY AUTOINCREMENT,
         name            TEXT    NOT NULL,
@@ -4486,6 +4495,70 @@ def _connector_link_present(local: str, target: str) -> bool:
     return target in cached.get("connected", [])
 
 
+def _connector_should_fire(row, now):
+    """Return True if this connector's schedule says it should trigger right now."""
+    if not row["connect_time"]:
+        return False
+    if now.strftime("%H:%M") != row["connect_time"]:
+        return False
+    stype = row["schedule_type"] or "daily"
+    sdays = row["schedule_days"] or ""
+
+    if stype == "manual":
+        return False
+    if stype == "daily":
+        return True
+    if stype == "weekly":
+        allowed = []
+        for d in sdays.split(","):
+            d = d.strip()
+            if d.isdigit():
+                allowed.append(int(d))
+        return now.weekday() in allowed
+    if stype == "biweekly":
+        parts = sdays.split(":")
+        try:
+            wday   = int(parts[0])
+            parity = int(parts[1]) if len(parts) > 1 else 0
+        except (ValueError, IndexError):
+            return False
+        return now.weekday() == wday and (now.isocalendar()[1] % 2) == parity
+    if stype == "monthly":
+        try:
+            return now.day == int(sdays)
+        except ValueError:
+            return False
+    if stype == "bimonthly":
+        parts = sdays.split(":")
+        try:
+            day         = int(parts[0])
+            start_month = int(parts[1]) if len(parts) > 1 else 1
+        except (ValueError, IndexError):
+            return False
+        return now.day == day and ((now.month - start_month) % 2 == 0)
+    if stype == "quarterly":
+        parts = sdays.split(":")
+        try:
+            day         = int(parts[0])
+            start_month = int(parts[1]) if len(parts) > 1 else 1
+        except (ValueError, IndexError):
+            return False
+        return now.day == day and ((now.month - start_month) % 3 == 0)
+    if stype == "yearly":
+        try:
+            mm, dd = sdays.split("-")
+            return now.month == int(mm) and now.day == int(dd)
+        except (ValueError, AttributeError):
+            return False
+    if stype == "onetime":
+        try:
+            target_date = datetime.strptime(sdays, "%Y-%m-%d").date()
+            return now.date() == target_date
+        except (ValueError, AttributeError):
+            return False
+    return False
+
+
 def _run_connectors():
     now     = datetime.now()
     now_str = now.strftime("%Y-%m-%d %H:%M:%S")
@@ -4501,11 +4574,15 @@ def _run_connectors():
         target = row["target_node"]
 
         # idle → check if scheduled connect_time has arrived
-        if state == "idle" and row["connect_time"] and now_hm == row["connect_time"]:
+        if state == "idle" and _connector_should_fire(row, now):
             db.execute(
                 "UPDATE connectors SET state='waiting', state_msg='Waiting for node to be idle', "
                 "state_updated=? WHERE id=?", (now_str, cid)
             )
+            # One-time connectors auto-disable after triggering
+            if (row["schedule_type"] or "daily") == "onetime":
+                db.execute("UPDATE connectors SET enabled=0 WHERE id=?", (cid,))
+                log("INFO", f"[CONNECTOR] '{row['name']}' one-time trigger — auto-disabled")
             db.commit()
             state = "waiting"
             log("INFO", f"[CONNECTOR] '{row['name']}' entered waiting state at {now_hm}")
@@ -4642,13 +4719,18 @@ def api_conn_get(cid):
     return jsonify(dict(row))
 
 
+_VALID_SCHEDULE_TYPES = {'manual', 'daily', 'weekly', 'biweekly', 'monthly',
+                         'bimonthly', 'quarterly', 'yearly', 'onetime'}
+
 @app.route("/api/connectors", methods=["POST"])
 def api_conn_create():
     data = request.json or {}
-    name        = str(data.get("name",           "")).strip()
-    local_node  = str(data.get("local_node",     "")).strip()
-    target_node = str(data.get("target_node",    "")).strip()
-    connect_time = data.get("connect_time") or None
+    name          = str(data.get("name",          "")).strip()
+    local_node    = str(data.get("local_node",    "")).strip()
+    target_node   = str(data.get("target_node",   "")).strip()
+    connect_time  = data.get("connect_time") or None
+    schedule_type = str(data.get("schedule_type", "daily")).strip()
+    schedule_days = str(data.get("schedule_days", "")).strip()
     idle_limit_sec = int(data.get("idle_limit_sec", 180))
     settle_sec     = int(data.get("settle_sec",     300))
 
@@ -4660,16 +4742,20 @@ def api_conn_create():
         return jsonify({"error": "Invalid target node number"}), 400
     if connect_time and not re.match(r'^\d{2}:\d{2}$', connect_time):
         return jsonify({"error": "connect_time must be HH:MM"}), 400
+    if schedule_type not in _VALID_SCHEDULE_TYPES:
+        return jsonify({"error": f"Invalid schedule_type"}), 400
 
     db = get_db()
     db.execute(
-        "INSERT INTO connectors (name, local_node, target_node, connect_time, idle_limit_sec, settle_sec) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
-        (name, local_node, target_node, connect_time, idle_limit_sec, settle_sec)
+        "INSERT INTO connectors (name, local_node, target_node, connect_time, "
+        "schedule_type, schedule_days, idle_limit_sec, settle_sec) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (name, local_node, target_node, connect_time,
+         schedule_type, schedule_days, idle_limit_sec, settle_sec)
     )
     db.commit()
     row = db.execute("SELECT * FROM connectors WHERE rowid=last_insert_rowid()").fetchone()
-    log("INFO", f"[CONNECTOR] Created '{name}' ({local_node} → {target_node})")
+    log("INFO", f"[CONNECTOR] Created '{name}' ({local_node} → {target_node}) sched={schedule_type}")
     return jsonify(dict(row)), 201
 
 
@@ -4681,10 +4767,12 @@ def api_conn_update(cid):
         return jsonify({"error": "Not found"}), 404
 
     data = request.json or {}
-    name           = str(data.get("name",           row["name"])).strip()
-    local_node     = str(data.get("local_node",     row["local_node"])).strip()
-    target_node    = str(data.get("target_node",    row["target_node"])).strip()
-    connect_time   = data.get("connect_time") or None
+    name          = str(data.get("name",          row["name"])).strip()
+    local_node    = str(data.get("local_node",    row["local_node"])).strip()
+    target_node   = str(data.get("target_node",   row["target_node"])).strip()
+    connect_time  = data.get("connect_time") or None
+    schedule_type = str(data.get("schedule_type", row["schedule_type"] or "daily")).strip()
+    schedule_days = str(data.get("schedule_days", row["schedule_days"] or "")).strip()
     idle_limit_sec = int(data.get("idle_limit_sec", row["idle_limit_sec"]))
     settle_sec     = int(data.get("settle_sec",     row["settle_sec"]))
 
@@ -4694,11 +4782,14 @@ def api_conn_update(cid):
         return jsonify({"error": "Invalid target node number"}), 400
     if connect_time and not re.match(r'^\d{2}:\d{2}$', connect_time):
         return jsonify({"error": "connect_time must be HH:MM"}), 400
+    if schedule_type not in _VALID_SCHEDULE_TYPES:
+        return jsonify({"error": f"Invalid schedule_type"}), 400
 
     db.execute(
         "UPDATE connectors SET name=?, local_node=?, target_node=?, connect_time=?, "
-        "idle_limit_sec=?, settle_sec=? WHERE id=?",
-        (name, local_node, target_node, connect_time, idle_limit_sec, settle_sec, cid)
+        "schedule_type=?, schedule_days=?, idle_limit_sec=?, settle_sec=? WHERE id=?",
+        (name, local_node, target_node, connect_time,
+         schedule_type, schedule_days, idle_limit_sec, settle_sec, cid)
     )
     db.commit()
     updated = db.execute("SELECT * FROM connectors WHERE id=?", (cid,)).fetchone()
