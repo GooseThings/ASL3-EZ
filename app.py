@@ -352,7 +352,7 @@ def check_auth():
     _PUBLIC          = {'login', 'logout', 'static', None,
                         'status_board', 'status_board_redirect',
                         'api_status_board', 'api_status_weather', 'api_status_activity',
-                        'api_login', 'api_session',
+                        'api_login', 'api_session', 'api_csrf_token',
                         'api_favorites', 'api_favorites_status',
                         'api_kiosk_settings_get'}
     # Any logged-in user (superuser / admin / user)
@@ -485,6 +485,13 @@ def api_login():
                         "csrf_token": generate_csrf()})
     log("WARN", f"[AUTH] API Login failed for '{username}'")
     return jsonify({"error": "Invalid username or password"}), 401
+
+
+@app.route("/api/csrf-token")
+def api_csrf_token():
+    """Return a fresh CSRF token for the current session (GET, so no CSRF check needed).
+    Used by the kiosk after logout to refresh _csrfToken without reloading the page."""
+    return jsonify({"csrf_token": generate_csrf()})
 
 
 @app.route("/api/session")

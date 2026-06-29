@@ -1186,16 +1186,22 @@ async function kioskLogin() {
   var username = document.getElementById('kl-user').value.trim();
   var password = document.getElementById('kl-pass').value;
   document.getElementById('kl-error').textContent = '';
-  var r = await apiFetch('/api/login', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({username: username, password: password})
-  });
-  var d = await r.json();
+  var r, d;
+  try {
+    r = await apiFetch('/api/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username: username, password: password})
+    });
+    d = await r.json();
+  } catch(e) {
+    document.getElementById('kl-error').textContent = 'Request error — try reloading the page';
+    return;
+  }
   if (r.ok && d.ok) {
     window._kioskRole = d.role;
-    /* session.clear() on the server invalidated the meta-tag CSRF token;
-       refresh _csrfToken so subsequent apiFetch calls don't get 403s. */
+    /* session.clear() on the server invalidated the CSRF token from the meta tag;
+       refresh _csrfToken so subsequent apiFetch calls don't get 400s. */
     if (d.csrf_token) _csrfToken = d.csrf_token;
     closeKioskModal();
     updateKioskUserBar(d.username, d.role);
@@ -1206,13 +1212,23 @@ async function kioskLogin() {
       _pendingAction = null;
     }
   } else {
-    document.getElementById('kl-error').textContent = d.error || 'Login failed';
+    document.getElementById('kl-error').textContent = d.error || ('Login failed (HTTP ' + r.status + ')');
   }
 }
 
 async function kioskLogout() {
   await apiFetch('/logout');
+  /* /logout clears the session, invalidating the CSRF token in our meta tag.
+     /login (the redirect target) regenerates one for the fresh session.
+     Fetch a new token so the next login attempt succeeds without a page reload. */
+  try {
+    var tr = await fetch('/api/csrf-token');
+    var td = await tr.json();
+    if (td.csrf_token) _csrfToken = td.csrf_token;
+  } catch(e) { /* non-fatal — a page reload would also fix it */ }
+  window._kioskRole = '';
   updateKioskUserBar(null, null);
+  renderFavorites();
   sbToast('Logged out', true);
 }
 
