@@ -3,7 +3,10 @@
 A browser-based web interface for managing your AllStarLink 3 nodes:
 - Edit `rpt.conf` with field-by-field or raw text editing
 - Field-by-field editing validates values against the official ASL3 docs (dropdowns for fixed-choice settings, numeric inputs with min/max for timers) so you can't save an invalid value
-- Connect, disconnect, and monitor nodes via AMI (Asterisk Manager Interface)
+- Connect and disconnect nodes (full transceive) or **Monitor** nodes (listen-only, `ilink 2`) via AMI
+- **Stream live receive audio** from your node to any browser tab — WebM/Opus over HTTP, multiple simultaneous listeners supported
+- **Status Board** (`/status`) — full-screen kiosk display with connected nodes, global activity feed, network map, weather bar, and grayline overlay; safe for TVs and public screens
+- **Multi-user roles**: Superuser / Admin / User (Kiosk) — kiosk accounts can connect/disconnect nodes but cannot access settings or config pages
 - Automatic backups on every save
 - Dashboard with system status and verbose debug logging
 - Node lookup from local astdb and AllStarLink stats API
@@ -156,14 +159,16 @@ All settings can be overridden in the service file:
 
 ```
 ASL3-EZ/
-├── app.py                  # Flask backend
+├── app.py                      # Flask backend
 ├── templates/
-│   ├── index.html          # Main single-page web UI
-│   └── login.html          # Login / first-run setup page
-├── requirements.txt        # Python deps (flask, gunicorn)
-├── ASL3-EZ.service         # systemd unit file
-├── install.sh              # Installer
-├── uninstall.sh            # Uninstaller
+│   ├── index.html              # Main single-page web UI (manager)
+│   ├── login.html              # Login / first-run setup page
+│   ├── status.html             # Status Board / kiosk display
+│   └── asl3-ez-manager.html    # Manager settings pages (kiosk, backups, alerts, etc.)
+├── requirements.txt            # Python deps (flask, gunicorn)
+├── ASL3-EZ.service             # systemd unit file
+├── install.sh                  # Installer
+├── uninstall.sh                # Uninstaller
 ├── README.md
 └── CHANGELOG.md
 ```
