@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="csrf-token" content="{{ csrf_token() }}">
-<title>HenWen Node Kiosk</title>
+<title>HenWen Kiosk</title>
 <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
 <script>(function(){var t=localStorage.getItem('henwen-theme')||localStorage.getItem('asl3ez-theme');if(t)document.documentElement.setAttribute('data-theme',t);})();</script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
@@ -203,8 +203,8 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
 .node-row:hover { background: var(--bg3); }
 .nr-dot { width: 9px; height: 9px; border-radius: 50%; background: #2a2a2a; border: 1px solid #333;
   margin-top: 4px; }
-.nr-dot.keyed { background: var(--green); border-color: var(--green);
-  box-shadow: 0 0 5px rgba(63,185,80,.7); }
+.nr-dot.keyed { background: var(--danger); border-color: var(--danger);
+  box-shadow: 0 0 5px rgba(224,68,68,.7); }
 .nr-dot.connecting { background: #d9a520; border-color: #d9a520;
   box-shadow: 0 0 5px rgba(217,165,32,.6); }
 .nr-num  { font-size: 1.05rem; font-weight: 700; font-family: var(--mono); }
@@ -309,10 +309,10 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
   padding: 3px 8px; border-radius: 4px; border: 1px solid; cursor: pointer;
   white-space: nowrap; transition: all .15s; flex-shrink: 0;
 }
-.sb-btn.connect    { background: rgba(88,166,255,.08); border-color: rgba(88,166,255,.3); color: var(--accent); }
-.sb-btn.connect:hover { background: rgba(88,166,255,.2); }
-.sb-btn.monitor    { background: rgba(63,185,80,.08);  border-color: rgba(63,185,80,.3);  color: var(--green); }
-.sb-btn.monitor:hover { background: rgba(63,185,80,.2); }
+.sb-btn.connect    { background: rgba(63,185,80,.08);  border-color: rgba(63,185,80,.3);  color: var(--green); }
+.sb-btn.connect:hover { background: rgba(63,185,80,.2); }
+.sb-btn.monitor    { background: rgba(88,166,255,.08); border-color: rgba(88,166,255,.3); color: var(--accent); }
+.sb-btn.monitor:hover { background: rgba(88,166,255,.2); }
 .sb-btn.disconnect { background: rgba(248,81,73,.08);  border-color: rgba(248,81,73,.3);  color: var(--red); }
 .sb-btn.disconnect:hover { background: rgba(248,81,73,.2); }
 .sb-btn.neutral    { background: var(--bg3); border-color: var(--border); color: var(--text2); }

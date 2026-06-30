@@ -494,7 +494,7 @@ def logout():
 @app.route("/api/login", methods=["POST"])
 @limiter.limit("10 per minute; 50 per hour")
 def api_login():
-    """JSON login for the Node Kiosk inline modal."""
+    """JSON login for the Kiosk inline modal."""
     data     = request.json or {}
     username = str(data.get("username", "")).strip()
     password = str(data.get("password", ""))
