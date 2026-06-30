@@ -1,5 +1,5 @@
 #!/bin/bash
-# ASL3-EZ - Uninstaller
+# HenWen - Uninstaller
 set -e
 
 if [ "$EUID" -ne 0 ]; then
@@ -9,11 +9,11 @@ fi
 
 echo ""
 echo "============================================"
-echo "  ASL3-EZ Uninstaller"
+echo "  HenWen Uninstaller"
 echo "============================================"
 echo ""
 
-echo "Stopping and disabling ASL3-EZ service..."
+echo "Stopping and disabling HenWen service..."
 systemctl stop    ASL3-EZ 2>/dev/null || true
 systemctl disable ASL3-EZ 2>/dev/null || true
 rm -f /etc/systemd/system/ASL3-EZ.service
@@ -25,7 +25,7 @@ rm -f /etc/systemd/system/asl3-rpt-editor.service
 
 systemctl daemon-reload
 
-echo "Removing installation directory /opt/ASL3-EZ..."
+echo "Removing installation directory /opt/ASL3-EZ (HenWen)..."
 rm -rf /opt/ASL3-EZ
 
 echo ""

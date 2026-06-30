@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ASL3-EZ - AllStarLink 3 rpt.conf Editor + Node Control
+HenWen - AllStarLink 3 rpt.conf Editor + Node Control
 by N8GMZ
 
 FIXES in this version:
@@ -67,7 +67,7 @@ app = Flask(__name__)
 RPT_CONF_PATH   = os.environ.get("RPT_CONF_PATH",   "/etc/asterisk/rpt.conf")
 MANAGER_CONF    = os.environ.get("MANAGER_CONF",    "/etc/asterisk/manager.conf")
 BACKUP_DIR      = os.environ.get("BACKUP_DIR",      "/etc/asterisk/rpt_backups")
-SECRET_KEY      = os.environ.get("SECRET_KEY",      "asl3-ez-change-me")
+SECRET_KEY      = os.environ.get("SECRET_KEY",      "henwen-change-me")
 PORT            = int(os.environ.get("PORT",         5000))
 HOST            = os.environ.get("HOST",             "0.0.0.0")
 DB_PATH         = os.environ.get("DB_PATH",          "/etc/asterisk/asl3ez.db")
@@ -82,7 +82,8 @@ SESSION_IDLE_TIMEOUT = int(os.environ.get("SESSION_IDLE_TIMEOUT", "1800"))  # 30
 
 # SECRET_KEY values that ship with the app/installer — used to warn the user
 # in the dashboard that they're still on the default and should change it.
-DEFAULT_SECRET_KEYS = {"", "asl3-ez-change-me", "asl3-ez-change-me-in-production"}
+DEFAULT_SECRET_KEYS = {"", "asl3-ez-change-me", "asl3-ez-change-me-in-production",
+                       "henwen-change-me", "henwen-change-me-in-production"}
 
 # Persistent AMI poller settings (tunable via service file env vars)
 # 1s poll for near-real-time keyed-status updates in the UI. This used to
@@ -154,7 +155,7 @@ def log(level, msg):
     with _log_lock:
         print(out, flush=True)
 
-log("INFO", "ASL3-EZ starting up")
+log("INFO", "HenWen starting up")
 log("INFO", f"  RPT_CONF_PATH  = {RPT_CONF_PATH}")
 log("INFO", f"  MANAGER_CONF   = {MANAGER_CONF}")
 log("INFO", f"  BACKUP_DIR     = {BACKUP_DIR}")
@@ -1111,11 +1112,11 @@ def _poll_loop():
                         watches = [w.strip() for w in cfg["watch_nodes"].split(",") if w.strip()]
                         if ev_type == "connect" and cfg["on_node_connect"]:
                             if not watches or peer in watches or local in watches:
-                                _send_alert("ASL3-EZ: Node Connected",
+                                _send_alert("HenWen: Node Connected",
                                             f"Node {peer} connected to {local}")
                         elif ev_type == "disconnect" and cfg["on_node_disconnect"]:
                             if not watches or peer in watches or local in watches:
-                                _send_alert("ASL3-EZ: Node Disconnected",
+                                _send_alert("HenWen: Node Disconnected",
                                             f"Node {peer} disconnected from {local}")
                 except Exception:
                     pass
@@ -1179,7 +1180,7 @@ def _fetch_node_stats(node: str) -> dict:
     socket.setdefaulttimeout(8)
     try:
         url = ASL_STATS_URL.format(node)
-        req = urlreq.Request(url, headers={"User-Agent": "ASL3-EZ/1.0"})
+        req = urlreq.Request(url, headers={"User-Agent": "HenWen/1.0"})
         with urlreq.urlopen(req, timeout=6) as resp:
             data = json.loads(resp.read().decode())
     finally:
@@ -1421,16 +1422,16 @@ def _check_alerts(ami_ok, cpu_temp):
         return
     # AMI disconnect
     if cfg["on_ami_disconnect"] and _alert_prev_ami is True and not ami_ok:
-        _send_alert("ASL3-EZ: AMI Offline", "Connection to Asterisk lost", "high")
+        _send_alert("HenWen: AMI Offline", "Connection to Asterisk lost", "high")
     # AMI reconnect
     if cfg["on_ami_reconnect"] and _alert_prev_ami is False and ami_ok:
-        _send_alert("ASL3-EZ: AMI Reconnected", "Connection to Asterisk restored", "default")
+        _send_alert("HenWen: AMI Reconnected", "Connection to Asterisk restored", "default")
     _alert_prev_ami = ami_ok
     # CPU temp — alert once when threshold is crossed, reset when it drops back
     if cfg["on_cpu_temp_high"] and cpu_temp is not None:
         thr = cfg["cpu_temp_threshold"]
         if cpu_temp > thr and not _alert_cpu_alerted:
-            _send_alert("ASL3-EZ: High CPU Temp",
+            _send_alert("HenWen: High CPU Temp",
                         f"CPU is {cpu_temp}C (threshold {thr}C)", "high")
             _alert_cpu_alerted = True
         elif cpu_temp <= thr:
@@ -1462,7 +1463,7 @@ def _geocode(location: str):
         _geocode_last[0] = time.time()
         try:
             url = NOMINATIM_URL.format(urlparse.quote_plus(loc))
-            req = urlreq.Request(url, headers={"User-Agent": "ASL3-EZ/1.0 (ham radio node manager)"})
+            req = urlreq.Request(url, headers={"User-Agent": "HenWen/1.0 (ham radio node manager)"})
             with urlreq.urlopen(req, timeout=10) as resp:
                 results = json.loads(resp.read())
             result = {"lat": float(results[0]["lat"]), "lon": float(results[0]["lon"])} if results else None
@@ -1507,7 +1508,7 @@ def _fetch_hub_linked_nodes():
     for hub in _ASL_HUBS:
         try:
             url = ASL_HUB_STATS_URL.format(hub)
-            req = urlreq.Request(url, headers={"User-Agent": "ASL3-EZ/1.0 (hub monitor)"})
+            req = urlreq.Request(url, headers={"User-Agent": "HenWen/1.0 (hub monitor)"})
             with urlreq.urlopen(req, timeout=10) as resp:
                 d = json.loads(resp.read())
             linked = (d.get("stats") or {}).get("data") or {}
@@ -1605,7 +1606,7 @@ def _fetch_weather(location: str) -> dict:
 
     try:
         url = WTTR_URL.format(urlparse.quote_plus(loc))
-        req = urlreq.Request(url, headers={"User-Agent": "ASL3-EZ/1.0"})
+        req = urlreq.Request(url, headers={"User-Agent": "HenWen/1.0"})
         with urlreq.urlopen(req, timeout=12) as resp:
             raw = json.loads(resp.read())
         cc   = (raw.get("current_condition") or [{}])[0]
@@ -2378,7 +2379,7 @@ def fetch_allmondb_node(node: str) -> dict:
 
     try:
         url = ALLMONDB_URL
-        req = urlreq.Request(url, headers={"User-Agent": "ASL3-EZ/1.0"})
+        req = urlreq.Request(url, headers={"User-Agent": "HenWen/1.0"})
         log("INFO", f"[ALLMONDB] Fetching node database from {url}")
         with urlreq.urlopen(req, timeout=10) as resp:
             text = resp.read().decode("utf-8", errors="replace")
@@ -2503,13 +2504,17 @@ def get_asterisk_status():
 # Flask routes
 # ---------------------------------------------------------------------------
 @app.route("/asl3-ez-manager")
+def redirect_old_manager():
+    return redirect(url_for("index"), 301)
+
+@app.route("/henwen-manager")
 def index():
     content   = read_conf_file(RPT_CONF_PATH)
     nodes     = get_node_numbers(content) if content else []
     templates = sorted(get_node_template_usage(content).keys()) if content else []
     macros    = sorted(get_macro_stanza_usage(content).keys()) if content else []
     schedules = sorted(get_schedule_stanza_usage(content).keys()) if content else []
-    return render_template("asl3-ez-manager.html",
+    return render_template("henwen-manager.html",
                            conf_exists=content is not None,
                            nodes=nodes,
                            templates=templates,
@@ -3036,7 +3041,7 @@ def api_alerts_test():
             return jsonify({"error": "No alert config saved yet"}), 400
         if not cfg["enabled"]:
             return jsonify({"error": "Alerts are disabled — enable them first"}), 400
-        _send_alert("ASL3-EZ: Test Alert",
+        _send_alert("HenWen: Test Alert",
                     "This is a test notification from ASL3-EZ", "default")
         return jsonify({"ok": True, "message": "Test alert sent"})
     except Exception as e:
@@ -3266,7 +3271,7 @@ def api_node_stats(node):
     try:
         url = ASL_STATS_URL.format(node)
         log("DEBUG", f"[API] Fetching stats for node {node} from {url}")
-        req = urlreq.Request(url, headers={"User-Agent": "ASL3-EZ/1.0"})
+        req = urlreq.Request(url, headers={"User-Agent": "HenWen/1.0"})
         with urlreq.urlopen(req, timeout=8) as resp:
             data = json.loads(resp.read().decode())
         return jsonify(data)
@@ -3284,7 +3289,7 @@ def api_nodestats_batch():
     for node in nodes[:15]:
         try:
             url = ASL_STATS_URL.format(node)
-            req = urlreq.Request(url, headers={"User-Agent": "ASL3-EZ/1.0"})
+            req = urlreq.Request(url, headers={"User-Agent": "HenWen/1.0"})
             with urlreq.urlopen(req, timeout=6) as resp:
                 results[node] = json.loads(resp.read().decode())
         except Exception as e:
