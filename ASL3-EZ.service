@@ -28,6 +28,9 @@ Environment=RPT_CONF_PATH=/etc/asterisk/rpt.conf
 Environment=MANAGER_CONF=/etc/asterisk/manager.conf
 Environment=BACKUP_DIR=/etc/asterisk/rpt_backups
 Environment=DB_PATH=/etc/asterisk/asl3ez.db
+# Announcement/ID sound files — must be under Asterisk's astdatadir/sounds/
+# so that "rpt localplay <node> asl3ez/<slug>" resolves correctly.
+Environment=SOUNDS_DIR=/usr/share/asterisk/sounds/asl3ez
 
 # ── Network ──────────────────────────────────────────────────────────────
 Environment=PORT=5000
