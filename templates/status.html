@@ -1565,7 +1565,11 @@ function _doStartListenMSE(audio, node) {
     _listenObjURL = null;
 
     try { sb = ms.addSourceBuffer('audio/webm; codecs=opus'); }
-    catch(e) { sbToast('Codec not supported: ' + e.message, false); return; }
+    catch(e) {
+      _listenSetBtn('&#9834; Listen', '', false);
+      sbToast('Codec not supported: ' + e.message, false);
+      return;
+    }
     sb.mode = 'sequence';
 
     sb.addEventListener('updateend', function() {

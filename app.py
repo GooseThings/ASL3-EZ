@@ -364,7 +364,7 @@ def check_auth():
                         'api_login', 'api_session', 'api_csrf_token',
                         'api_favorites', 'api_favorites_status',
                         'api_kiosk_settings_get',
-                        'api_audio_stream', 'api_audio_check'}
+                        'api_audio_stream', 'api_audio_check', 'api_audio_stop'}
     # Any logged-in user (superuser / admin / user)
     _USER_OR_ABOVE = {'api_status_connect', 'api_status_disconnect',
                       'api_fav_add', 'api_fav_delete', 'api_fav_label'}
