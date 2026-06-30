@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="csrf-token" content="{{ csrf_token() }}">
-<title>ASL3-EZ Node Kiosk</title>
+<title>HenWen Node Kiosk</title>
 <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
-<script>(function(){var t=localStorage.getItem('asl3ez-theme');if(t)document.documentElement.setAttribute('data-theme',t);})();</script>
+<script>(function(){var t=localStorage.getItem('henwen-theme')||localStorage.getItem('asl3ez-theme');if(t)document.documentElement.setAttribute('data-theme',t);})();</script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <style>
 html[data-theme="midnight"] {
@@ -361,8 +361,8 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
   <!-- Header -->
   <header class="header">
     <div class="header-brand">
-      <img class="header-logo" src="/static/logo-512.png" alt="ASL3-EZ">
-      <strong>ASL3-EZ</strong> <span>NODE KIOSK</span><span class="hb-dot" id="hb-dot"></span>
+      <img class="header-logo" src="/static/logo-512.png" alt="HenWen">
+      <strong>HenWen</strong> <span>NODE KIOSK</span><span class="hb-dot" id="hb-dot"></span>
     </div>
     <div class="header-clock" id="clock">--:--:--</div>
     <div class="header-actions">
@@ -373,7 +373,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
       </div>
       <button class="btn-icon" id="kiosk-login-btn" onclick="openKioskLogin()" style="display:none">Login</button>
       <button class="btn-icon" onclick="toggleFS()" title="Fullscreen">&#x26F6; Fullscreen</button>
-      <a class="btn-icon" href="/asl3-ez-manager">&#8592; Manager</a>
+      <a class="btn-icon" href="/henwen-manager">&#8592; Manager</a>
       <audio id="node-audio" preload="none">
         <source type="audio/webm; codecs=opus">
       </audio>
@@ -480,8 +480,8 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
     <span>Updated: <span id="f-updated">—</span>
       <span id="f-stale" class="f-stale" style="display:none"> — DATA STALE</span></span>
     <span>Uptime: <strong id="f-uptime">—</strong> &nbsp;|&nbsp; Disk: <strong id="f-disk">—</strong></span>
-    <span><a href="https://github.com/GooseThings/ASL3-EZ" target="_blank" rel="noopener"
-             style="color:var(--text2);text-decoration:none" title="ASL3-EZ on GitHub">ASL3-EZ</a></span>
+    <span><a href="https://github.com/GooseThings/HenWen" target="_blank" rel="noopener"
+             style="color:var(--text2);text-decoration:none" title="HenWen on GitHub">HenWen</a></span>
   </footer>
 
   <!-- Kiosk login modal -->
@@ -629,7 +629,7 @@ function changeTiles(key) {
   /* Move tile layer to bottom so markers stay on top */
   _currentTile.bringToBack();
   document.getElementById('map').classList.toggle('map-native', !def.darkFilter);
-  localStorage.setItem('asl3ez-maptiles', key);
+  localStorage.setItem('henwen-maptiles', key);
 }
 
 function toggleLayer(which, btn) {
@@ -651,7 +651,7 @@ function initMap() {
   });
 
   /* Load saved tile pref */
-  var saved = localStorage.getItem('asl3ez-maptiles') || 'dark';
+  var saved = localStorage.getItem('henwen-maptiles') || localStorage.getItem('asl3ez-maptiles') || 'dark';
   var sel = document.getElementById('map-tile-sel');
   if (sel) sel.value = saved;
   changeTiles(saved);

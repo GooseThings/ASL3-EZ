@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="csrf-token" content="{{ csrf_token() }}">
-<title>ASL3-EZ | AllStarLink 3 Node Manager</title>
+<title>HenWen | AllStarLink 3 Node Manager</title>
 <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
-<script>(function(){var t=localStorage.getItem('asl3ez-theme');if(t)document.documentElement.setAttribute('data-theme',t);})();</script>
+<script>(function(){var t=localStorage.getItem('henwen-theme')||localStorage.getItem('asl3ez-theme');if(t)document.documentElement.setAttribute('data-theme',t);})();</script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -461,7 +461,7 @@ pre.codeblock { background: var(--bg3); padding: 12px; border-radius: 4px; font-
 <aside class="sidebar">
   <div class="sidebar-header">
     <div>
-      <h1>ASL3-EZ</h1>
+      <h1>HenWen</h1>
       <p>AllStarLink 3 Manager</p>
     </div>
     <button class="hamburger" id="nav-toggle" onclick="toggleNav()" aria-label="Toggle navigation">&#9776;</button>
@@ -515,7 +515,7 @@ pre.codeblock { background: var(--bg3); padding: 12px; border-radius: 4px; font-
       <span class="sidebar-user">{{ session.get('username', '') }}</span>
       <a href="/logout" class="sidebar-logout">Sign out</a>
     </div>
-    <a href="https://github.com/GooseThings/ASL3-EZ" target="_blank" rel="noopener" class="sidebar-github">github.com/GooseThings/ASL3-EZ</a>
+    <a href="https://github.com/GooseThings/HenWen" target="_blank" rel="noopener" class="sidebar-github">github.com/GooseThings/HenWen</a>
   </div>
 </aside>
 
@@ -1512,7 +1512,7 @@ sudo asterisk -rx "module reload manager"</pre>
   <!-- Settings -->
   <section class="page" id="page-settings">
     <div class="page-title">Settings</div>
-    <div class="page-sub">App-level configuration for ASL3-EZ itself.</div>
+    <div class="page-sub">App-level configuration for HenWen itself.</div>
 
     <div class="card">
       <div class="card-header"><h2>Color Theme</h2></div>
@@ -1693,14 +1693,14 @@ sudo asterisk -rx "module reload manager"</pre>
         </div>
         <div id="secret-key-result" style="margin-top:14px"></div>
         <p class="muted" style="margin-top:10px">
-          Applying restarts the ASL3-EZ service to load the new key. This briefly disconnects
+          Applying restarts the HenWen service to load the new key. This briefly disconnects
           the web UI; reload the page after a couple of seconds.
         </p>
       </div>
     </div>
 
     <div class="card">
-      <div class="card-header"><h2>About ASL3-EZ</h2></div>
+      <div class="card-header"><h2>About HenWen</h2></div>
       <div class="card-body" style="line-height:1.7">
         <p style="margin-bottom:12px">
           A browser-based manager for AllStarLink 3 nodes — rpt.conf editing with live validation,
@@ -1716,9 +1716,9 @@ sudo asterisk -rx "module reload manager"</pre>
           <div>
             <div class="nav-section" style="padding:0 0 6px;margin:0 0 6px">Project</div>
             <ul style="list-style:none;line-height:2">
-              <li><a href="https://github.com/GooseThings/ASL3-EZ" target="_blank" rel="noopener" style="color:var(--accent)">GitHub &mdash; GooseThings/ASL3-EZ</a></li>
+              <li><a href="https://github.com/GooseThings/HenWen" target="_blank" rel="noopener" style="color:var(--accent)">GitHub &mdash; GooseThings/HenWen</a></li>
               <li><a href="https://www.WE8CHZ.org" target="_blank" rel="noopener" style="color:var(--accent)">WE8CHZ.org</a></li>
-              <li><a href="https://github.com/GooseThings/ASL3-EZ/blob/main/LICENSE" target="_blank" rel="noopener" style="color:var(--accent)">License &mdash; GPL-2.0</a></li>
+              <li><a href="https://github.com/GooseThings/HenWen/blob/main/LICENSE" target="_blank" rel="noopener" style="color:var(--accent)">License &mdash; GPL-3.0</a></li>
             </ul>
           </div>
           <div>
@@ -1848,7 +1848,7 @@ var THEME_NAMES = ['dark','midnight','light','terminal','amber','nord','mario','
 function applyTheme(name) {
   if (THEME_NAMES.indexOf(name) === -1) name = 'dark';
   document.documentElement.setAttribute('data-theme', name);
-  localStorage.setItem('asl3ez-theme', name);
+  localStorage.setItem('henwen-theme', name);
   THEME_NAMES.forEach(function(t) {
     var el = document.getElementById('ts-' + t);
     if (el) el.classList.toggle('active', t === name);
@@ -1858,7 +1858,7 @@ function applyTheme(name) {
 // Mark the active swatch whenever the settings page is shown.
 // (Theme is already applied by the <head> inline script on load.)
 function syncThemePicker() {
-  var current = localStorage.getItem('asl3ez-theme') || 'dark';
+  var current = localStorage.getItem('henwen-theme') || localStorage.getItem('asl3ez-theme') || 'dark';
   THEME_NAMES.forEach(function(t) {
     var el = document.getElementById('ts-' + t);
     if (el) el.classList.toggle('active', t === current);
@@ -2043,7 +2043,7 @@ async function refreshDashboard() {
   if (!d.ami_user || d.ami_user === 'NOT CONFIGURED')
     log('AMI credentials not configured. See AMI Diagnostics page.', 'ERROR');
   if (d.running_as === 'root')
-    log('ASL3-EZ is running as root. Consider switching to the asterisk user for better security.', 'WARN');
+    log('HenWen is running as root. Consider switching to the asterisk user for better security.', 'WARN');
 }
 
 /* ── Restart / reload ───────────────────────────────────────────────────── */
@@ -3851,7 +3851,7 @@ async function applyRoleNav() {
 }
 
 window.addEventListener('DOMContentLoaded', function() {
-  log('ASL3-EZ loaded.', 'INFO');
+  log('HenWen loaded.', 'INFO');
   applyRoleNav();
   // Initialize Add Connector schedule section
   var scSec = document.getElementById('sc-sched-section');

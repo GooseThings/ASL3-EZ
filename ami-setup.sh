@@ -1,13 +1,13 @@
 #!/bin/bash
-# asl3-ez-ami-setup
-# Verifies and optionally fixes the Asterisk AMI configuration for ASL3-EZ.
+# henwen-ami-setup
+# Verifies and optionally fixes the Asterisk AMI configuration for HenWen.
 # Run as root: sudo bash ami-setup.sh
 #
 # This script:
 #   1. Shows the current manager.conf
 #   2. Tests the AMI connection directly using Python (no app needed)
 #   3. Optionally creates/updates the AMI user entry
-#   4. Updates the ASL3-EZ service file to match
+#   4. Updates the HenWen service file to match
 #   5. Reloads Asterisk manager module
 
 set -e
@@ -22,7 +22,7 @@ RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC
 
 echo ""
 echo "============================================"
-echo "  ASL3-EZ AMI Setup and Verification"
+echo "  HenWen AMI Setup and Verification"
 echo "============================================"
 echo ""
 
@@ -281,7 +281,7 @@ esac
 
 # ── Update service file ───────────────────────────────────────────────────────
 echo ""
-echo -e "${CYAN}[5/5] Updating ASL3-EZ service file...${NC}"
+echo -e "${CYAN}[5/5] Updating HenWen service file...${NC}"
 
 if [ ! -f "$SERVICE_FILE" ]; then
     echo "  Service file not found at $SERVICE_FILE"
@@ -305,12 +305,12 @@ else
         systemctl restart ASL3-EZ
         sleep 1
         if systemctl is-active --quiet ASL3-EZ; then
-            echo -e "  ${GREEN}ASL3-EZ service updated and restarted successfully.${NC}"
+            echo -e "  ${GREEN}HenWen service updated and restarted successfully.${NC}"
         else
             echo -e "  ${YELLOW}Service restart may have failed. Check: journalctl -u ASL3-EZ -n 20${NC}"
         fi
     else
-        echo "  ASL3-EZ service not currently running. Start with: sudo systemctl start ASL3-EZ"
+        echo "  HenWen service not currently running. Start with: sudo systemctl start ASL3-EZ"
     fi
 fi
 
@@ -337,5 +337,5 @@ echo "    http://$(hostname -I | awk '{print $1}'):5000"
 echo "    -> AMI Diagnostics -> Run Test"
 echo ""
 echo "  To check logs:"
-echo "    journalctl -u ASL3-EZ -f"
+echo "    journalctl -u ASL3-EZ -f   # service unit name is still ASL3-EZ"
 echo "============================================"

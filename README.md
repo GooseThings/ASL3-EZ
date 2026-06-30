@@ -1,4 +1,4 @@
-# ASL3-EZ — AllStarLink 3 Node Manager
+# HenWen — AllStarLink 3 Node Manager
 
 A browser-based web interface for managing your AllStarLink 3 node. Runs as a systemd service on the same machine as Asterisk.
 
@@ -31,14 +31,14 @@ A browser-based web interface for managing your AllStarLink 3 node. Runs as a sy
 ## Step 1 — Install
 
 ```bash
-git clone https://github.com/GooseThings/ASL3-EZ.git
-cd ASL3-EZ
+git clone https://github.com/GooseThings/HenWen.git
+cd HenWen
 sudo bash install.sh
 ```
 
 The installer:
 - Installs Python dependencies into a virtual environment
-- Creates and enables the `ASL3-EZ` systemd service (runs on port 5000)
+- Creates and enables the `ASL3-EZ` systemd service (runs on port 5000)  <!-- service unit name stays ASL3-EZ on existing installs -->
 - Starts the service immediately
 
 Verify it is running:
@@ -122,7 +122,7 @@ In the web UI, go to **Dashboard → AMI Diagnostics** and click **Run Test**. A
 
 ## Step 4 — Commission: Rotate the Secret Key
 
-ASL3-EZ ships with a default `SECRET_KEY` that signs session cookies. You should replace it before putting the system into service.
+HenWen ships with a default `SECRET_KEY` that signs session cookies. You should replace it before putting the system into service.
 
 Go to **Settings** in the web UI and click **Generate & Apply New Key** (or type your own, 16+ characters). This writes the new key to the service file and restarts the service. The Dashboard shows a warning banner until the key has been rotated.
 
@@ -238,7 +238,7 @@ systemctl status ASL3-EZ
 
 ## Environment Variables
 
-All settings are configured in the systemd service file (`/etc/systemd/system/ASL3-EZ.service`). After editing, run `sudo systemctl daemon-reload && sudo systemctl restart ASL3-EZ`.
+All settings are configured in the systemd service file (`/etc/systemd/system/ASL3-EZ.service`). After editing, run `sudo systemctl daemon-reload && sudo systemctl restart ASL3-EZ`. (The service unit file retains the `ASL3-EZ` name on existing installs.)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -253,10 +253,10 @@ All settings are configured in the systemd service file (`/etc/systemd/system/AS
 | `SOUNDS_DIR` | `/var/lib/asterisk/sounds/asl3ez` | Uploaded audio files for Announcements and Node ID |
 | `PORT` | `5000` | Web server port |
 | `HOST` | `0.0.0.0` | Bind address |
-| `SECRET_KEY` | `asl3-ez-change-me` | Flask session key — rotate via the Settings page |
+| `SECRET_KEY` | `henwen-change-me` | Flask session key — rotate via the Settings page |
 | `SERVICE_NAME` | `ASL3-EZ` | systemd unit name (used when applying a new SECRET_KEY) |
 | `SERVICE_FILE_PATH` | `/etc/systemd/system/<SERVICE_NAME>.service` | Path to the unit file the Settings page edits |
-| `LOG_LEVEL` | `INFO` | ASL3-EZ log verbosity: `INFO` or `DEBUG` (full trace in journald) |
+| `LOG_LEVEL` | `INFO` | HenWen log verbosity: `INFO` or `DEBUG` (full trace in journald) |
 | `ASTERISK_LOG_PATH` | `/var/log/asterisk/messages.log` | Asterisk log shown in the Asterisk Console page |
 
 ---
@@ -264,11 +264,11 @@ All settings are configured in the systemd service file (`/etc/systemd/system/AS
 ## File Structure
 
 ```
-ASL3-EZ/
+HenWen/
 ├── app.py                      # Flask backend — all routes, AMI, scheduler threads
 ├── templates/
 │   ├── index.html              # Manager shell (nav + page loader)
-│   ├── asl3-ez-manager.html    # All manager pages (settings, connectors, users, etc.)
+│   ├── henwen-manager.html     # All manager pages (settings, connectors, users, etc.)
 │   ├── login.html              # Login / first-run account creation
 │   └── status.html             # Status Board / kiosk display (/status)
 ├── requirements.txt            # Python dependencies (flask, gunicorn, werkzeug)

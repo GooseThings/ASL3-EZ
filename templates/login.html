@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ASL3-EZ | {% if setup_mode %}Create Account{% else %}Sign In{% endif %}</title>
-<script>(function(){var t=localStorage.getItem('asl3ez-theme');if(t)document.documentElement.setAttribute('data-theme',t);})();</script>
+<title>HenWen | {% if setup_mode %}Create Account{% else %}Sign In{% endif %}</title>
+<script>(function(){var t=localStorage.getItem('henwen-theme')||localStorage.getItem('asl3ez-theme');if(t)document.documentElement.setAttribute('data-theme',t);})();</script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -187,7 +187,7 @@ button[type=submit]:hover {
 </head>
 <body>
 <div class="box">
-  <div class="logo">ASL3-EZ</div>
+  <div class="logo">HenWen</div>
   <div class="app-sub">AllStarLink 3 Manager</div>
 
   <h2>{% if setup_mode %}Create Account{% else %}Sign In{% endif %}</h2>

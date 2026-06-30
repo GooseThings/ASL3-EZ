@@ -1,6 +1,6 @@
 #!/bin/bash
-# ASL3-EZ - Installer
-# https://www.github.com/GooseThings/ASL3-EZ/
+# HenWen - Installer
+# https://www.github.com/GooseThings/HenWen/
 # Run as root: sudo bash install.sh
 set -e
 
@@ -10,7 +10,7 @@ PORT="${PORT:-5000}"
 
 echo ""
 echo "============================================"
-echo "  ASL3-EZ AllStarLink 3 Node Manager"
+echo "  HenWen AllStarLink 3 Node Manager"
 echo "  Installer  -  by N8GMZ"
 echo "============================================"
 echo ""
