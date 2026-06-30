@@ -1444,6 +1444,8 @@ var _listenCtrl      = null;   // AbortController for in-flight fetch
 var _listenObjURL    = null;   // MediaSource blob URL pending revoke
 var _listenRenewTimer= null;   // safety-valve reconnect (30 min)
 var _listenRateTimer = null;   // rate-control interval
+var _listenStartTimer= null;   // startup watchdog — abort if no stream within N seconds
+var _LISTEN_START_MS = 12000;  // give up on a stalled connection after 12 s
 
 /* MSE live-edge tuning.
    Playback aims to sit _LISTEN_TARGET_S behind the live edge. When it drifts
@@ -1485,10 +1487,24 @@ function _startListen() {
   audio.onloadstart = null;
   audio.onerror     = null;
 
+  /* Startup watchdog: if playback hasn't begun within _LISTEN_START_MS, tear the
+     attempt down and tell the user instead of leaving the button stuck on
+     "... Connecting" forever (e.g. when a network blocks the live stream). */
+  if (_listenStartTimer) clearTimeout(_listenStartTimer);
+  _listenStartTimer = setTimeout(function() {
+    _listenStartTimer = null;
+    if (_listenActive) return;
+    console.warn('[AUDIO] startup watchdog fired — no stream after ' + _LISTEN_START_MS + 'ms');
+    _stopListen();
+    _listenSetBtn('&#9834; Listen', '', false);
+    sbToast('Audio did not start — your network may be blocking the live stream. Try again, or use a different connection.', false);
+  }, _LISTEN_START_MS);
+
   apiFetch('/api/audio/check/' + node)
     .then(function(r) { return r.json(); })
     .then(function(d) {
       if (!d.ok) {
+        if (_listenStartTimer) { clearTimeout(_listenStartTimer); _listenStartTimer = null; }
         _listenSetBtn('&#9834; Listen', '', false);
         sbToast('Audio unavailable: ' + (d.issues || []).join('; '), false);
         return;
@@ -1496,6 +1512,7 @@ function _startListen() {
       _doStartListen(audio, node);
     })
     .catch(function(e) {
+      if (_listenStartTimer) { clearTimeout(_listenStartTimer); _listenStartTimer = null; }
       _listenSetBtn('&#9834; Listen', '', false);
       sbToast('Check failed: ' + e.message, false);
     });
@@ -1618,6 +1635,7 @@ function _doStartListenMSE(audio, node) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
 
         _listenActive = true;
+        if (_listenStartTimer) { clearTimeout(_listenStartTimer); _listenStartTimer = null; }
         _listenSetBtn('&#9646;&#9646; Mute', 'var(--green)', false);
         sbToast('Monitoring node ' + node + ' — audio plays when active', true);
         console.log('[AUDIO] MSE connected to node', node, new Date().toISOString());
@@ -1731,6 +1749,7 @@ function _doStartListenFallback(audio, node) {
      High-latency (browser buffers aggressively) but functional. */
   audio.onloadstart = function() {
     _listenActive = true;
+    if (_listenStartTimer) { clearTimeout(_listenStartTimer); _listenStartTimer = null; }
     _listenSetBtn('&#9646;&#9646; Mute', 'var(--green)', false);
     sbToast('Monitoring node ' + node + ' — audio plays when active', true);
     console.log('[AUDIO] fallback src connected to node', node);
@@ -1763,6 +1782,7 @@ function _doStartListenFallback(audio, node) {
 }
 
 function _stopListen() {
+  if (_listenStartTimer) { clearTimeout(_listenStartTimer);  _listenStartTimer = null; }
   if (_listenRenewTimer) { clearTimeout(_listenRenewTimer);  _listenRenewTimer = null; }
   if (_listenRateTimer)  { clearInterval(_listenRateTimer);  _listenRateTimer  = null; }
   if (_listenCtrl) { _listenCtrl.abort(); _listenCtrl = null; }

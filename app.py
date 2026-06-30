@@ -4021,7 +4021,11 @@ def _start_broadcast(node):
         '-i', 'pipe:0',
         '-ar', '48000',        # resample to Opus native rate before encoding
         '-c:a', 'libopus', '-b:a', '24k',
-        '-vbr', 'on',          # variable bitrate: spend bits only when there's signal
+        '-vbr', 'off',         # CBR — keep a steady ~24 kbps byte flow even when the node
+                               # is quiet, so the injected silence actually keeps the
+                               # connection alive through NAT/proxies. With VBR, silence
+                               # compresses to ~4 kbps and buffering proxies stall the
+                               # idle stream, so a remote listener's player never starts.
         '-cutoff', '4000',     # narrowband — the 8 kHz source has no content above 4 kHz
                                # (Nyquist), so confine Opus to 0–4 kHz and spend every bit
                                # on the speech band instead of an empty 4–8 kHz range
