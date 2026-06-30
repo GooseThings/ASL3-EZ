@@ -1,6 +1,6 @@
 # HenWen — AllStarLink 3 Node Manager & Kiosk
 
-A browser-based web interface for managing your AllStarLink 3 node. Runs as a systemd service on the same machine as Asterisk.
+A browser-based web interface for managing and using your AllStarLink 3 node. Also supports multiple users via a kiosk. Runs as a systemd service on the same machine as Asterisk.
 
 ![kiosk](kiosk-example.jpg)
 
