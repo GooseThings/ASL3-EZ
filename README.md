@@ -1,8 +1,8 @@
-# HenWen — AllStarLink 3 Node Manager
+# HenWen — AllStarLink 3 Node Manager & Kiosk
 
 A browser-based web interface for managing your AllStarLink 3 node. Runs as a systemd service on the same machine as Asterisk.
 
-https://github.com/GooseThings/HenWen/blob/main/kiosk-example.jpg?raw=true
+![kiosk](https://github.com/GooseThings/HenWen/blob/main/kiosk-example.jpg?raw=true)
 
 **Key features:**
 - Edit `rpt.conf` field-by-field (validated dropdowns and range-checked inputs sourced from the official ASL3 docs) or switch to a raw text editor
@@ -336,6 +336,6 @@ HenWen/
 
 ## License
 
-GPL-2.0 — use freely, at your own risk. Not affiliated with AllStarLink, Inc.
+GPL-3.0 — use at your own risk. Not affiliated with AllStarLink, Inc.
 
-*73 de N8GMZ*
+*73 de N8GMZ dit dit*
