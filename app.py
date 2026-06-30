@@ -74,7 +74,7 @@ DB_PATH         = os.environ.get("DB_PATH",          "/etc/asterisk/asl3ez.db")
 AMI_HOST        = os.environ.get("AMI_HOST",         "127.0.0.1")
 AMI_PORT        = int(os.environ.get("AMI_PORT",     5038))
 SERVICE_NAME    = os.environ.get("SERVICE_NAME",     "ASL3-EZ")
-SOUNDS_DIR      = os.environ.get("SOUNDS_DIR",       "/var/lib/asterisk/sounds/asl3ez")
+SOUNDS_DIR      = os.environ.get("SOUNDS_DIR",       "/usr/share/asterisk/sounds/asl3ez")
 SERVICE_FILE_PATH = os.environ.get("SERVICE_FILE_PATH",
                                     f"/etc/systemd/system/{SERVICE_NAME}.service")
 SECURE_COOKIES       = os.environ.get("SECURE_COOKIES", "false").lower() == "true"
@@ -4645,6 +4645,9 @@ def _convert_to_ulaw(src: str, dest: str) -> None:
     )
     if result.returncode != 0:
         raise RuntimeError(f"ffmpeg failed: {result.stderr[-500:]}")
+    # Asterisk reads sounds as the asterisk user; ensure it can read the file
+    # regardless of the process umask.
+    os.chmod(dest, 0o644)
 
 
 def _ann_sound_path(slug: str) -> str:
