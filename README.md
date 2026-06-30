@@ -137,6 +137,57 @@ Go to **Manager** in the web UI. Your node stanzas from `/etc/asterisk/rpt.conf`
 
 ---
 
+## Updating HenWen
+
+HenWen's code installs to `/opt/ASL3-EZ`, while your configuration and data live elsewhere and are **not** touched by a code update:
+
+- AMI credentials and `SECRET_KEY` — `/etc/systemd/system/ASL3-EZ.service`
+- Users, favorites, connectors, announcements — `/etc/asterisk/asl3ez.db`
+- rpt.conf backups — `/etc/asterisk/rpt_backups/`
+
+The SQLite schema migrates automatically on startup, so new features need no manual database steps.
+
+### Quick update (recommended)
+
+Pulls the latest code and restarts the service. Your service file, database, and backups are all preserved.
+
+```bash
+cd ~/HenWen          # the directory you originally cloned into
+git pull
+sudo cp -r app.py templates static /opt/ASL3-EZ/
+sudo systemctl restart ASL3-EZ
+```
+
+If a release adds new Python dependencies (check `requirements.txt`), also refresh the virtual environment:
+
+```bash
+sudo /opt/ASL3-EZ/venv/bin/pip install -r /opt/ASL3-EZ/requirements.txt
+sudo systemctl restart ASL3-EZ
+```
+
+### Full reinstall
+
+Re-running the installer also refreshes Python dependencies and the systemd unit. **It overwrites the service file** (`/etc/systemd/system/ASL3-EZ.service`) with the default template and re-runs AMI setup — so back up your service file first and restore it afterward, or you will lose your AMI credentials and `SECRET_KEY`:
+
+```bash
+cd ~/HenWen
+git pull
+sudo cp /etc/systemd/system/ASL3-EZ.service ~/ASL3-EZ.service.bak   # save your credentials
+sudo bash install.sh
+sudo cp ~/ASL3-EZ.service.bak /etc/systemd/system/ASL3-EZ.service   # restore them
+sudo systemctl daemon-reload && sudo systemctl restart ASL3-EZ
+```
+
+### Verify
+
+```bash
+systemctl status ASL3-EZ
+```
+
+Then open the web UI and run **Dashboard → AMI Diagnostics → Run Test**. Hard-refresh the browser (Ctrl-Shift-R) to pick up any updated UI.
+
+---
+
 ## Using the Status Board
 
 The Status Board at `/status` (or **Status Board ↗** in the sidebar) is designed for TV or kiosk display. It requires no login to view.
