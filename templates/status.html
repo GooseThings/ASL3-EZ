@@ -1456,10 +1456,13 @@ var _listenRateTimer = null;   // rate-control interval
 
 /* MSE live-edge tuning.
    Instead of jumping, we speed up playback slightly when drifting behind.
-   Chrome uses pitch-preserving WSOLA for playbackRate, so 1.06x sounds
-   like the same audio just very slightly faster — inaudible on voice.
-   A hard jump is kept only as a last resort for extreme stalls (>2s). */
-var _LISTEN_KEEPBUF_S  = 1.0;            // trim buffer older than this behind playhead
+   Chrome uses pitch-preserving WSOLA for playbackRate, so slight speedup is
+   inaudible on voice. A hard jump is last resort only for extreme stalls.
+     lag < 0.40s  → 1.00× (comfortable at live edge — wide dead-band for jitter)
+     0.40–1.00s   → 1.05× (5% faster, imperceptible)
+     1.00–3.00s   → 1.12× (12% faster, barely noticeable)
+     > 3.00s      → hard jump to liveEdge−0.4s (leaves runway after recovery) */
+var _LISTEN_KEEPBUF_S  = 2.0;            // trim buffer older than this behind playhead
 var _LISTEN_RATE_MS    = 150;            // how often (ms) to run the rate controller
 var _LISTEN_RENEW_MS   = 30 * 60 * 1000;
 
@@ -1574,25 +1577,21 @@ function _doStartListenMSE(audio, node) {
     });
 
     /* Rate controller: runs every _LISTEN_RATE_MS and nudges playbackRate
-       to gently chase the live edge without an audible jump.
-       Chrome uses pitch-preserving WSOLA so the speedup is transparent.
-         lag < 0.15s  → 1.00× (at live edge, normal speed)
-         0.15–0.4s    → 1.05× (5% faster, imperceptible)
-         0.4–2.0s     → 1.12× (12% faster, barely noticeable)
-         > 2.0s       → hard jump (network stall recovery only) */
+       to gently chase the live edge without an audible jump. */
     if (_listenRateTimer) clearInterval(_listenRateTimer);
     _listenRateTimer = setInterval(function() {
       if (!_listenActive || !sb || sb.updating || !sb.buffered.length) return;
+      if (audio.readyState < 2) return;  // skip while browser is still buffering startup
       var liveEdge = sb.buffered.end(sb.buffered.length - 1);
       var lag      = liveEdge - audio.currentTime;
       var rate;
-      if (lag > 2.0) {
-        audio.currentTime = liveEdge - 0.1;
+      if (lag > 3.0) {
+        audio.currentTime = liveEdge - 0.4;
         rate = 1.0;
         console.log('[AUDIO] emergency jump: lag=' + lag.toFixed(3) + 's');
-      } else if (lag > 0.4) {
+      } else if (lag > 1.0) {
         rate = 1.12;
-      } else if (lag > 0.15) {
+      } else if (lag > 0.4) {
         rate = 1.05;
       } else {
         rate = 1.0;
@@ -1655,6 +1654,31 @@ function _doStartListenMSE(audio, node) {
     _listenSetBtn('&#9834; Listen', '', false);
     sbToast('Audio error: ' + code + (msg ? ' — ' + msg : ''), false);
   };
+
+  /* Stall recovery: when the browser fires 'waiting' (ran out of buffer),
+     pause and poll until we have ≥800ms of forward buffer before resuming.
+     This prevents choppy restarts from the browser playing on a thin buffer. */
+  var _rebufferTimer = null;
+  audio.addEventListener('waiting', function() {
+    if (!_listenActive || ctrl.signal.aborted) return;
+    if (_rebufferTimer) return;
+    console.log('[AUDIO] stalled — waiting for rebuffer');
+    _rebufferTimer = setInterval(function() {
+      if (!_listenActive || ctrl.signal.aborted) {
+        clearInterval(_rebufferTimer); _rebufferTimer = null; return;
+      }
+      if (!sb || !sb.buffered.length) return;
+      var ahead = sb.buffered.end(sb.buffered.length - 1) - audio.currentTime;
+      if (ahead >= 0.8) {
+        clearInterval(_rebufferTimer); _rebufferTimer = null;
+        console.log('[AUDIO] rebuffered (' + ahead.toFixed(2) + 's ahead) — resuming');
+        audio.play().catch(function() {});
+      }
+    }, 100);
+  });
+  audio.addEventListener('playing', function() {
+    if (_rebufferTimer) { clearInterval(_rebufferTimer); _rebufferTimer = null; }
+  });
 
   audio.src = url;
   audio.play().catch(function(e) {

@@ -3875,7 +3875,7 @@ class _AudioBroadcast:
     def _read_loop(self):
         try:
             while True:
-                chunk = self.ffmpeg_proc.stdout.read1(512)
+                chunk = self.ffmpeg_proc.stdout.read1(2048)
                 if not chunk:
                     break
                 self._fanout(chunk)
@@ -3988,7 +3988,7 @@ def _start_broadcast(node):
         '-frame_duration', '20',
         '-application', 'audio',
         '-f', 'webm',
-        '-cluster_time_limit', '50',
+        '-cluster_time_limit', '100',
         'pipe:1',
     ]
     log('DEBUG', f'[AUDIO] launching ffmpeg: {" ".join(ffmpeg_cmd)}')
