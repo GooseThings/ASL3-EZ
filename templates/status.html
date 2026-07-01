@@ -373,7 +373,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
       </div>
       <button class="btn-icon" id="kiosk-login-btn" onclick="openKioskLogin()" style="display:none">Login</button>
       <button class="btn-icon" onclick="toggleFS()" title="Fullscreen">&#x26F6; Fullscreen</button>
-      <a class="btn-icon" href="/henwen-manager">&#8592; Manager</a>
+      <a class="btn-icon" href="/henwen-manager" target="_blank" rel="noopener">&#8592; Manager</a>
       <audio id="node-audio" preload="none">
         <source type="audio/webm; codecs=opus">
       </audio>
@@ -477,6 +477,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
   <!-- Footer -->
   <footer class="footer">
     <span>Uptime: <strong id="f-uptime">—</strong></span>
+    <span>Logged in: <strong id="f-active-users">—</strong></span>
     <span><a href="https://github.com/GooseThings/HenWen" target="_blank" rel="noopener"
              style="color:var(--text2);text-decoration:none" title="HenWen on GitHub">HenWen</a></span>
   </footer>
@@ -949,6 +950,8 @@ async function refreshBoard() {
     /* Footer */
     var elUptime = document.getElementById('f-uptime');
     if (elUptime) elUptime.textContent = data.uptime || '—';
+    var elActiveUsers = document.getElementById('f-active-users');
+    if (elActiveUsers) elActiveUsers.textContent = (data.active_users != null) ? data.active_users : '—';
 
     /* Re-render map whenever board data changes */
     updateMap();
@@ -1223,6 +1226,7 @@ async function kioskLogin() {
     updateKioskUserBar(d.username, d.role);
     var pl = document.getElementById('perm-label');
     if (pl) pl.style.display = (d.role === 'admin' || d.role === 'superuser') ? '' : 'none';
+    loadFavorites();
     if (_pendingAction) {
       _pendingAction.fn.apply(null, _pendingAction.args);
       _pendingAction = null;
@@ -1244,7 +1248,7 @@ async function kioskLogout() {
   } catch(e) { /* non-fatal — a page reload would also fix it */ }
   window._kioskRole = '';
   updateKioskUserBar(null, null);
-  renderFavorites();
+  loadFavorites();
   sbToast('Logged out', true);
 }
 

@@ -389,12 +389,18 @@ def check_auth():
         last_active  = session.get('last_active', now)
         idle_timeout = session.get('idle_timeout', SESSION_IDLE_TIMEOUT)
         if idle_timeout and now - last_active > idle_timeout:
+            remove_active_session(session.get('sid'))
             session.clear()
             logged_in = False
             if request.path.startswith('/api/'):
                 return jsonify({"error": "Session expired", "timeout": True}), 401
             return redirect(url_for('login'))
         session['last_active'] = now
+        sid = session.get('sid')
+        if not sid:
+            sid = secrets.token_hex(16)
+            session['sid'] = sid
+        touch_active_session(sid, session.get('username', ''))
 
     # Refresh role from DB if missing or if 'admin' (the pre-v3 role that was
     # migrated to 'superuser' in the DB but not in existing sessions).
@@ -457,6 +463,8 @@ def login():
             session["role"]         = "superuser"
             session["user_id"]      = new_user["id"]
             session["idle_timeout"] = new_user["session_idle_timeout"] if new_user["session_idle_timeout"] is not None else SESSION_IDLE_TIMEOUT
+            session["sid"] = secrets.token_hex(16)
+            touch_active_session(session["sid"], username)
             log("INFO", f"[AUTH] Initial account created for '{username}'")
             return redirect(url_for('index'))
 
@@ -469,6 +477,8 @@ def login():
             session["role"]         = user["role"]
             session["user_id"]      = user["id"]
             session["idle_timeout"] = user["session_idle_timeout"] if user["session_idle_timeout"] is not None else SESSION_IDLE_TIMEOUT
+            session["sid"] = secrets.token_hex(16)
+            touch_active_session(session["sid"], username)
             log("INFO", f"[AUTH] Login: '{username}' (role={user['role']})")
             if user["role"] == "user":
                 return redirect(url_for('status_board'))
@@ -486,6 +496,7 @@ def login():
 @app.route("/logout")
 def logout():
     username = session.get("username", "unknown")
+    remove_active_session(session.get("sid"))
     session.clear()
     log("INFO", f"[AUTH] Logout: '{username}'")
     return redirect(url_for('login'))
@@ -506,6 +517,8 @@ def api_login():
         session["role"]         = user["role"]
         session["user_id"]      = user["id"]
         session["idle_timeout"] = user["session_idle_timeout"] if user["session_idle_timeout"] is not None else SESSION_IDLE_TIMEOUT
+        session["sid"] = secrets.token_hex(16)
+        touch_active_session(session["sid"], username)
         log("INFO", f"[AUTH] API Login: '{username}' (role={user['role']})")
         # session.clear() above invalidated the CSRF token that was baked into
         # the already-loaded status page meta tag.  Return the fresh token so
@@ -1271,6 +1284,35 @@ _kiosk_temp_lock  = threading.Lock()
 # ── Alert state ───────────────────────────────────────────────────────────────
 _alert_prev_ami    = None   # None=unknown, True=was connected, False=was disconnected
 _alert_cpu_alerted = False
+
+# ── Active session tracking (for the "logged in users" footer count) ─────────
+# Flask sessions are signed cookies with no server-side store, so we track
+# active logins ourselves via a random per-session id stashed in the cookie.
+# key: session id, val: {'username': str, 'last_active': float (epoch)}
+_active_sessions      = {}
+_active_sessions_lock = threading.Lock()
+ACTIVE_SESSION_WINDOW = 90  # seconds of inactivity before a session drops out of the count
+
+
+def touch_active_session(sid, username):
+    with _active_sessions_lock:
+        _active_sessions[sid] = {'username': username, 'last_active': time.time()}
+
+
+def remove_active_session(sid):
+    if not sid:
+        return
+    with _active_sessions_lock:
+        _active_sessions.pop(sid, None)
+
+
+def get_active_user_count():
+    cutoff = time.time() - ACTIVE_SESSION_WINDOW
+    with _active_sessions_lock:
+        stale = [sid for sid, info in _active_sessions.items() if info['last_active'] < cutoff]
+        for sid in stale:
+            del _active_sessions[sid]
+        return len(_active_sessions)
 
 
 def _record_keyed(node: str):
@@ -3531,6 +3573,7 @@ def api_status_board():
         "cpu_temp":         get_cpu_temp(),
         "disk":             get_disk_usage(),
         "ami_connected":    _ami_connected,
+        "active_users":     get_active_user_count(),
     })
     resp.headers["Cache-Control"] = "no-store"
     return resp
