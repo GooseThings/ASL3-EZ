@@ -2,6 +2,8 @@
 
 ## Recent Changes
 
+- **Changed: removed the blue dot next to global entries in the Global Activity list**, keeping the green dot for locally-keyed entries so the local highlight still stands out without the list looking cluttered.
+- **Changed: the Recent Connections list in the Node card is now bottom-justified** — with fewer than a full list of rows, they now anchor to the bottom of the card instead of leaving empty space below them.
 - **Changed: Recent Connections on the kiosk now only shows completed connections, last 5.** Still-live connections already appear in the Connected Nodes panel, so showing them again here was redundant; `/api/status/history` now filters to `disconnected_at IS NOT NULL` and caps at 5 instead of 20.
 - **Fixed: Global Activity panel fonts were noticeably larger than Favorites and Recent Connections.** Node number, callsign, and location font sizes in the Global Activity list now match Favorites' sizes for visual consistency.
 - **Changed: Node status card is now a full-height column (matching Global Activity and Favorites), narrowed to just fit a 6-digit node number, with a condensed Recent Connections list filling the extra vertical space.** Connected Nodes and the Network Map shifted over into the space the Node card used to occupy, and now share the same width. The connection history shown is a condensed, read-only view scoped to this server's own hosted node(s) (new `/api/status/history` endpoint, public like the rest of the Status Board) — the full searchable/paginated history with node filtering and a Clear button remains in the Manager's Conn. History tab.
