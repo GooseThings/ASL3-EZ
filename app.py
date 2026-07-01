@@ -28,6 +28,7 @@ FIXES in this version:
 
 import os
 import re
+import html
 import subprocess
 import shutil
 import socket
@@ -1518,72 +1519,66 @@ def _geocode(location: str):
     return result
 
 
-# ── Global ASL activity (nodes connected to major public hubs) ────────────────
-# Instead of the 9.7 MB full-node-list endpoint (which triggers rate limits),
-# we poll a small curated list of major public hub nodes. Each request is ~3 KB.
-# From each hub's linkedNodes list we extract nodes with server lat/lon.
-# Polled every 5 minutes; 1-second gap between hub requests.
-ASL_HUB_STATS_URL     = "https://stats.allstarlink.org/api/stats/{}"
-GLOBAL_ACTIVITY_INTERVAL = 300.0   # 5 minutes between full hub sweeps
+# ── Global ASL activity (currently-keyed nodes network-wide) ──────────────────
+# Scrapes the public "Keyed Nodes" page, which lists every node presently
+# keyed up anywhere on the AllStarLink network — no arbitrary top-N cap,
+# we take every row the page lists. Polled every 2 minutes.
+ASL_KEYED_STATS_URL      = "https://stats.allstarlink.org/stats/keyed"
+GLOBAL_ACTIVITY_INTERVAL = 120.0   # 2 minutes between sweeps
 
-# Well-known public hubs with confirmed active linkedNodes populations.
-# The poller gracefully skips any that return no data.
-_ASL_HUBS = [27339, 41522, 2000, 55143, 3109050, 9050, 436000, 460220]
+# Only the most recent activity matters for display — the keyed page is a
+# live snapshot, not a history, so there's no reason to retain entries past
+# the display window itself.
+_GLOBAL_DISPLAY_WINDOW_SEC = 15 * 60   # 15 minutes
+_GLOBAL_MAX_AGE_SEC        = _GLOBAL_DISPLAY_WINDOW_SEC
 
 _global_nodes_cache = []   # rolling history, newest first, de-duped by node
 _global_nodes_ts    = 0.0
 _global_nodes_lock  = threading.Lock()
-_GLOBAL_MAX_AGE_SEC = 480 * 60  # prune entries older than max pin duration (8 h)
+
+_KEYED_ROW_RE = re.compile(r'<tr>(.*?)</tr>', re.S)
+_KEYED_TD_RE  = re.compile(r'<td>(.*?)</td>', re.S)
+_KEYED_NODE_RE     = re.compile(r'>([^<]+)</a>')
+_KEYED_CALLSIGN_RE = re.compile(r'callsign=([^"]+)"')
 
 
-def _fetch_hub_linked_nodes():
+def _fetch_keyed_nodes():
     """
-    Query each hub in _ASL_HUBS for ALL of its linkedNodes.
-    Collect every unique node across all hubs, then return the 10 whose
-    regseconds (last-connected-to-hub timestamp) are most recent.
-    This means the returned batch changes sweep-to-sweep as nodes
-    reconnect, allowing the accumulation history to grow over time.
+    Scrape https://stats.allstarlink.org/stats/keyed for every node
+    currently keyed up network-wide. Returns one entry per row on the
+    page — the page itself only lists presently-active nodes, so there
+    is no separate "top N" cap to apply here.
     """
-    seen  = set()
-    pool  = []
-    now   = time.time()
-    for hub in _ASL_HUBS:
-        try:
-            url = ASL_HUB_STATS_URL.format(hub)
-            req = urlreq.Request(url, headers={"User-Agent": "HenWen/1.0 (hub monitor)"})
-            with urlreq.urlopen(req, timeout=10) as resp:
-                d = json.loads(resp.read())
-            linked = (d.get("stats") or {}).get("data") or {}
-            linked = linked.get("linkedNodes") or []
-            for n in linked:
-                name = str(n.get("name", ""))
-                if not name or name in seen:
-                    continue
-                seen.add(name)
-                srv = n.get("server") or {}
-                lat = lon = None
-                try:
-                    if srv.get("Latitude") and srv.get("Logitude"):
-                        lat = float(srv["Latitude"])
-                        lon = float(srv["Logitude"])  # AllStarLink API typo
-                except (ValueError, TypeError):
-                    pass
-                pool.append({
-                    "node":     name,
-                    "callsign": n.get("callsign", ""),
-                    "location": srv.get("Location", "") or n.get("node_frequency", ""),
-                    "lat":      lat,
-                    "lon":      lon,
-                    "reg_ts":   int(n.get("regseconds", 0) or 0),
-                    "ts":       now,   # observation time — used for retention/display
-                })
-        except Exception as e:
-            log("DEBUG", f"[GLOBAL-ACTIVITY] Hub {hub}: {e}")
-        time.sleep(1.0)   # 1 s gap between hub requests
+    now  = time.time()
+    pool = []
+    try:
+        req = urlreq.Request(ASL_KEYED_STATS_URL, headers={"User-Agent": "HenWen/1.0 (keyed monitor)"})
+        with urlreq.urlopen(req, timeout=10) as resp:
+            page = resp.read().decode("utf-8", "replace")
+    except Exception as e:
+        log("DEBUG", f"[GLOBAL-ACTIVITY] Keyed page fetch failed: {e}")
+        return pool
 
-    # Top 10 across all hubs by most-recently-connected-to-hub
-    pool.sort(key=lambda x: x["reg_ts"], reverse=True)
-    return pool[:10]
+    for row in _KEYED_ROW_RE.findall(page):
+        tds = _KEYED_TD_RE.findall(row)
+        if len(tds) < 6:
+            continue
+        node_m = _KEYED_NODE_RE.search(tds[0])
+        node   = node_m.group(1).strip() if node_m else ""
+        if not node:
+            continue
+        call_m   = _KEYED_CALLSIGN_RE.search(tds[2])
+        callsign = html.unescape(urlparse.unquote(call_m.group(1))).strip() if call_m else ""
+        location = html.unescape(re.sub(r'<[^>]+>', '', tds[5])).strip()
+        pool.append({
+            "node":     node,
+            "callsign": callsign,
+            "location": location,
+            "lat":      None,
+            "lon":      None,
+            "ts":       now,   # observation time — used for retention/display
+        })
+    return pool
 
 
 def _global_activity_poll_loop():
@@ -1593,7 +1588,14 @@ def _global_activity_poll_loop():
     backoff = 0
     while True:
         try:
-            nodes = _fetch_hub_linked_nodes()
+            nodes = _fetch_keyed_nodes()
+            # Geocode locations to lat/lon (cached — only new locations hit Nominatim)
+            for n in nodes:
+                if n["location"]:
+                    coords = _geocode(n["location"])
+                    if coords:
+                        n["lat"] = coords["lat"]
+                        n["lon"] = coords["lon"]
             now    = time.time()
             cutoff = now - _GLOBAL_MAX_AGE_SEC
             new_ids = {n["node"] for n in nodes}
@@ -3597,8 +3599,8 @@ def api_status_activity():
     """
     Combined activity feed for the Status Board:
     - recently_keyed: nodes observed keying via this node's AMI (real-time)
-    - global_nodes:   top 10 most recently registered ASL nodes worldwide
-                      (polled every 5 min from stats.allstarlink.org)
+    - global_nodes:   every node currently keyed network-wide, last 15 min
+                      (polled every 2 min from stats.allstarlink.org/stats/keyed)
     """
     pin_min = int(get_setting('kiosk_map_pin_duration_min', '60') or 60)
     cutoff  = time.time() - pin_min * 60
@@ -3614,8 +3616,11 @@ def api_status_activity():
                 entry["lat"] = coords["lat"]
                 entry["lon"] = coords["lon"]
 
+    # Global nodes always use a fixed 15-minute window, independent of the
+    # (locally configurable) pin duration used for this node's own keyed history.
+    global_cutoff = time.time() - _GLOBAL_DISPLAY_WINDOW_SEC
     with _global_nodes_lock:
-        global_nodes = [e for e in _global_nodes_cache if e["ts"] >= cutoff]
+        global_nodes = [e for e in _global_nodes_cache if e["ts"] >= global_cutoff]
         global_ts    = _global_nodes_ts
 
     resp = jsonify({

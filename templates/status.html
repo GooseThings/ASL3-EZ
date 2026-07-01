@@ -999,7 +999,7 @@ async function refreshActivity() {
     var al = document.getElementById('activity-list');
     document.getElementById('act-count').textContent = combined.length ? combined.length + ' nodes' : '';
     var updEl = document.getElementById('act-updated');
-    if (updEl && data.global_updated) updEl.textContent = 'hub sweep ' + relTime(data.global_updated);
+    if (updEl && data.global_updated) updEl.textContent = 'global sweep ' + relTime(data.global_updated);
     if (!combined.length) {
       al.innerHTML = '<div class="empty-msg">No activity data yet</div>';
     } else {
