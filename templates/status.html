@@ -123,18 +123,34 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
 .weather-item strong { color: var(--text); }
 .weather-loading { color: var(--text2); font-style: italic; }
 
-/* ── Content area: Global Activity (full height) | node+connected / map | Favorites (full height) ── */
-.content-area { display: grid; grid-template-columns: 345px 1fr 280px; grid-template-rows: 55fr 45fr; gap: 10px; flex: 1; min-height: 0; }
+/* ── Content area: Global Activity | Node info | Connected/Map | Favorites (outer 2 + node full height) ── */
+.content-area { display: grid; grid-template-columns: 345px 210px 1fr 280px; grid-template-rows: 55fr 45fr; gap: 10px; flex: 1; min-height: 0; }
 
-/* ── Top row: node + connected ── */
-.top-row { grid-column: 2; grid-row: 1; display: grid; grid-template-columns: 260px 1fr; gap: 10px; min-height: 0; }
+.connected-card { grid-column: 3; grid-row: 1; }
 
-/* ── Node status card ── */
+/* ── Node status card: full height, matching Global Activity / Favorites ── */
 .node-card {
+  grid-column: 2; grid-row: 1 / span 2;
   background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
-  padding: 18px 16px; display: flex; flex-direction: column; align-items: center;
-  gap: 8px; overflow: hidden;
+  padding: 16px 12px; display: flex; flex-direction: column;
+  gap: 8px; overflow: hidden; min-height: 0;
 }
+#node-info { display: flex; flex-direction: column; align-items: center; gap: 8px; flex-shrink: 0; }
+.node-history {
+  width: 100%; flex: 1; min-height: 0; display: flex; flex-direction: column;
+  margin-top: 4px; border-top: 1px solid var(--border); padding-top: 8px;
+}
+.node-history-title { flex-shrink: 0; margin-bottom: 4px; }
+.node-history-list { flex: 1; overflow-y: auto; }
+.node-history-list::-webkit-scrollbar { width: 3px; }
+.node-history-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.hist-row { padding: 6px 2px; border-bottom: 1px solid var(--border); }
+.hist-row:last-child { border-bottom: none; }
+.hist-top { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.hist-num { font-size: 0.85rem; font-weight: 700; font-family: var(--mono); color: var(--accent); text-decoration: none; }
+.hist-call { font-size: 0.72rem; font-weight: 600; color: var(--text); }
+.hist-meta { display: flex; justify-content: space-between; gap: 6px; font-size: 0.68rem; color: var(--text2); margin-top: 1px; }
+.hist-live { color: var(--green); font-weight: 600; }
 .node-label { font-size: 0.68rem; letter-spacing: 0.12em; color: var(--text2); text-transform: uppercase; }
 .node-number { font-size: 2.4rem; font-weight: 700; line-height: 1; color: var(--accent); text-decoration: none; }
 .node-callsign { font-size: 1.25rem; font-weight: 600; color: var(--text); letter-spacing: 0.04em; }
@@ -163,7 +179,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
 /* ── Connected nodes ── */
 .connected-card {
   background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
-  display: flex; flex-direction: column; overflow: hidden;
+  display: flex; flex-direction: column; overflow: hidden; min-height: 0;
 }
 .card-header { padding: 12px 18px 8px; border-bottom: 1px solid var(--border);
   display: flex; align-items: baseline; gap: 10px; flex-shrink: 0; }
@@ -226,7 +242,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
 .act-badge.global { background: rgba(88,166,255,.12); color: var(--accent); }
 
 /* ── Map ── */
-.map-card { grid-column: 2; grid-row: 2; min-height: 0;
+.map-card { grid-column: 3; grid-row: 2; min-height: 0;
   background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
   display: flex; flex-direction: column; overflow: hidden; }
 #map { flex: 1; background: #0d1117; }
@@ -245,7 +261,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
 
 /* ── Favorites sidebar ── */
 .favorites-card {
-  grid-column: 3; grid-row: 1 / span 2;
+  grid-column: 4; grid-row: 1 / span 2;
   background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
   display: flex; flex-direction: column; overflow: hidden; min-height: 0;
 }
@@ -377,39 +393,44 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
       </div>
     </div>
 
-    <!-- Top row: node status + connected nodes -->
-    <div class="top-row">
-
-      <div class="node-card" id="node-card">
+    <!-- Node status: full-height column matching Global Activity / Favorites -->
+    <div class="node-card">
+      <div id="node-info">
         <div class="node-label">NODE</div>
         <div style="color:var(--text2);font-size:.9rem">Loading&hellip;</div>
       </div>
-
-      <div class="connected-card">
-        <div class="card-header">
-          <span class="card-title">Connected Nodes</span>
-          <span class="card-count" id="conn-count"></span>
-          <span style="margin-left:auto;display:flex;align-items:center;gap:6px">
-            <span id="listen-delay-note" style="font-size:0.65rem;color:var(--text2);font-style:italic;display:none">~1s delay</span>
-            <button class="btn-icon" id="listen-btn" onclick="toggleListen()" title="Stream live audio from this node — expect ~1 second delay">&#9834; Listen</button>
-          </span>
-        </div>
-        <div class="conn-form-bar" id="conn-form-bar">
-          <input id="conn-form-node" type="text" placeholder="Node #" maxlength="7"
-                 onkeydown="if(event.key==='Enter')statusConnectNew()">
-          <button class="sb-btn connect" onclick="statusConnectNew()">Connect</button>
-          <button class="sb-btn monitor" onclick="statusMonitorNew()">Monitor</button>
-          <button class="sb-btn fav" id="fav-add-btn" onclick="addToFavorites()" title="Add node to your Favorites list">&#9733; Fav</button>
-          <label class="perm-label" id="perm-label" style="display:none">
-            <input type="checkbox" id="conn-perm-chk"> Permanent
-          </label>
-          <span id="conn-form-msg" style="font-size:0.75rem;color:var(--text2)"></span>
-        </div>
-        <div class="node-list" id="node-list">
-          <div class="empty-msg">Loading&hellip;</div>
+      <div class="node-history">
+        <div class="node-history-title card-title">Recent Connections</div>
+        <div class="node-history-list" id="node-history-list">
+          <div class="empty-msg" style="font-size:.75rem">Loading&hellip;</div>
         </div>
       </div>
+    </div>
 
+    <!-- Connected nodes -->
+    <div class="connected-card">
+      <div class="card-header">
+        <span class="card-title">Connected Nodes</span>
+        <span class="card-count" id="conn-count"></span>
+        <span style="margin-left:auto;display:flex;align-items:center;gap:6px">
+          <span id="listen-delay-note" style="font-size:0.65rem;color:var(--text2);font-style:italic;display:none">~1s delay</span>
+          <button class="btn-icon" id="listen-btn" onclick="toggleListen()" title="Stream live audio from this node — expect ~1 second delay">&#9834; Listen</button>
+        </span>
+      </div>
+      <div class="conn-form-bar" id="conn-form-bar">
+        <input id="conn-form-node" type="text" placeholder="Node #" maxlength="7"
+               onkeydown="if(event.key==='Enter')statusConnectNew()">
+        <button class="sb-btn connect" onclick="statusConnectNew()">Connect</button>
+        <button class="sb-btn monitor" onclick="statusMonitorNew()">Monitor</button>
+        <button class="sb-btn fav" id="fav-add-btn" onclick="addToFavorites()" title="Add node to your Favorites list">&#9733; Fav</button>
+        <label class="perm-label" id="perm-label" style="display:none">
+          <input type="checkbox" id="conn-perm-chk"> Permanent
+        </label>
+        <span id="conn-form-msg" style="font-size:0.75rem;color:var(--text2)"></span>
+      </div>
+      <div class="node-list" id="node-list">
+        <div class="empty-msg">Loading&hellip;</div>
+      </div>
     </div>
 
     <!-- Map -->
@@ -858,7 +879,7 @@ async function refreshBoard() {
     /* Node card */
     var nodes = data.nodes || [];
     window._lastBoardNodes = nodes;
-    var nc = document.getElementById('node-card');
+    var nc = document.getElementById('node-info');
     if (!nodes.length) {
       nc.innerHTML = '<div class="node-label">NODE</div><div style="color:var(--text2)">No nodes configured</div>';
     } else {
@@ -955,6 +976,45 @@ async function refreshBoard() {
 
     /* Keep favorites sidebar in sync with connected state */
     renderFavorites();
+  } catch(e) {}
+}
+
+/* ── Recent connection history (condensed, in the Node card) ── */
+function _histDuration(sec) {
+  sec = Math.round(sec);
+  var h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60), s = sec%60;
+  if (h) return h + 'h ' + m + 'm';
+  if (m) return m + 'm';
+  return s + 's';
+}
+
+async function refreshHistory() {
+  try {
+    var r = await apiFetch('/api/status/history', {cache: 'no-store'});
+    if (!r.ok) return;
+    var data = await r.json();
+    var rows = data.rows || [];
+    var hl = document.getElementById('node-history-list');
+    if (!hl) return;
+    if (!rows.length) {
+      hl.innerHTML = '<div class="empty-msg" style="font-size:.75rem">No connections yet</div>';
+      return;
+    }
+    hl.innerHTML = rows.map(function(row) {
+      var status = row.disconnected_at
+        ? '<span>' + _histDuration(row.duration_seconds || 0) + '</span>'
+        : '<span class="hist-live">&#9679; Live</span>';
+      return '<div class="hist-row">' +
+        '<div class="hist-top">' +
+          nodeLink(row.peer_node, 'hist-num') +
+          (row.peer_callsign ? '<span class="hist-call">' + esc(row.peer_callsign) + '</span>' : '') +
+        '</div>' +
+        '<div class="hist-meta">' +
+          '<span>' + relTime(row.connected_at) + '</span>' +
+          status +
+        '</div>' +
+      '</div>';
+    }).join('');
   } catch(e) {}
 }
 
@@ -1805,11 +1865,13 @@ initMap();
 refreshBoard();
 refreshWeather();
 refreshActivity();
+refreshHistory();
 loadFavorites();
 checkKioskSession();
 
 setInterval(refreshBoard,    5000);    /* node status every 5s */
 setInterval(refreshActivity, 15000);   /* activity every 15s */
+setInterval(refreshHistory,  30000);   /* connection history every 30s */
 setInterval(refreshWeather,  600000);  /* weather every 10min */
 setInterval(updateGrayline,  120000);  /* grayline advances ~0.5° every 2min */
 </script>
