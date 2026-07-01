@@ -3682,6 +3682,12 @@ def api_status_connect():
         return jsonify({"error": "Invalid remote_node"}), 400
     # Only admin/superuser may request a permanent connection
     caller_role = session.get('role', '')
+    # Kiosk/user accounts are limited to one connection at a time — the
+    # Status Board UI disables Connect/Monitor once any node is connected,
+    # but that's client-side only, so enforce it here too (a user-role
+    # session could otherwise hit this endpoint directly and stack links).
+    if caller_role == 'user' and get_cached_status(local_node).get('connected'):
+        return jsonify({"error": "Only one connection at a time is allowed for your account. Disconnect the current node first."}), 403
     permanent   = bool(data.get("permanent", False)) and caller_role in ('admin', 'superuser')
     monitor     = bool(data.get("monitor", False))
     # ilink 3  = transient transceive (default — remote can drop it, no auto-reconnect)
