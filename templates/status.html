@@ -230,7 +230,6 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
 .act-row:hover { background: var(--bg3); }
 .act-dot { width: 7px; height: 7px; border-radius: 50%; align-self: center; flex-shrink: 0; }
 .act-dot.local  { background: var(--green); box-shadow: 0 0 4px rgba(63,185,80,.7); }
-.act-dot.global { background: transparent; }
 .act-body { display: flex; flex-direction: column; gap: 1px; overflow: hidden; }
 .act-top { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; }
 .act-node { font-size: 0.9rem; font-weight: 700; font-family: var(--mono); color: var(--accent); text-decoration: none; }
@@ -1102,7 +1101,7 @@ async function refreshActivity() {
         return '<div class="act-row">' +
           '<div class="act-body">' +
             '<div class="act-top">' +
-              '<div class="act-dot ' + e.type + '"></div>' +
+              (e.type === 'local' ? '<div class="act-dot local"></div>' : '') +
               nodeLink(e.node, 'act-node') +
               (e.callsign ? '<span class="act-call">' + esc(e.callsign) + '</span>' : '') +
               '<span class="act-ts">' + (e.ts ? relTime(e.ts) : '') + '</span>' +
