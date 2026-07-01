@@ -3035,9 +3035,11 @@ def api_conn_history_clear():
 def api_status_history():
     """
     Condensed recent connection history for the Status Board (kiosk).
-    Scoped to this server's own hosted node(s) only; the full
-    searchable/paginated history (any node, clear button) lives in the
-    Manager's Conn. History tab via /api/connection-history.
+    Scoped to this server's own hosted node(s) only, completed
+    connections only (still-live ones belong in the Connected Nodes
+    panel, not here), last 5. The full searchable/paginated history
+    (any node, live or not, clear button) lives in the Manager's
+    Conn. History tab via /api/connection-history.
     """
     content = read_conf_file(RPT_CONF_PATH)
     nodes   = get_node_numbers(content) if content else []
@@ -3049,7 +3051,8 @@ def api_status_history():
     rows   = db.execute(
         f"SELECT peer_node, peer_callsign, peer_location, direction, "
         f"connected_at, disconnected_at, duration_seconds FROM connection_history "
-        f"WHERE local_node IN ({marks}) ORDER BY connected_at DESC LIMIT 20",
+        f"WHERE local_node IN ({marks}) AND disconnected_at IS NOT NULL "
+        f"ORDER BY connected_at DESC LIMIT 5",
         [str(n) for n in nodes]
     ).fetchall()
     resp = jsonify({"rows": [dict(r) for r in rows]})
