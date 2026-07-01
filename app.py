@@ -371,11 +371,12 @@ def check_auth():
     _USER_OR_ABOVE = {'api_status_connect', 'api_status_disconnect',
                       'api_fav_add', 'api_fav_delete', 'api_fav_label'}
 
-    endpoint = request.endpoint
-    if endpoint in _PUBLIC:
-        return None
+    endpoint  = request.endpoint
+    is_public = endpoint in _PUBLIC
 
     if not is_auth_configured():
+        if is_public:
+            return None
         if request.path.startswith('/api/'):
             return jsonify({"error": "Setup required", "setup_url": "/login"}), 503
         return redirect(url_for('login'))
@@ -386,6 +387,14 @@ def check_auth():
     # Idle session timeout: expire sessions inactive for too long.
     # idle_timeout is stored in the session at login (per-user value or global default).
     # 0 means never expire.
+    #
+    # This — and the active-session touch below — must run for every
+    # logged-in request, *including* public endpoints. The Status Board's
+    # normal polling (api_status_board, api_status_activity, favorites,
+    # etc.) is all public, since the board itself needs no login. A kiosk/
+    # user account that just sits on the board and never hits a protected
+    # endpoint would otherwise never get touched, so it'd never show up in
+    # the "Logged in" footer count and would never idle-expire on its own.
     if logged_in:
         now          = time.time()
         last_active  = session.get('last_active', now)
@@ -394,15 +403,20 @@ def check_auth():
             remove_active_session(session.get('sid'))
             session.clear()
             logged_in = False
-            if request.path.startswith('/api/'):
-                return jsonify({"error": "Session expired", "timeout": True}), 401
-            return redirect(url_for('login'))
-        session['last_active'] = now
-        sid = session.get('sid')
-        if not sid:
-            sid = secrets.token_hex(16)
-            session['sid'] = sid
-        touch_active_session(sid, session.get('username', ''))
+            if not is_public:
+                if request.path.startswith('/api/'):
+                    return jsonify({"error": "Session expired", "timeout": True}), 401
+                return redirect(url_for('login'))
+        else:
+            session['last_active'] = now
+            sid = session.get('sid')
+            if not sid:
+                sid = secrets.token_hex(16)
+                session['sid'] = sid
+            touch_active_session(sid, session.get('username', ''))
+
+    if is_public:
+        return None
 
     # Refresh role from DB if missing or if 'admin' (the pre-v3 role that was
     # migrated to 'superuser' in the DB but not in existing sessions).
