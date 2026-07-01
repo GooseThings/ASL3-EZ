@@ -2,6 +2,12 @@
 
 ## Recent Changes
 
+- **Changed: the HenWen logo now sits inside the health circle in the Node card at 50% opacity, and the green pulse animation is now half speed** (2.8s cycle instead of 1.4s).
+- **Added: Connect and Monitor buttons to map pin popups for Global Activity / recently-keyed pins, and node numbers in every pin popup (hosted, connected, activity) now link to that node's AllStarLink stats page** in a new tab, matching the rest of the Status Board.
+- **Changed: the Global Activity list's status dot is now inline next to the node number, indented the same way Favorites' connection dot is**, instead of sitting in its own column flush to the left edge of the row.
+- **Changed: "Keys" stat in Connected Nodes renamed to "Keyups" and always shown** (previously hidden when the count was still zero).
+- **Added: Transmit / Monitor mode badge in Connected Nodes**, read directly from Asterisk's `RPT_ALINKS` link mode so it's accurate regardless of how the connection was made (kiosk, Manager, or a permanent rpt.conf link).
+- **Changed: the Idle badge in Connected Nodes now counts up (elapsed idle time) instead of counting down to the timeout.** Added a small ✕ button next to it that resets the idle clock back to zero via a new `/api/status/reset-idle` endpoint — unlike the existing "No Timeout" button, this does **not** convert the connection to permanent; it stays temporary and still auto-disconnects after the configured idle timeout, just measured from the reset point.
 - **Changed: removed the blue dot next to global entries in the Global Activity list**, keeping the green dot for locally-keyed entries so the local highlight still stands out without the list looking cluttered.
 - **Changed: the Recent Connections list in the Node card is now bottom-justified** — with fewer than a full list of rows, they now anchor to the bottom of the card instead of leaving empty space below them.
 - **Changed: Recent Connections on the kiosk now only shows completed connections, last 5.** Still-live connections already appear in the Connected Nodes panel, so showing them again here was redundant; `/api/status/history` now filters to `disconnected_at IS NOT NULL` and caps at 5 instead of 20.

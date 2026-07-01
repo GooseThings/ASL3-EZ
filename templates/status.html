@@ -138,10 +138,11 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
 #node-info { display: flex; flex-direction: column; align-items: center; gap: 8px; flex-shrink: 0; }
 .node-history {
   width: 100%; flex: 1; min-height: 0; display: flex; flex-direction: column;
-  margin-top: 4px; border-top: 1px solid var(--border); padding-top: 8px;
+  justify-content: flex-end;   /* push title + list together to the bottom of the card */
+  margin-top: 4px;
 }
-.node-history-title { flex-shrink: 0; margin-bottom: 4px; }
-.node-history-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; justify-content: flex-end; }
+.node-history-title { flex-shrink: 0; margin-bottom: 4px; border-top: 1px solid var(--border); padding-top: 8px; }
+.node-history-list { flex-shrink: 1; overflow-y: auto; display: flex; flex-direction: column; justify-content: flex-end; }
 .node-history-list::-webkit-scrollbar { width: 3px; }
 .node-history-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 .hist-row { padding: 6px 2px; border-bottom: 1px solid var(--border); }
@@ -157,10 +158,12 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
 
 .keyed-wrap { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 6px 0 2px; }
 .keyed-dot { width: 56px; height: 56px; border-radius: 50%; background: #222;
-  border: 3px solid #333; transition: background .4s, border-color .4s, box-shadow .4s; }
+  border: 3px solid #333; transition: background .4s, border-color .4s, box-shadow .4s;
+  display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.keyed-dot-logo { width: 65%; height: 65%; object-fit: contain; opacity: 0.5; }
 .keyed-dot.healthy { background: var(--green); border-color: #5de073;
   box-shadow: 0 0 24px rgba(63,185,80,.65), 0 0 56px rgba(63,185,80,.25);
-  animation: pulse-k 1.4s ease-in-out infinite; }
+  animation: pulse-k 2.8s ease-in-out infinite; }
 .keyed-dot.down { background: var(--danger); border-color: var(--danger);
   box-shadow: 0 0 24px rgba(219,68,55,.65), 0 0 56px rgba(219,68,55,.25);
   animation: none; }
@@ -220,12 +223,12 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
 .activity-list::-webkit-scrollbar { width: 3px; }
 .activity-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
-.act-row { display: grid; grid-template-columns: 8px 1fr auto; gap: 0 10px;
+.act-row { display: grid; grid-template-columns: 1fr auto; gap: 0 10px;
   align-items: center; padding: 8px 14px;
   border-bottom: 1px solid var(--border); transition: background .15s; }
 .act-row:last-child { border-bottom: none; }
 .act-row:hover { background: var(--bg3); }
-.act-dot { width: 7px; height: 7px; border-radius: 50%; }
+.act-dot { width: 7px; height: 7px; border-radius: 50%; align-self: center; flex-shrink: 0; }
 .act-dot.local  { background: var(--green); box-shadow: 0 0 4px rgba(63,185,80,.7); }
 .act-dot.global { background: transparent; }
 .act-body { display: flex; flex-direction: column; gap: 1px; overflow: hidden; }
@@ -257,6 +260,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
   border-radius: 4px; padding: 2px 8px; font-size: 0.7rem; font-weight: 600;
   cursor: pointer; letter-spacing: .04em; transition: all .15s; white-space: nowrap; }
 .map-btn.on { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.popup-node-link { color: var(--accent); font-weight: 600; text-decoration: none; }
 
 /* ── Favorites sidebar ── */
 .favorites-card {
@@ -330,6 +334,14 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
   background: rgba(63,185,80,.08); border: 1px solid rgba(63,185,80,.3); color: var(--green);
   cursor: pointer; white-space: nowrap; }
 .idle-squash-btn:hover { background: rgba(63,185,80,.22); }
+.idle-reset-btn { background: none; border: none; color: var(--text2); cursor: pointer;
+  font-size: 0.8rem; padding: 0 2px; line-height: 1; opacity: 0.6; }
+.idle-reset-btn:hover { color: var(--warn); opacity: 1; }
+
+/* Transmit / Monitor mode badge in node rows */
+.mode-badge { font-size: 0.65rem; padding: 1px 6px; border-radius: 3px; font-weight: 600; white-space: nowrap; }
+.mode-badge.tx  { background: rgba(63,185,80,.1);  color: var(--green); }
+.mode-badge.mon { background: rgba(88,166,255,.1); color: var(--accent); }
 
 /* toast notification */
 #sb-toast { position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%);
@@ -758,6 +770,9 @@ function updateGrayline() {
 function updateMap() {
   if (!_map) return;
 
+  var localNode = (window._lastBoardNodes && window._lastBoardNodes[0])
+                  ? window._lastBoardNodes[0].node : '';
+
   /* Clear markers and lines */
   _markers.forEach(function(m) { _map.removeLayer(m); });
   _markers = [];
@@ -777,7 +792,7 @@ function updateMap() {
     WORLD_OFFSETS.forEach(function(off) {
       var m = L.marker([n.lat, n.lon + off], {icon:makeStarIcon('#ffd700'), zIndexOffset:1000})
         .bindPopup('<b>&#11088; ' + esc(n.callsign||n.node) + '</b><br>' +
-                   esc(n.location||'') + '<br><small>Node ' + esc(n.node) + ' &mdash; this server</small>');
+                   esc(n.location||'') + '<br><small>Node ' + nodeLink(n.node, 'popup-node-link') + ' &mdash; this server</small>');
       m.addTo(_map); _markers.push(m);
     });
   });
@@ -789,7 +804,7 @@ function updateMap() {
     WORLD_OFFSETS.forEach(function(off) {
       var m = L.marker([c.lat, c.lon + off], {icon:makeIcon('#e74c3c'), zIndexOffset:500})
         .bindPopup('<b>' + esc(c.callsign||c.node) + '</b><br>' +
-                   esc(c.location||'') + '<br><small>Node ' + esc(c.node) + ' &mdash; connected</small>');
+                   esc(c.location||'') + '<br><small>Node ' + nodeLink(c.node, 'popup-node-link') + ' &mdash; connected</small>');
       m.addTo(_map); _markers.push(m);
       if (_showLines && c.host_lat != null && c.host_lon != null) {
         var line = L.polyline([[c.lat, c.lon + off], [c.host_lat, c.host_lon + off]], {
@@ -813,11 +828,20 @@ function updateMap() {
       color = style.color; opacity = style.opacity;
     }
     allPinned.push(p);
+    var pinConnBtns = localNode
+      ? '<div style="margin-top:6px;display:flex;gap:6px">' +
+          '<button class="sb-btn connect" onclick="sbConnect(\'' +
+            esc(localNode) + '\',\'' + esc(p.node) + '\',this,false,false)">Connect</button>' +
+          '<button class="sb-btn monitor" onclick="sbConnect(\'' +
+            esc(localNode) + '\',\'' + esc(p.node) + '\',this,false,true)">Monitor</button>' +
+        '</div>'
+      : '';
     WORLD_OFFSETS.forEach(function(off) {
       var m = L.marker([p.lat, p.lon + off], {icon:makeIcon(color, opacity)})
         .bindPopup('<b>' + esc(p.callsign||p.node) + '</b><br>' +
-                   esc(p.location||'') + '<br><small>Node ' + esc(p.node) +
-                   (p.type==='local' ? ' &mdash; keyed' : ' &mdash; online') + '</small>');
+                   esc(p.location||'') + '<br><small>Node ' + nodeLink(p.node, 'popup-node-link') +
+                   (p.type==='local' ? ' &mdash; keyed' : ' &mdash; online') + '</small>' +
+                   pinConnBtns);
       m.addTo(_map); _markers.push(m);
     });
   });
@@ -892,7 +916,9 @@ async function refreshBoard() {
         (n.callsign ? '<div class="node-callsign">' + esc(n.callsign) + '</div>' : '') +
         (n.location ? '<div class="node-location">' + esc(n.location) + '</div>' : '') +
         '<div class="keyed-wrap">' +
-          '<div class="keyed-dot ' + (healthy ? 'healthy' : 'down') + '"></div>' +
+          '<div class="keyed-dot ' + (healthy ? 'healthy' : 'down') + '">' +
+            '<img class="keyed-dot-logo" src="/static/logo-512.png" alt="">' +
+          '</div>' +
           '<div class="keyed-label ' + (healthy ? 'healthy' : 'down') + '">' + (healthy ? 'ONLINE' : 'OFFLINE') + '</div>' +
         '</div>' +
         '<div class="link-count">Linked: <span>' + (n.connected ? n.connected.length : 0) + '</span></div>';
@@ -932,16 +958,22 @@ async function refreshBoard() {
         var meta = [];
         var isConn = (c.connect_state || 'ESTABLISHED') === 'ESTABLISHED';
         if (c.connect_time) meta.push('Conn: <strong>' + esc(c.connect_time) + '</strong>');
-        if (c.keyups)       meta.push('Keys: <strong>' + c.keyups + '</strong>');
+        meta.push('Keyups: <strong>' + (c.keyups || 0) + '</strong>');
         if (c.last_keyed)   meta.push('Last: <strong>' + relTime(c.last_keyed) + '</strong>');
+        var modeBadge = '';
+        if (c.mode === 'T') modeBadge = '<span class="mode-badge tx">Transmit</span>';
+        else if (c.mode === 'R') modeBadge = '<span class="mode-badge mon">Monitor</span>';
         var idleBadge = '';
-        if (c.permanent === false && typeof c.idle_remaining === 'number') {
-          var mins = Math.floor(c.idle_remaining / 60);
-          var secs = c.idle_remaining % 60;
+        if (c.permanent === false && typeof c.idle_elapsed === 'number') {
+          var mins = Math.floor(c.idle_elapsed / 60);
+          var secs = c.idle_elapsed % 60;
           var ts   = mins + ':' + (secs < 10 ? '0' : '') + secs;
-          var warn = c.idle_remaining < 120;
+          var warn = (typeof c.idle_remaining === 'number') && c.idle_remaining < 120;
           idleBadge = '<span class="idle-badge' + (warn ? ' warn' : '') + '">Idle: ' + ts + '</span>';
           if (window._kioskRole === 'admin' || window._kioskRole === 'superuser') {
+            idleBadge += '<button class="idle-reset-btn" onclick="sbResetIdle(\'' +
+              esc(c.local_node) + '\',\'' + esc(c.node) + '\',this)" ' +
+              'title="Reset idle timer to zero — stays a temporary connection">&#10005;</button>';
             idleBadge += '<button class="idle-squash-btn" onclick="sbSquashIdle(\'' +
               esc(c.local_node) + '\',\'' + esc(c.node) + '\',this)" ' +
               'title="Upgrade to permanent connection — disables idle timeout and auto-reconnects if dropped">No Timeout</button>';
@@ -949,6 +981,7 @@ async function refreshBoard() {
         } else if (c.permanent === true) {
           idleBadge = '<span class="idle-badge">Permanent</span>';
         }
+        var badges = modeBadge + idleBadge;
         var dotClass = !isConn ? ' connecting' : (c.keyed ? ' keyed' : '');
         var dcBtn = '<button class="sb-btn disconnect" onclick="sbDisconnect(\'' +
           esc(c.local_node) + '\',\'' + esc(c.node) + '\',this)">Disconnect</button>';
@@ -958,7 +991,7 @@ async function refreshBoard() {
           '<div class="nr-call">' + esc(c.callsign||'—') + '</div>' +
           '<div class="nr-right">' +
             '<div class="nr-loc">' + esc(c.location||c.desc||'') + '</div>' +
-            (meta.length ? '<div class="nr-meta"><span>' + meta.join('</span><span>') + '</span>' + idleBadge + '</div>' : (idleBadge ? '<div class="nr-meta">' + idleBadge + '</div>' : '')) +
+            (meta.length ? '<div class="nr-meta"><span>' + meta.join('</span><span>') + '</span>' + badges + '</div>' : (badges ? '<div class="nr-meta">' + badges + '</div>' : '')) +
             (!isConn ? '<div class="nr-meta" style="color:var(--warn)">Connecting…</div>' : '') +
           '</div>' +
           dcBtn +
@@ -1067,9 +1100,9 @@ async function refreshActivity() {
             '</div>'
           : '';
         return '<div class="act-row">' +
-          '<div class="act-dot ' + e.type + '"></div>' +
           '<div class="act-body">' +
             '<div class="act-top">' +
+              '<div class="act-dot ' + e.type + '"></div>' +
               nodeLink(e.node, 'act-node') +
               (e.callsign ? '<span class="act-call">' + esc(e.callsign) + '</span>' : '') +
               '<span class="act-ts">' + (e.ts ? relTime(e.ts) : '') + '</span>' +
@@ -1172,6 +1205,28 @@ async function sbSquashIdle(localNode, remoteNode, btn) {
   } catch(e) {
     sbToast('Error: ' + e.message, false);
     if (btn) { btn.disabled = false; btn.textContent = 'No Timeout'; }
+  }
+}
+
+async function sbResetIdle(localNode, remoteNode, btn) {
+  if (btn) { btn.disabled = true; }
+  try {
+    var r = await apiFetch('/api/status/reset-idle', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({local_node: localNode, remote_node: remoteNode})
+    });
+    var d = await r.json();
+    if (r.ok && d.ok) {
+      sbToast('Idle timer reset for ' + remoteNode, true);
+      setTimeout(refreshBoard, 500);
+    } else {
+      sbToast('Failed: ' + (d.error || r.status), false);
+      if (btn) { btn.disabled = false; }
+    }
+  } catch(e) {
+    sbToast('Error: ' + e.message, false);
+    if (btn) { btn.disabled = false; }
   }
 }
 

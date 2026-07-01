@@ -3559,26 +3559,32 @@ def api_status_board():
             with _kiosk_temp_lock:
                 tc = _kiosk_temp_conns.get((node_str_local, cn))
             if tc and not tc.get('permanent'):
-                idle_remaining = max(0, int(idle_timeout - (time.time() - tc['last_active'])))
+                idle_elapsed   = max(0, int(time.time() - tc['last_active']))
+                idle_remaining = max(0, idle_timeout - idle_elapsed)
                 is_permanent   = False
             elif tc and tc.get('permanent'):
+                idle_elapsed   = None
                 idle_remaining = None
                 is_permanent   = True
             else:
+                idle_elapsed   = None
                 idle_remaining = None
                 is_permanent   = None  # not tracked (pre-existing connection)
+            link_info = cached.get("links", {}).get(cn, {})
             connected_details.append({
                 "node":           cn,
                 "callsign":       cn_info.get("callsign", ""),
                 "desc":           cn_info.get("desc", ""),
                 "location":       cn_loc,
-                "keyed":          cached.get("links", {}).get(cn, {}).get("keyed", False),
+                "keyed":          link_info.get("keyed", False),
+                "mode":           link_info.get("mode", ""),  # 'T' = transmit/transceive, 'R' = monitor/receive-only
                 "connect_time":   lct.get(cn, ""),
                 "keyups":         ls.get("keyups", 0),
                 "last_keyed":     ls.get("last_keyed"),
                 "lat":            cn_coords["lat"] if cn_coords else None,
                 "lon":            cn_coords["lon"] if cn_coords else None,
                 "connect_state":  cached.get("link_connect_state", {}).get(cn, "ESTABLISHED"),
+                "idle_elapsed":   idle_elapsed,
                 "idle_remaining": idle_remaining,
                 "permanent":      is_permanent,
             })
@@ -3757,6 +3763,29 @@ def api_status_squash_idle():
         log("ERROR", f"[API] /api/status/squash-idle ilink{ilink_mode} failed: {e}")
         return jsonify({"error": str(e)}), 500
     log("INFO", f"[API] /api/status/squash-idle {local_node} -> {remote_node}: upgraded to ilink{ilink_mode}")
+    return jsonify({"ok": True})
+
+
+@app.route("/api/status/reset-idle", methods=["POST"])
+def api_status_reset_idle():
+    """Reset the idle-timeout clock for a temporary connection back to zero, without
+    making it permanent — the connection still auto-disconnects after the configured
+    idle timeout, just measured from now instead of whenever it last went idle."""
+    if session.get('role') not in ('admin', 'superuser'):
+        return jsonify({"error": "Admin access required"}), 403
+    data        = request.json or {}
+    local_node  = str(data.get("local_node",  "")).strip()
+    remote_node = str(data.get("remote_node", "")).strip()
+    if not re.match(r'^\d{4,7}$', local_node):
+        return jsonify({"error": "Invalid local_node"}), 400
+    if not re.match(r'^\d{4,7}$', remote_node):
+        return jsonify({"error": "Invalid remote_node"}), 400
+    key = (local_node, remote_node)
+    with _kiosk_temp_lock:
+        if key not in _kiosk_temp_conns or _kiosk_temp_conns[key].get('permanent'):
+            return jsonify({"error": "Not a tracked temporary connection"}), 404
+        _kiosk_temp_conns[key]['last_active'] = time.time()
+    log("INFO", f"[API] /api/status/reset-idle {local_node} -> {remote_node}: idle timer reset")
     return jsonify({"ok": True})
 
 
